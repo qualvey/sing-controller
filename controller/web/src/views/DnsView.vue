@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import { useStatusStore } from '../stores/status'
+import SourcePane from '../components/SourcePane.vue'
 import {
   DNS_RULE_ACTIONS,
   DNS_RULE_FIELDS,
@@ -15,6 +16,7 @@ import {
 const statusStore = useStatusStore()
 
 const activeTab = ref('servers')
+const outerTab = ref('form')
 const loading = ref(false)
 const saving = ref(false)
 const servers = ref<Array<Record<string, any>>>([])
@@ -519,7 +521,9 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <div class="toolbar">
+    <el-tabs v-model="outerTab">
+      <el-tab-pane label="表单" name="form">
+        <div class="toolbar">
       <el-button type="primary" @click="openCreateServer">新建 Server</el-button>
       <el-button type="primary" @click="openCreateRule">新建规则</el-button>
       <el-button :loading="loading" @click="loadDns">刷新</el-button>
@@ -780,6 +784,12 @@ onMounted(() => {
         <el-button type="primary" :loading="saving" @click="saveRule">保存</el-button>
       </template>
     </el-dialog>
+
+    </el-tab-pane>
+    <el-tab-pane label="源码" name="source">
+      <SourcePane segment="dns" @saved="loadDns" />
+    </el-tab-pane>
+  </el-tabs>
   </div>
 </template>
 

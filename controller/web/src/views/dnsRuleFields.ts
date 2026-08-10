@@ -108,7 +108,8 @@ export const DNS_RULE_SUMMARY_ORDER = [
   'port',
   'port_range',
   'source_port',
-  'preferred_by'
+  'preferred_by',
+  'clash_mode'
 ]
 
 /** DNS 规则动作（option/rule_action.go DNSRuleAction） */

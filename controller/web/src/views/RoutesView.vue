@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { api } from '../api'
+import SourcePane from '../components/SourcePane.vue'
 import type { RouteInfo, RouteRule } from '../api'
 import { useStatusStore } from '../stores/status'
 import { RULE_FIELDS, RULE_FIELD_KEYS, RULE_GROUPS, RULE_SUMMARY_ORDER } from './routeFields'
@@ -10,6 +11,7 @@ import { RULE_FIELDS, RULE_FIELD_KEYS, RULE_GROUPS, RULE_SUMMARY_ORDER } from '.
 const statusStore = useStatusStore()
 
 const loading = ref(false)
+const outerTab = ref('form')
 const saving = ref(false)
 const savingFinal = ref(false)
 const routes = ref<RouteInfo['routes']>([])
@@ -37,6 +39,9 @@ const actionOptions = [
 const snifferOptions = ['tls', 'http', 'quic', 'dns', 'stun', 'bittorrent', 'dtls', 'ssh', 'rdp', 'ntp']
 
 const ruleForm = reactive<Record<string, unknown>>({
+  ruleType: 'default',
+  mode: 'and',
+  rulesJson: '',
   action: 'route',
   outbound: '',
   sniffers: [] as string[],
@@ -73,8 +78,12 @@ function fieldOptions(f: (typeof RULE_FIELDS)[number]): string[] {
   return f.options ?? []
 }
 
-// 列表摘要：按优先级取有值的字段 + 其余字段计数
+// 列表摘要：logical 显示组合信息；default 按优先级取有值字段 + 其余字段计数
 function ruleSummary(row: Record<string, unknown>): { items: Array<{ k: string; v: string }>; otherCount: number } {
+  if (row.type === 'logical') {
+    const count = Array.isArray(row.rules) ? row.rules.length : 0
+    return { items: [{ k: 'logical', v: `${String(row.mode || 'and')} · ${count} 条子规则` }], otherCount: 0 }
+  }
   const items = RULE_SUMMARY_ORDER.filter((k) => row[k] != null).map((k) => ({ k, v: fmtList(row[k]) }))
   const otherCount = RULE_FIELDS.filter((f) => !RULE_SUMMARY_ORDER.includes(f.key) && row[f.key] != null).length
   return { items, otherCount }
@@ -146,6 +155,9 @@ const saveFinal = async () => {
 }
 
 const resetForm = () => {
+  ruleForm.ruleType = 'default'
+  ruleForm.mode = 'and'
+  ruleForm.rulesJson = ''
   ruleForm.action = 'route'
   ruleForm.outbound = ''
   ruleForm.sniffers = []
@@ -170,6 +182,17 @@ const openEdit = (row: RouteRule) => {
   isEdit.value = true
   editingId.value = typeof row.id === 'string' ? row.id : ''
   const rowRec = row as Record<string, unknown>
+  // logical 类型（多态）：mode + 嵌套子规则 + 共用 action
+  if (rowRec.type === 'logical') {
+    ruleForm.ruleType = 'logical'
+    ruleForm.mode = rowRec.mode === 'or' ? 'or' : 'and'
+    ruleForm.rulesJson = Array.isArray(rowRec.rules) ? JSON.stringify(rowRec.rules, null, 2) : ''
+    ruleForm.invert = rowRec.invert === true
+    fillAction(rowRec)
+    routeDialogVisible.value = true
+    ruleFormRef.value?.clearValidate()
+    return
+  }
   // 全字段回填（sing-box Listable 单值序列化为字符串，需兼容）
   for (const f of RULE_FIELDS) {
     const v = rowRec[f.key]
@@ -177,16 +200,11 @@ const openEdit = (row: RouteRule) => {
     else if (f.type === 'select' || f.type === 'string') ruleForm[f.key] = v == null ? '' : String(v)
     else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
   }
-  const action = typeof rowRec.action === 'string' && rowRec.action ? rowRec.action : 'route'
-  ruleForm.action = action
-  ruleForm.outbound = typeof rowRec.outbound === 'string' ? rowRec.outbound : ''
-  const sniffers = rowRec.sniffer
-  ruleForm.sniffers = Array.isArray(sniffers) ? sniffers.map(String) : typeof sniffers === 'string' ? [sniffers] : []
-  ruleForm.resolve_server = typeof rowRec.server === 'string' ? rowRec.server : ''
+  fillAction(rowRec)
   // 字段表之外的字段（action 参数、复杂 map 结构等）→ extraJson 兜底
   const extra: Record<string, unknown> = {}
   for (const k of Object.keys(rowRec)) {
-    if (k !== 'id' && !RULE_FIELD_KEYS.includes(k) && !['action', 'outbound', 'sniffer', 'server'].includes(k)) {
+    if (k !== 'id' && !RULE_FIELD_KEYS.includes(k) && !['action', 'outbound', 'sniffer', 'server', 'type', 'mode', 'rules'].includes(k)) {
       extra[k] = rowRec[k]
     }
   }
@@ -195,8 +213,34 @@ const openEdit = (row: RouteRule) => {
   ruleFormRef.value?.clearValidate()
 }
 
+// action 回填（default/logical 共用）
+function fillAction(rowRec: Record<string, unknown>) {
+  const action = typeof rowRec.action === 'string' && rowRec.action ? rowRec.action : 'route'
+  ruleForm.action = action
+  ruleForm.outbound = typeof rowRec.outbound === 'string' ? rowRec.outbound : ''
+  const sniffers = rowRec.sniffer
+  ruleForm.sniffers = Array.isArray(sniffers) ? sniffers.map(String) : typeof sniffers === 'string' ? [sniffers] : []
+  ruleForm.resolve_server = typeof rowRec.server === 'string' ? rowRec.server : ''
+}
+
 function buildRule(): RouteRule {
   const rule: RouteRule = {}
+  // logical 类型：mode + 嵌套子规则（JSON）+ 共用 action
+  if (ruleForm.ruleType === 'logical') {
+    rule.type = 'logical'
+    rule.mode = String(ruleForm.mode || 'and')
+    let nested: unknown
+    try {
+      nested = JSON.parse(String(ruleForm.rulesJson).trim() || '[]')
+    } catch (e) {
+      throw new Error(`子规则 JSON 格式错误：${(e as Error).message}`)
+    }
+    if (!Array.isArray(nested)) throw new Error('子规则必须是数组')
+    rule.rules = nested
+    if (ruleForm.invert === true) rule.invert = true
+    buildAction(rule)
+    return rule
+  }
   // 匹配字段：字段表驱动，空值不写入
   for (const f of RULE_FIELDS) {
     const v = ruleForm[f.key]
@@ -218,18 +262,7 @@ function buildRule(): RouteRule {
         ? (v as string[]).map((x) => Number(x))
         : [...(v as string[])]
   }
-  // action 模型：route(默认) → outbound；其他 → action 字段
-  if (isRouteAction.value) {
-    rule.outbound = ruleForm.outbound as string
-  } else {
-    rule.action = ruleForm.action as string
-    if (ruleForm.action === 'sniff' && (ruleForm.sniffers as string[]).length) {
-      rule.sniffer = [...(ruleForm.sniffers as string[])]
-    }
-    if (ruleForm.action === 'resolve' && String(ruleForm.resolve_server).trim()) {
-      rule.server = String(ruleForm.resolve_server).trim()
-    }
-  }
+  buildAction(rule)
   // extraJson 兜底：字段表之外的字段（表单字段优先，不覆盖）
   if (String(ruleForm.extraJson).trim()) {
     let extra: Record<string, unknown>
@@ -246,6 +279,21 @@ function buildRule(): RouteRule {
     }
   }
   return rule
+}
+
+// action 构建（default/logical 共用）
+function buildAction(rule: RouteRule) {
+  if (isRouteAction.value) {
+    rule.outbound = ruleForm.outbound as string
+  } else {
+    rule.action = ruleForm.action as string
+    if (ruleForm.action === 'sniff' && (ruleForm.sniffers as string[]).length) {
+      rule.sniffer = [...(ruleForm.sniffers as string[])]
+    }
+    if (ruleForm.action === 'resolve' && String(ruleForm.resolve_server).trim()) {
+      rule.server = String(ruleForm.resolve_server).trim()
+    }
+  }
 }
 
 const save = async () => {
@@ -294,6 +342,8 @@ onMounted(() => {
 
 <template>
   <div class="page">
+    <el-tabs v-model="outerTab">
+      <el-tab-pane label="表单" name="form">
     <div class="final-bar">
       <span class="final-label">route.final</span>
       <el-select v-model="finalTag" style="width: 240px" placeholder="选择 final outbound" :disabled="!outboundTags.length">
@@ -345,8 +395,29 @@ onMounted(() => {
       :close-on-click-modal="false"
     >
       <el-form ref="ruleFormRef" :model="ruleForm" :rules="ruleRules" label-width="130px">
+        <el-form-item label="类型">
+          <el-select v-model="ruleForm.ruleType" style="width: 100%">
+            <el-option label="普通规则（匹配字段）" value="default" />
+            <el-option label="逻辑组合（and/or 嵌套子规则）" value="logical" />
+          </el-select>
+        </el-form-item>
+        <template v-if="ruleForm.ruleType === 'logical'">
+          <el-form-item label="mode" required>
+            <el-select v-model="ruleForm.mode" style="width: 100%">
+              <el-option label="and" value="and" />
+              <el-option label="or" value="or" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="invert">
+            <el-switch v-model="ruleForm.invert" />
+          </el-form-item>
+          <el-form-item label="子规则 (JSON)" required>
+            <el-input v-model="ruleForm.rulesJson" type="textarea" :rows="8" class="mono" placeholder='[{"rule_set": "gfw"}, {"clash_mode": "direct"}]' />
+          </el-form-item>
+          <span class="hint">嵌套子规则为 Rule 数组（可再嵌套 logical）；每个子规则也可带 action</span>
+        </template>
         <el-tabs>
-          <el-tab-pane label="匹配条件">
+          <el-tab-pane v-if="ruleForm.ruleType === 'default'" label="匹配条件">
             <template v-for="g in RULE_GROUPS" :key="g">
               <el-divider content-position="left">{{ g }}</el-divider>
               <el-form-item
@@ -425,6 +496,11 @@ onMounted(() => {
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+      </el-tab-pane>
+      <el-tab-pane label="源码" name="source">
+        <SourcePane segment="route" @saved="loadRoutes" />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 

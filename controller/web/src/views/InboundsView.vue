@@ -3,12 +3,14 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { api } from '../api'
+import SourcePane from '../components/SourcePane.vue'
 import type { Inbound } from '../api'
 import { useStatusStore } from '../stores/status'
 
 const statusStore = useStatusStore()
 
 const loading = ref(false)
+const outerTab = ref('form')
 const inbounds = ref<Inbound[]>([])
 const inboundTypes = ref<string[]>([])
 
@@ -270,6 +272,8 @@ onMounted(async () => {
 
 <template>
   <div class="page">
+    <el-tabs v-model="outerTab">
+      <el-tab-pane label="表单" name="form">
     <div class="toolbar">
       <el-button type="primary" @click="openCreate">新建 Inbound</el-button>
       <el-button :loading="loading" @click="loadInbounds">刷新</el-button>
@@ -363,6 +367,11 @@ onMounted(async () => {
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+      </el-tab-pane>
+      <el-tab-pane label="源码" name="source">
+        <SourcePane segment="inbounds" @saved="loadInbounds" />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 

@@ -2,11 +2,13 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
+import SourcePane from '../components/SourcePane.vue'
 import { useStatusStore } from '../stores/status'
 
 const statusStore = useStatusStore()
 
 const loading = ref(false)
+const outerTab = ref('form')
 const saving = ref(false)
 const providers = ref<Array<{ id: string; provider: Record<string, any> }>>([])
 
@@ -240,6 +242,8 @@ onMounted(load)
 
 <template>
   <div class="page">
+    <el-tabs v-model="outerTab">
+      <el-tab-pane label="表单" name="form">
     <div class="section">
       <div class="section-title">certificate（全局证书配置）</div>
       <el-form label-width="180px" style="max-width: 720px">
@@ -347,6 +351,11 @@ onMounted(load)
         <el-button type="primary" :loading="saving" @click="saveProvider">保存</el-button>
       </template>
     </el-dialog>
+      </el-tab-pane>
+      <el-tab-pane label="源码" name="source">
+        <SourcePane segment="certificate" @saved="load" />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 

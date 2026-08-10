@@ -72,7 +72,10 @@ npm run dev     # http://localhost:5173
 - **新建 outbound 自动并入 Proxy**（settings 默认开，可配目标 selector tag）
 - **粘贴 JSON 解析**：表单粘贴 JSON → 后端解析校验 → 填充字段
 - **Config 页使用 CodeMirror 6 编辑器（JSONC）**：支持 `//` 与 `/* */` 注释、尾逗号（自建 Lezer grammar，语法树完整 → 折叠/缩进不丢）；实时 lint 用微软 jsonc-parser（VSCode 同款引擎）；一键格式化/Ctrl+Shift+F = VSCode 同款格式化（保留注释）；保存兼容 JSONC 原文（注释忽略、尾逗号容忍）
-- **DNS 管理页**：servers CRUD（local/udp/tcp/tls/https/quic/h3/fakeip/hosts/dhcp/mdns 多态 transport + detour/TLS 表单）、DNS 规则 CRUD（server 字段模型，常用匹配字段 + 附加 JSON）、基础选项（final/strategy/timeout/cache）；删除引用保护（409 + force 确认）
+- **DNS 管理页**：servers CRUD（local/udp/tcp/tls/https/quic/h3/fakeip/hosts/dhcp/mdns 多态 transport + detour/TLS 表单）、DNS 规则 CRUD（server 字段模型 + logical 嵌套类型，常用匹配字段 + 附加 JSON）、基础选项（final/strategy/timeout/cache）；删除引用保护（409 + force 确认）
+- **规则集页（route.rule_set）**：inline/local/remote 三类型 CRUD（format 按扩展名推断 + 保存时显式写回，sing-box Marshal 丢 format 的兼容）；引用保护（409 + force 清除规则引用）
+- **证书页**：certificate 段 + acme providers CRUD；被 tls.certificate_provider 引用保护
+- **每个配置页带「源码」tab**：手动编辑对应段 JSON（JSONC），保存时与主配置合并（整段替换/写 null 删除，其余配置不变）——通用 SourcePane 组件（inbounds/outbounds/route/dns/route.rule_set/certificate）
 - **配置诊断页**：静态分析（重复 tag、route/dns 悬空引用、组引用、监听冲突、未使用 outbound），补 sing-box 校验盲区（悬空引用 box.New 不拦）
 - **完整校验管线**：所有写操作 = 严格解码（未知字段/多态/重复 tag 检查）→ `box.New` 干跑预检 → 原子写盘（.bak 备份）；失败不落盘、内存回滚
 - **JSON Schema 自动生成**（`GET /api/schema`，与代码同步）

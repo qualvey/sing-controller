@@ -2,11 +2,13 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
+import SourcePane from '../components/SourcePane.vue'
 import { useStatusStore } from '../stores/status'
 
 const statusStore = useStatusStore()
 
 const loading = ref(false)
+const outerTab = ref('form')
 const saving = ref(false)
 const items = ref<Array<{ id: string; rule_set: Record<string, any> }>>([])
 
@@ -56,7 +58,8 @@ function buildRuleSet(): Record<string, any> {
       rs.rules = rules
     }
   } else {
-    if (form.format) rs.format = form.format
+    // 始终显式写 format（sing-box Marshal 会丢 format，保存时固定避免推断漂移）
+    rs.format = form.format || inferFormat({ url: form.url, path: form.path })
     if (form.type === 'local') {
       if (form.path.trim()) rs.path = form.path.trim()
     } else {
@@ -83,7 +86,7 @@ function openEdit(row: { id: string; rule_set: Record<string, any> }) {
   const type = typeof rs.type === 'string' && rs.type ? rs.type : 'inline'
   form.type = type
   form.tag = rs.tag == null ? [] : Array.isArray(rs.tag) ? rs.tag.map(String) : [String(rs.tag)]
-  form.format = typeof rs.format === 'string' ? rs.format : 'source'
+  form.format = inferFormat(rs)
   form.path = typeof rs.path === 'string' ? rs.path : ''
   form.url = typeof rs.url === 'string' ? rs.url : ''
   form.initial_path = typeof rs.initial_path === 'string' ? rs.initial_path : ''
@@ -184,11 +187,20 @@ function fmtList(v: unknown): string {
   return v == null ? '—' : String(v)
 }
 
+// sing-box RuleSet Marshal 会丢弃 format（实测）→ 从 url/path 扩展名推断（.srs→binary，其余 source）
+function inferFormat(rs: Record<string, any>): string {
+  if (typeof rs.format === 'string' && rs.format) return rs.format
+  const src = String(rs.url || rs.path || '')
+  return src.endsWith('.srs') ? 'binary' : 'source'
+}
+
 onMounted(load)
 </script>
 
 <template>
   <div class="page">
+    <el-tabs v-model="outerTab">
+      <el-tab-pane label="表单" name="form">
     <div class="toolbar">
       <el-button type="primary" @click="openCreate">新建规则集</el-button>
       <el-button :loading="loading" @click="load">刷新</el-button>
@@ -203,7 +215,7 @@ onMounted(load)
         <template #default="{ row }">{{ row.rule_set.type || 'inline' }}</template>
       </el-table-column>
       <el-table-column label="format" width="80">
-        <template #default="{ row }">{{ row.rule_set.format || '—' }}</template>
+        <template #default="{ row }">{{ inferFormat(row.rule_set) }}</template>
       </el-table-column>
       <el-table-column label="来源" min-width="220">
         <template #default="{ row }">
@@ -274,6 +286,11 @@ onMounted(load)
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+      </el-tab-pane>
+      <el-tab-pane label="源码" name="source">
+        <SourcePane segment="route.rule_set" @saved="load" />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 

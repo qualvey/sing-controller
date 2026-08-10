@@ -100,5 +100,6 @@ export const RULE_SUMMARY_ORDER = [
   'geoip',
   'source_geoip',
   'geosite',
-  'rule_set'
+  'rule_set',
+  'clash_mode'
 ]
