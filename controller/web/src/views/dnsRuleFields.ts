@@ -84,6 +84,14 @@ export const DNS_RULE_FIELDS: DnsRuleField[] = [
 
 export const DNS_RULE_FIELD_KEYS = DNS_RULE_FIELDS.map((f) => f.key)
 
+/** DNS 规则类型（option/rule_dns.go _DNSRule）：default 匹配字段 / logical 逻辑组合 */
+export const DNS_RULE_TYPES = [
+  { value: 'default', label: '普通规则（匹配字段）' },
+  { value: 'logical', label: '逻辑组合（and/or 嵌套子规则）' }
+]
+
+export const LOGICAL_MODES = ['and', 'or']
+
 /** 列表页 DNS 规则摘要的展示优先级 */
 export const DNS_RULE_SUMMARY_ORDER = [
   'inbound',
@@ -99,7 +107,9 @@ export const DNS_RULE_SUMMARY_ORDER = [
   'source_ip_cidr',
   'port',
   'port_range',
-  'source_port'
+  'source_port',
+  'preferred_by',
+  'clash_mode'
 ]
 
 /** DNS 规则动作（option/rule_action.go DNSRuleAction） */

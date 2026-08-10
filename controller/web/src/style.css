@@ -10,6 +10,64 @@ body {
   font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #f5f7fa;
+  color: #303133;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+/* 暗色主题全局底色 */
+html.dark body {
+  background: #141414;
+  color: #e5eaf3;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+/* 编辑器外壳主题变量（ConfigView VSCode 风格外壳） */
+:root {
+  --cfg-shell-bg: #ffffff;
+  --cfg-shell-border: #e4e7ed;
+  --cfg-tab-bg: #ffffff;
+  --cfg-tabbar-bg: #fafbfc;
+  --cfg-tab-color: #606266;
+  --cfg-toolbar-bg: #fafbfc;
+  --cfg-statusbar-bg: #f5f7fa;
+  --cfg-text-dim: #909399;
+  --cfg-text-bright: #303133;
+  --cfg-accent: #409eff;
+  --cfg-shadow: rgba(0, 0, 0, 0.08);
+  --cfg-dirty: #e6a23c;
+}
+html.dark {
+  --cfg-shell-bg: #282c34;
+  --cfg-shell-border: #30363d;
+  --cfg-tab-bg: #282c34;
+  --cfg-tabbar-bg: #1e2227;
+  --cfg-tab-color: #d7dae0;
+  --cfg-toolbar-bg: #21252b;
+  --cfg-statusbar-bg: #1e2227;
+  --cfg-text-dim: #636d83;
+  --cfg-text-bright: #abb2bf;
+  --cfg-accent: #61afef;
+  --cfg-shadow: rgba(0, 0, 0, 0.25);
+  --cfg-dirty: #e5c07b;
+}
+
+/* 页面通用类的暗色适配（白底卡片/次要文字） */
+html.dark .section,
+html.dark .final-bar {
+  background: #1d1e1f;
+  border-color: #303030;
+}
+html.dark .section-title,
+html.dark .final-label {
+  color: #e5eaf3;
+}
+html.dark .hint,
+html.dark .rule-item b,
+html.dark .muted {
+  color: #a3a6ad;
 }
 
 /* 原始 JSON 编辑框使用等宽字体 */

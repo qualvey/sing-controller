@@ -3,16 +3,21 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { api } from '../api'
+import SourcePane from '../components/SourcePane.vue'
+import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import type { Inbound } from '../api'
 import { useStatusStore } from '../stores/status'
 
 const statusStore = useStatusStore()
 
 const loading = ref(false)
+const outerTab = ref('form')
 const inbounds = ref<Inbound[]>([])
 const inboundTypes = ref<string[]>([])
 
 const dialogVisible = ref(false)
+const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
+const sourceJson = ref('{}')
 const isEdit = ref(false)
 const editingTag = ref('')
 const saving = ref(false)
@@ -26,7 +31,6 @@ interface InboundForm {
   listen: string
   listen_port?: number
   users: { username: string; password: string }[]
-  rawJson: string
 }
 
 const form = reactive<InboundForm>({
@@ -35,7 +39,6 @@ const form = reactive<InboundForm>({
   listen: '',
   listen_port: undefined,
   users: [{ username: '', password: '' }],
-  rawJson: ''
 })
 
 const isMixed = computed(() => form.type === 'mixed')
@@ -68,7 +71,6 @@ function resetForm(type: string) {
   form.listen = ''
   form.listen_port = undefined
   form.users = [{ username: '', password: '' }]
-  form.rawJson = ''
 }
 
 function fillForm(obj: Inbound) {
@@ -83,26 +85,34 @@ function fillForm(obj: Inbound) {
           return { username: str(rec.username), password: str(rec.password) }
         })
       : [{ username: '', password: '' }]
-    form.rawJson = ''
   } else {
     form.users = []
-    const rest: Record<string, unknown> = { ...obj }
-    delete rest.type
-    delete rest.tag
-    delete rest.listen
-    delete rest.listen_port
-    form.rawJson = Object.keys(rest).length ? JSON.stringify(rest, null, 2) : ''
   }
 }
 
-const openCreate = () => {
+// 从后端 settings 拉取默认值填充 listen（不依赖 statusStore 异步时序）
+const fillDefaults = async () => {
+  try {
+    const s = await api.settings()
+    if (s.defaults?.listen) form.listen = s.defaults.listen
+  } catch {
+    // 拉取失败保持现状，用户可手动填
+  }
+}
+
+const openCreate = async () => {
   isEdit.value = false
   editingTag.value = ''
+  sourceJson.value = '{}'
   const def = statusStore.status?.defaults
   const defType = def?.inbound_type
   resetForm(defType && inboundTypes.value.includes(defType) ? defType : inboundTypes.value[0] || 'mixed')
-  if (def?.listen) form.listen = def.listen
-  if (typeof def?.listen_port === 'number') form.listen_port = def.listen_port
+  // listen 默认值来自后端 settings.defaults.listen（实时拉取）
+  form.listen = ''
+  await fillDefaults()
+  // listen_port 默认自动分配（可手动修改），分配失败则留空
+  form.listen_port = undefined
+  void allocatePort(false)
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }
@@ -113,7 +123,9 @@ const openEdit = async (row: Inbound) => {
   dialogVisible.value = true
   formRef.value?.clearValidate()
   try {
-    fillForm(await api.getInbound(row.tag))
+    const data = await api.getInbound(row.tag)
+    sourceJson.value = JSON.stringify(data, null, 2)
+    fillForm(data)
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
     dialogVisible.value = false
@@ -124,7 +136,10 @@ const openEdit = async (row: Inbound) => {
 watch(
   () => form.type,
   (t) => {
-    if (!suppressTypeWatch.value && dialogVisible.value && !isEdit.value) resetForm(t)
+    if (!suppressTypeWatch.value && dialogVisible.value && !isEdit.value) {
+      resetForm(t)
+      void fillDefaults() // 切换类型后重新填充 listen 默认值
+    }
   }
 )
 
@@ -157,15 +172,15 @@ const fillFromJson = async () => {
   }
 }
 
-// 自动分配最小可用端口（起点=controller 配置的 min_port）
-const allocatePort = async () => {
+// 自动分配最小可用端口（起点=controller 配置的 min_port）；新建时默认触发，也可手动点击
+const allocatePort = async (notify = true) => {
   allocating.value = true
   try {
     const res = await api.availablePort()
     form.listen_port = res.port
-    ElMessage.success(`已分配可用端口 ${res.port}`)
+    if (notify) ElMessage.success(`已分配可用端口 ${res.port}`)
   } catch (e) {
-    ElMessage.error((e as Error).message || '端口分配失败')
+    if (notify) ElMessage.error((e as Error).message || '端口分配失败')
   } finally {
     allocating.value = false
   }
@@ -184,20 +199,9 @@ function buildBody(): Inbound {
       throw new Error('用户名和密码需同时填写')
     }
     if (users.length) body.users = users
-  } else if (form.rawJson.trim()) {
-    let extra: Record<string, unknown>
-    try {
-      extra = JSON.parse(form.rawJson.trim())
-    } catch (e) {
-      throw new Error(`原始 JSON 格式错误：${(e as Error).message}`)
-    }
-    if (typeof extra !== 'object' || extra === null || Array.isArray(extra)) {
-      throw new Error('原始 JSON 必须为 JSON 对象')
-    }
-    Object.assign(body, extra)
-    body.type = form.type
-    if (!body.tag) body.tag = form.tag.trim()
   }
+  body.type = form.type
+  if (!body.tag) body.tag = form.tag.trim()
   return body
 }
 
@@ -215,7 +219,8 @@ const save = async () => {
   if (!valid) return
   saving.value = true
   try {
-    const body = buildBody()
+    // 源码 tab 被修改时用源码内容作为提交体（覆盖表单）
+    const body = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildBody()
     const res = isEdit.value ? await api.updateInbound(editingTag.value, body) : await api.createInbound(body)
     handleResult(res)
     dialogVisible.value = false
@@ -270,6 +275,8 @@ onMounted(async () => {
 
 <template>
   <div class="page">
+    <el-tabs v-model="outerTab">
+      <el-tab-pane label="表单" name="form">
     <div class="toolbar">
       <el-button type="primary" @click="openCreate">新建 Inbound</el-button>
       <el-button :loading="loading" @click="loadInbounds">刷新</el-button>
@@ -298,6 +305,8 @@ onMounted(async () => {
       width="680px"
       :close-on-click-modal="false"
     >
+      <el-tabs>
+        <el-tab-pane label="表单">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="130px">
         <el-form-item>
           <el-button size="small" @click="fillFromJson">从 JSON 填充（粘贴解析）</el-button>
@@ -347,22 +356,23 @@ onMounted(async () => {
               <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
             </div>
           </el-form-item>
-          <el-form-item label="其他字段 (JSON)">
-            <el-input
-              v-model="form.rawJson"
-              type="textarea"
-              :rows="8"
-              class="mono"
-              placeholder='{"network": "tcp", "sniff": true}'
-            />
-          </el-form-item>
         </template>
       </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="源码">
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+      </el-tab-pane>
+    </el-tabs>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+      </el-tab-pane>
+      <el-tab-pane label="源码" name="source">
+        <SourcePane segment="inbounds" @saved="loadInbounds" />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 

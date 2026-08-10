@@ -94,11 +94,21 @@ export const RULE_SUMMARY_ORDER = [
   'domain_regex',
   'ip_cidr',
   'source_ip_cidr',
+  'ip_is_private',
+  'source_ip_is_private',
+  'ip_accept_any',
   'port',
   'port_range',
   'source_port',
+  'source_port_range',
+  'process_name',
+  'process_path',
+  'package_name',
+  'user',
+  'auth_user',
   'geoip',
   'source_geoip',
   'geosite',
-  'rule_set'
+  'rule_set',
+  'clash_mode'
 ]

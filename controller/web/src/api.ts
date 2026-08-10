@@ -27,6 +27,13 @@ export interface ControllerSettings {
     level: string
   }
   min_port: number
+  reload?: {
+    mode: string
+    service?: string
+    pid_file?: string
+    hook?: string
+    after_save?: boolean
+  }
   defaults: {
     inbound_type: string
     outbound_type: string
@@ -149,6 +156,26 @@ export const api = {
   deleteDnsRule: (id: string) => http.delete(`/dns/rules/${encodeURIComponent(id)}`).then((r) => r.data),
   updateDnsOptions: (o: Record<string, unknown>) => http.put('/dns/options', o).then((r) => r.data),
 
+  // 重载 sing-box
+  reload: () => http.post('/reload').then((r) => r.data),
+
   // 诊断
-  diagnostics: () => http.get<{ diagnostics: Array<{ level: string; message: string }> }>('/diagnostics').then((r) => r.data)
+  diagnostics: () => http.get<{ diagnostics: Array<{ level: string; message: string }> }>('/diagnostics').then((r) => r.data),
+
+  // 规则集（route.rule_set 段）
+  ruleSets: () => http.get<{ rule_sets: Array<{ id: string; rule_set: Record<string, any> }> }>('/rule-sets').then((r) => r.data),
+  createRuleSet: (rs: Record<string, unknown>) => http.post('/rule-sets', rs).then((r) => r.data),
+  updateRuleSet: (id: string, rs: Record<string, unknown>) =>
+    http.put(`/rule-sets/${encodeURIComponent(id)}`, rs).then((r) => r.data),
+  deleteRuleSet: (id: string, force = false) =>
+    http.delete(`/rule-sets/${encodeURIComponent(id)}${force ? '?force=true' : ''}`).then((r) => r.data),
+
+  // 证书（certificate 段 + certificate_providers）
+  certificate: () => http.get<{ certificate: unknown; providers: Array<{ id: string; provider: Record<string, any> }> }>('/certificate').then((r) => r.data),
+  saveCertificate: (cert: unknown) => http.put('/certificate', cert).then((r) => r.data),
+  createCertProvider: (p: Record<string, unknown>) => http.post('/certificate/providers', p).then((r) => r.data),
+  updateCertProvider: (id: string, p: Record<string, unknown>) =>
+    http.put(`/certificate/providers/${encodeURIComponent(id)}`, p).then((r) => r.data),
+  deleteCertProvider: (id: string, force = false) =>
+    http.delete(`/certificate/providers/${encodeURIComponent(id)}${force ? '?force=true' : ''}`).then((r) => r.data)
 }

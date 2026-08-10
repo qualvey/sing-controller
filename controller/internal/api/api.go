@@ -117,6 +117,22 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	// 诊断
 	mux.HandleFunc("GET /api/diagnostics", h.handleDiagnostics)
 
+	// 规则集（route.rule_set 段）
+	mux.HandleFunc("GET /api/rule-sets", h.handleListRuleSets)
+	mux.HandleFunc("POST /api/rule-sets", h.handleCreateRuleSet)
+	mux.HandleFunc("PUT /api/rule-sets/{id}", h.handleUpdateRuleSet)
+	mux.HandleFunc("DELETE /api/rule-sets/{id}", h.handleDeleteRuleSet)
+
+	// 证书
+	mux.HandleFunc("GET /api/certificate", h.handleGetCertificate)
+	mux.HandleFunc("PUT /api/certificate", h.handlePutCertificate)
+	mux.HandleFunc("POST /api/certificate/providers", h.handleCreateCertProvider)
+	mux.HandleFunc("PUT /api/certificate/providers/{id}", h.handleUpdateCertProvider)
+	mux.HandleFunc("DELETE /api/certificate/providers/{id}", h.handleDeleteCertProvider)
+
+	// 重载 sing-box
+	mux.HandleFunc("POST /api/reload", h.handleReload)
+
 	return h.withMiddleware(mux)
 }
 
@@ -200,7 +216,15 @@ func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*op
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+	response := map[string]any{"saved": true}
+	// 保存后自动重载 sing-box（settings.reload.after_save）
+	if executed, err := h.reloadIfEnabled(); err != nil {
+		response["reload_error"] = err.Error()
+		response["message"] = "配置已保存，但 sing-box 重载失败"
+	} else if executed {
+		response["reloaded"] = true
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -319,6 +343,10 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("min_port 需在 1024-65535 之间"))
 		return
 	}
+	if err := newValues.Reload.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 	ctx := h.ctx(r)
 	if err := h.settings.Update(func(s *settings.Settings) error {
 		*s = newValues
@@ -389,7 +417,15 @@ func (h *Handler) handlePutConfigRaw(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+	response := map[string]any{"saved": true}
+	// 保存后自动重载 sing-box（settings.reload.after_save）
+	if executed, err := h.reloadIfEnabled(); err != nil {
+		response["reload_error"] = err.Error()
+		response["message"] = "配置已保存，但 sing-box 重载失败"
+	} else if executed {
+		response["reloaded"] = true
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {

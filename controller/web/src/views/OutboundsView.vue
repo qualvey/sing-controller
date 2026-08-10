@@ -3,16 +3,21 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { api } from '../api'
+import SourcePane from '../components/SourcePane.vue'
+import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import type { Outbound } from '../api'
 import { useStatusStore } from '../stores/status'
 
 const statusStore = useStatusStore()
 
 const loading = ref(false)
+const outerTab = ref('form')
 const outbounds = ref<Outbound[]>([])
 const outboundTypes = ref<string[]>([])
 
 const dialogVisible = ref(false)
+const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
+const sourceJson = ref('{}')
 const isEdit = ref(false)
 const editingTag = ref('')
 const saving = ref(false)
@@ -46,7 +51,6 @@ interface OutboundForm {
   interval: string
   tolerance?: number
   interrupt_exist_connections: boolean
-  rawJson: string
 }
 
 const form = reactive<OutboundForm>({
@@ -74,7 +78,6 @@ const form = reactive<OutboundForm>({
   interval: '',
   tolerance: undefined,
   interrupt_exist_connections: false,
-  rawJson: ''
 })
 
 const networkOptions = ['tcp', 'udp', 'ws', 'grpc', 'h2', 'httpupgrade', 'xhttp']
@@ -160,7 +163,6 @@ function resetForm(type: string) {
   form.interval = ''
   form.tolerance = undefined
   form.interrupt_exist_connections = false
-  form.rawJson = ''
 }
 
 function fillForm(obj: Outbound) {
@@ -190,7 +192,6 @@ function fillForm(obj: Outbound) {
     alpn: Array.isArray(tls.alpn) ? tls.alpn.map(String) : ['h3']
   }
   if (form.type === 'vless' || form.type === 'tuic') {
-    form.rawJson = ''
   } else if (form.type === 'selector' || form.type === 'urltest') {
     form.outbounds = Array.isArray(obj.outbounds) ? obj.outbounds.map(String) : []
     form.default_out = str(obj.default)
@@ -198,20 +199,14 @@ function fillForm(obj: Outbound) {
     form.interval = str(obj.interval)
     form.tolerance = num(obj.tolerance)
     form.interrupt_exist_connections = !!obj.interrupt_exist_connections
-    form.rawJson = ''
   } else {
-    const rest: Record<string, unknown> = { ...obj }
-    delete rest.type
-    delete rest.tag
-    delete rest.server
-    delete rest.server_port
-    form.rawJson = Object.keys(rest).length ? JSON.stringify(rest, null, 2) : ''
   }
 }
 
 const openCreate = () => {
   isEdit.value = false
   editingTag.value = ''
+  sourceJson.value = '{}'
   const def = statusStore.status?.defaults?.outbound_type
   resetForm(def && outboundTypes.value.includes(def) ? def : outboundTypes.value[0] || 'vless')
   dialogVisible.value = true
@@ -224,7 +219,9 @@ const openEdit = async (row: Outbound) => {
   dialogVisible.value = true
   formRef.value?.clearValidate()
   try {
-    fillForm(await api.getOutbound(row.tag))
+    const data = await api.getOutbound(row.tag)
+    sourceJson.value = JSON.stringify(data, null, 2)
+    fillForm(data)
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
     dialogVisible.value = false
@@ -317,21 +314,7 @@ function buildBody(): Outbound {
     return body
   }
 
-  // 其他类型：通用字段 + 原始 JSON 合并
-  if (form.rawJson.trim()) {
-    let extra: Record<string, unknown>
-    try {
-      extra = JSON.parse(form.rawJson.trim())
-    } catch (e) {
-      throw new Error(`原始 JSON 格式错误：${(e as Error).message}`)
-    }
-    if (typeof extra !== 'object' || extra === null || Array.isArray(extra)) {
-      throw new Error('原始 JSON 必须为 JSON 对象')
-    }
-    Object.assign(body, extra)
-    body.type = form.type
-    if (!body.tag) body.tag = form.tag.trim()
-  }
+  // 其他类型：表单覆盖常用字段（未覆盖字段用「源码」tab 编辑）
   return body
 }
 
@@ -349,7 +332,7 @@ const save = async () => {
   if (!valid) return
   saving.value = true
   try {
-    const body = buildBody()
+    const body = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildBody()
     const res = isEdit.value ? await api.updateOutbound(editingTag.value, body) : await api.createOutbound(body)
     handleResult(res)
     dialogVisible.value = false
@@ -454,6 +437,8 @@ onMounted(async () => {
 
 <template>
   <div class="page">
+    <el-tabs v-model="outerTab">
+      <el-tab-pane label="表单" name="form">
     <div class="toolbar">
       <el-button type="primary" @click="openCreate">新建 Outbound</el-button>
       <el-button :loading="loading" @click="loadOutbounds">刷新</el-button>
@@ -482,6 +467,8 @@ onMounted(async () => {
       width="720px"
       :close-on-click-modal="false"
     >
+      <el-tabs>
+        <el-tab-pane label="表单">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="170px">
         <el-form-item>
           <el-button size="small" @click="fillFromJson">从 JSON 填充（粘贴解析）</el-button>
@@ -626,7 +613,6 @@ onMounted(async () => {
         <!-- 其他类型：原始 JSON 兜底 -->
         <el-form-item v-else label="其他字段 (JSON)">
           <el-input
-            v-model="form.rawJson"
             type="textarea"
             :rows="8"
             class="mono"
@@ -634,11 +620,21 @@ onMounted(async () => {
           />
         </el-form-item>
       </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="源码">
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+      </el-tab-pane>
+    </el-tabs>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+      </el-tab-pane>
+      <el-tab-pane label="源码" name="source">
+        <SourcePane segment="outbounds" @saved="loadOutbounds" />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 

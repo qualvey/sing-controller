@@ -11,6 +11,7 @@ const form = ref<ControllerSettings>({
   listen: '127.0.0.1:8080',
   log: { level: 'info' },
   min_port: 8000,
+  reload: { mode: 'none', after_save: false },
   defaults: {
     inbound_type: 'mixed',
     outbound_type: 'vless',
@@ -30,6 +31,9 @@ const load = async () => {
     // 兼容旧配置：attach_to_selector 缺失时按默认开启
     if (s.defaults.attach_to_selector === undefined) {
       s.defaults.attach_to_selector = true
+    }
+    if (!s.reload) {
+      s.reload = { mode: 'none', after_save: false }
     }
     form.value = s
   } catch (e) {
@@ -141,6 +145,32 @@ onMounted(load)
             <el-option v-for="t in selectorTags" :key="t" :label="t" :value="t" />
           </el-select>
           <div class="field-hint">下拉自动列出现有 type=selector 的 outbound；须先存在同名 selector，否则不生效。</div>
+        </el-form-item>
+
+        <el-divider content-position="left">sing-box 重载</el-divider>
+        <el-form-item label="重载方式 (mode)">
+          <el-select v-model="form.reload!.mode" style="width: 100%">
+            <el-option label="不启用 (none)" value="none" />
+            <el-option label="systemd（systemctl reload，推荐）" value="systemd" />
+            <el-option label="pidfile（读取 PID 后 kill -HUP）" value="pidfile" />
+            <el-option label="hook（自定义命令）" value="hook" />
+          </el-select>
+          <div class="field-hint">sing-box 官方重载机制只有 SIGHUP（收到后重载配置）。保存/手动触发时按此方式执行。</div>
+        </el-form-item>
+        <el-form-item v-if="form.reload!.mode === 'systemd'" label="systemd 服务名">
+          <el-input v-model="form.reload!.service" placeholder="sing-box" />
+          <div class="field-hint">执行 systemctl reload &lt;服务名&gt;；需 sing-controller 用户有对应权限（通常需 root 或 polkit 授权）。</div>
+        </el-form-item>
+        <el-form-item v-if="form.reload!.mode === 'pidfile'" label="PID 文件路径">
+          <el-input v-model="form.reload!.pid_file" placeholder="/run/sing-box.pid" />
+        </el-form-item>
+        <el-form-item v-if="form.reload!.mode === 'hook'" label="hook 命令">
+          <el-input v-model="form.reload!.hook" placeholder="sudo systemctl reload sing-box" />
+          <div class="field-hint">以 sing-controller 用户执行（sh -c）；如需 sudo 请配置 NOPASSWD。</div>
+        </el-form-item>
+        <el-form-item label="保存后自动重载">
+          <el-switch v-model="form.reload!.after_save" :disabled="form.reload!.mode === 'none'" />
+          <div class="field-hint">开启后所有配置写操作保存成功即自动触发重载；失败不影响保存，仅提示。</div>
         </el-form-item>
       </el-form>
     </el-card>

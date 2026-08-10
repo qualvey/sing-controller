@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -23,11 +24,19 @@ func main() {
 		listenAddr   string
 		settingsPath string
 		secret       string
+		showVersion  bool
 	)
 	flag.StringVar(&listenAddr, "listen", "", "HTTP listen address (override config.json listen)")
 	flag.StringVar(&settingsPath, "config", "config.json", "controller config file path")
 	flag.StringVar(&secret, "secret", "", "optional API secret (X-Secret header)")
+	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
+
+	// 支持两种形式：-version flag 与 version 子命令（sing-box 风格）
+	if showVersion || (flag.NArg() > 0 && flag.Arg(0) == "version") {
+		fmt.Printf("sing-controller %s\n", version)
+		return
+	}
 
 	ctx := context.Background()
 

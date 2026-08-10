@@ -150,6 +150,32 @@ mixed 示例：
 
 > 说明：sing-box 校验不拦截悬空引用（`box.New` 通过），诊断页是这些问题的唯一发现渠道。
 
+## 规则集（route.rule_set 段）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/rule-sets` | `{rule_sets: [{id, rule_set}, ...]}` |
+| POST | `/api/rule-sets` | 新建（inline 内联 / local 本地 / remote 远程，参照 option/rule_set.go）；tag 必填 |
+| PUT | `/api/rule-sets/{id}` | 替换 |
+| DELETE | `/api/rule-sets/{id}` | 被 route/dns 规则引用时返回 409 + references；`?force=true` 自动从规则中移除引用后删除 |
+
+- inline：`{tag, rules: [HeadlessRule...]}`；local：`{type, tag, format, path}`；remote：`{type, tag, format, url, initial_path?, update_interval?}`
+- format 省略时按扩展名推断（.json→source，.srs→binary）；多 tag 时 local/remote 的 path/url 需含 `{tag}` 占位符
+- local 校验会实际读取文件（空/非法文件报错）；remote 仅校验 URL 格式
+
+## 证书
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/certificate` | `{certificate: {...}|null, providers: [{id, provider}, ...]}` |
+| PUT | `/api/certificate` | 整体替换顶层 certificate 段（store/certificate/certificate_path/certificate_directory_path）；body 为 null 清空 |
+| POST | `/api/certificate/providers` | 新建 provider（acme，registry 多态解码）；tag 可选 |
+| PUT | `/api/certificate/providers/{id}` | 替换 |
+| DELETE | `/api/certificate/providers/{id}` | 被 tls.certificate_provider 引用时返回 409 + references；`?force=true` 自动清除引用后删除 |
+
+- provider 引用方式：tag 字符串或内联对象（option/certificate_provider.go）；acme 需构建 tag `with_acme`
+- certificate_path / PEM 校验会实际读取文件
+
 ## 工具
 
 | 方法 | 路径 | 说明 |
@@ -157,6 +183,14 @@ mixed 示例：
 | POST | `/api/tools/uuid` | `{uuid}` 生成 v4 uuid |
 | POST | `/api/tools/reality-keypair` | `{private_key, public_key}` Reality X25519 密钥对（URL-safe base64，与 `sing-box generate reality-keypair` 一致） |
 | POST | `/api/tools/parse-json` | body `{json: "<文本>"}`；合法 → `{ok: true, data: <解析结果>}`，非法 → 400 |
+| POST | `/api/reload` | 重载运行中的 sing-box（SIGHUP）；按 settings.reload 配置执行（systemd/pidfile/hook）；未配置返回 400 |
+
+## sing-box 重载（settings.reload）
+
+- sing-box 官方重载机制只有 SIGHUP（`cmd_run.go` 收到 SIGHUP 重载配置）；clash_api **无** reload 端点
+- `mode`：`systemd`（systemctl reload &lt;service&gt;，默认 sing-box）/ `pidfile`（读 pid 文件 → kill -HUP，仅 Linux）/ `hook`（sh -c 自定义命令）/ `none`
+- `after_save`：开启后所有配置写操作保存成功自动触发重载（成功响应含 `reloaded: true`；失败附 `reload_error` 不影响保存）
+- 权限提示：systemd 模式需 sing-controller 用户有 unit 管理权限（root/polkit）；hook 模式如需 sudo 配置 NOPASSWD
 
 ## 写操作响应与校验
 

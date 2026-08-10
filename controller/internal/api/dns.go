@@ -127,7 +127,13 @@ func removeDNSRuleRefs(ctx context.Context, rule *option.DNSRule, tag string) er
 	if err != nil {
 		return err
 	}
-	return json.UnmarshalContext(ctx, content, rule)
+	// 解码到新对象再回写（复用对象时未出现的字段会保留旧值）
+	var fresh option.DNSRule
+	if err := json.UnmarshalContext(ctx, content, &fresh); err != nil {
+		return err
+	}
+	*rule = fresh
+	return nil
 }
 
 func (h *Handler) handleGetDNS(w http.ResponseWriter, r *http.Request) {

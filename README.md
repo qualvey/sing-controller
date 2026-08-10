@@ -22,7 +22,7 @@
 ```bash
 # 1. 构建前端（产物被 controller embed）
 cd controller/web
-npm install && npm run build
+pnpm install && pnpm run build
 
 # 2. 启动 controller（页面 + API 同端口，默认 127.0.0.1:8080）
 cd ..
@@ -34,7 +34,7 @@ go run -tags "with_quic with_utls with_gvisor with_dhcp with_wireguard with_acme
 
 ```bash
 cd controller/web
-npm run dev     # http://localhost:5173
+pnpm run dev     # http://localhost:5173
 ```
 
 > **构建 tags 对齐生产 sing-box 二进制**（with_quic/with_utls/with_gvisor/with_dhcp/with_wireguard/with_acme/with_clash_api/with_tailscale/with_ccm/with_ocm/with_cloudflared/with_usbip），
@@ -72,9 +72,16 @@ npm run dev     # http://localhost:5173
 - **新建 outbound 自动并入 Proxy**（settings 默认开，可配目标 selector tag）
 - **粘贴 JSON 解析**：表单粘贴 JSON → 后端解析校验 → 填充字段
 - **Config 页使用 CodeMirror 6 编辑器（JSONC）**：支持 `//` 与 `/* */` 注释、尾逗号（自建 Lezer grammar，语法树完整 → 折叠/缩进不丢）；实时 lint 用微软 jsonc-parser（VSCode 同款引擎）；一键格式化/Ctrl+Shift+F = VSCode 同款格式化（保留注释）；保存兼容 JSONC 原文（注释忽略、尾逗号容忍）
-- **DNS 管理页**：servers CRUD（local/udp/tcp/tls/https/quic/h3/fakeip/hosts/dhcp/mdns 多态 transport + detour/TLS 表单）、DNS 规则 CRUD（server 字段模型，常用匹配字段 + 附加 JSON）、基础选项（final/strategy/timeout/cache）；删除引用保护（409 + force 确认）
+- **DNS 管理页**：servers CRUD（local/udp/tcp/tls/https/quic/h3/fakeip/hosts/dhcp/mdns 多态 transport + detour/TLS 表单）、DNS 规则 CRUD（server 字段模型 + logical 嵌套类型，常用匹配字段 + 附加 JSON）、基础选项（final/strategy/timeout/cache）；删除引用保护（409 + force 确认）
+- **规则集页（route.rule_set）**：inline/local/remote 三类型 CRUD（format 按扩展名推断 + 保存时显式写回，sing-box Marshal 丢 format 的兼容）；引用保护（409 + force 清除规则引用）
+- **证书页**：certificate 段 + acme providers CRUD；被 tls.certificate_provider 引用保护
+- **每个配置页带「源码」tab**：手动编辑对应段 JSON（JSONC），保存时与主配置合并（整段替换/写 null 删除，其余配置不变）——通用 SourcePane 组件（inbounds/outbounds/route/dns/route.rule_set/certificate）
 - **配置诊断页**：静态分析（重复 tag、route/dns 悬空引用、组引用、监听冲突、未使用 outbound），补 sing-box 校验盲区（悬空引用 box.New 不拦）
 - **完整校验管线**：所有写操作 = 严格解码（未知字段/多态/重复 tag 检查）→ `box.New` 干跑预检 → 原子写盘（.bak 备份）；失败不落盘、内存回滚
+- **sing-box 重载（SIGHUP）**:`POST /api/reload` 三模式（systemd / pidfile / hook，由 settings.reload 配置）;保存配置后自动重载;全页面左下角悬浮重载按钮
+- **日/夜主题切换**:右上角 ☀️/🌙 切换,localStorage 持久化（默认暗色）;Element Plus dark css-vars 全组件适配;CodeMirror 用 Compartment 动态切换 oneDark/亮色（含编辑器 UI 外壳）
+- **移动端响应式**:<768px 侧边栏自动折叠为 64px 图标栏,汉堡按钮自身伸展为完整菜单（遮罩点击收起）,选中路由自动收起
+- **后端单元测试**:`go test ./...`（internal/api 24.3% 覆盖,40+ 用例:配置往返/引用保护/删除回写/端口分配/诊断计数;httptest 全链路 config/raw JSONC 注释保留）
 - **JSON Schema 自动生成**（`GET /api/schema`，与代码同步）
 
 ## 复用 sing-box 的关键点
@@ -107,7 +114,7 @@ goreleaser release --snapshot --clean
 ```
 
 CI 流程：checkout 主仓库 → clone `qualvey/sing-box` fork 到 `<workspace>/../sing-box`（与本地布局一致）
-→ setup-go(1.26) + setup-node(22) → `npm ci && npm run build` → goreleaser（自动 embed dist）。
+→ setup-go(1.26) + setup-node(22) → `pnpm install --frozen-lockfile && pnpm run build` → goreleaser（自动 embed dist）。
 
 自动产物：linux amd64 / arm64 / armv7 的 `tar.gz` + **deb**（含 systemd 单元，安装后自动建用户、启停服务）。
 
@@ -119,6 +126,19 @@ sudo systemctl status sing-controller
 # 浏览器访问 http://<host>:8080（listen 可改 /etc/sing-controller/config.json 后 restart）
 ```
 
+重载权限
+
+```shell
+sudo tee /etc/polkit-1/rules.d/50-sing-box.rules <<'EOF'
+polkit.addRule(function(action, subject) {
+  if (action.id == "org.freedesktop.systemd1.manage-units" &&
+      subject.user == "sing-controller" &&
+      action.lookup("unit") == "sing-box.service") {
+    return polkit.Result.YES;
+  }
+});
+EOF
+```
 安装后：
 - 用户/组 `sing-controller`（无特权、nologin），配置目录 `/etc/sing-controller`
 - systemd 服务 `sing-controller`（journald 日志：`journalctl -u sing-controller -f`），带 `CAP_NET_BIND_SERVICE`（可监听 80/443）
