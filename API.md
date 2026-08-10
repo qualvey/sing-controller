@@ -60,7 +60,7 @@ PUT 响应语义：
 | POST | `/api/outbounds` | 新建。body 必须含 `type` 和 `tag`；tag 重复返回 400 |
 | GET | `/api/outbounds/{tag}` | 单个 |
 | PUT | `/api/outbounds/{tag}` | 整体替换（body 的 tag 需与路径一致） |
-| DELETE | `/api/outbounds/{tag}` | 删除；被 route 规则/final 引用时返回 400 |
+| DELETE | `/api/outbounds/{tag}` | 删除；被 route 规则/final 引用时返回 400；被 selector/urltest 组引用时返回 **409** `{error, references: [组tag,...]}`，加 `?force=true` 重试会自动从所有引用组拔除该 tag 后删除 |
 
 vless 示例：
 ```json

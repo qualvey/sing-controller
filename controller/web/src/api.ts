@@ -78,12 +78,15 @@ const http = axios.create({
   timeout: 15000
 })
 
-// 非 2xx 响应统一 reject，并提取后端 error 字段，调用处 catch 后展示
+// 非 2xx 响应统一 reject，并提取后端 error 字段；409 引用冲突时附带 references 列表（前端弹确认框用）
 http.interceptors.response.use(
   (res) => res,
-  (err: AxiosError<{ error?: string }>) => {
-    const msg = err.response?.data?.error || err.message || '请求失败'
-    return Promise.reject(new Error(msg))
+  (err: AxiosError<{ error?: string; references?: string[] }>) => {
+    const data = err.response?.data
+    const msg = data?.error || err.message || '请求失败'
+    const e = new Error(msg) as Error & { references?: string[] }
+    if (data?.references?.length) e.references = data.references
+    return Promise.reject(e)
   }
 )
 
@@ -115,7 +118,8 @@ export const api = {
   getOutbound: (tag: string) => http.get<Outbound>(`/outbounds/${encodeURIComponent(tag)}`).then((r) => r.data),
   createOutbound: (o: Outbound) => http.post('/outbounds', o).then((r) => r.data),
   updateOutbound: (tag: string, o: Outbound) => http.put(`/outbounds/${encodeURIComponent(tag)}`, o).then((r) => r.data),
-  deleteOutbound: (tag: string) => http.delete(`/outbounds/${encodeURIComponent(tag)}`).then((r) => r.data),
+  deleteOutbound: (tag: string, force = false) =>
+    http.delete(`/outbounds/${encodeURIComponent(tag)}${force ? '?force=true' : ''}`).then((r) => r.data),
 
   // Inbound CRUD
   inbounds: () => http.get<{ inbounds: Inbound[] }>('/inbounds').then((r) => r.data.inbounds),

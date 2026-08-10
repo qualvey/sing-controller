@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/sagernet/sing-box/include"
@@ -172,6 +173,14 @@ func (h *Handler) schema() ([]byte, error) {
 // commit 执行"内存修改 → 全量校验 → 原子写盘"管线。
 func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*option.Options, *store.Meta) error) {
 	if err := h.store.Update(h.ctx(r), mutate); err != nil {
+		var refErr *GroupReferenceError
+		if errors.As(err, &refErr) {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":      refErr.Error(),
+				"references": refErr.References,
+			})
+			return
+		}
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -186,6 +195,18 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, map[string]any{"error": err.Error()})
+}
+
+// GroupReferenceError 表示对象被 selector/urltest 组引用：
+// 删除需前端确认，确认后带 force=true 重试（后端自动从引用组拔除 tag）。
+// commit 会将此类错误转成 409 + references 列表，供前端弹确认框。
+type GroupReferenceError struct {
+	Tag        string
+	References []string
+}
+
+func (e *GroupReferenceError) Error() string {
+	return "outbound 被组引用: " + strings.Join(e.References, ", ")
 }
 
 func readRawBody(r *http.Request) ([]byte, error) {

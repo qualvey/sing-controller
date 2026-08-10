@@ -376,7 +376,28 @@ const remove = async (row: Outbound) => {
     ElMessage.success('删除成功')
     await Promise.all([loadOutbounds(), statusStore.refresh()])
   } catch (e) {
-    ElMessage.error((e as Error).message || '删除失败')
+    const err = e as Error & { references?: string[] }
+    // 被 selector/urltest 组引用：确认后强制删除（后端自动从引用组拔除 tag）
+    if (err.references?.length) {
+      try {
+        await ElMessageBox.confirm(
+          `节点「${row.tag}」被以下组引用：${err.references.join('、')}\n删除后将自动从这些组中移除该节点。确认删除？`,
+          '节点被组引用',
+          { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+        )
+      } catch {
+        return
+      }
+      try {
+        await api.deleteOutbound(row.tag, true)
+        ElMessage.success(`删除成功，并已从 ${err.references.join('、')} 中移除`)
+        await Promise.all([loadOutbounds(), statusStore.refresh()])
+      } catch (e2) {
+        ElMessage.error((e2 as Error).message || '删除失败')
+      }
+      return
+    }
+    ElMessage.error(err.message || '删除失败')
   }
 }
 
