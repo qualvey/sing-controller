@@ -20,6 +20,7 @@ const downSpeed = ref(0)
 const connected = ref(false)
 const failed = ref(false)
 const closed = ref(false)
+const abort = new AbortController()
 
 let lastBatchAt = Date.now()
 
@@ -86,7 +87,7 @@ const handleBatch = (ev: ConnectionEvents) => {
 
 const run = async () => {
   try {
-    for await (const ev of subscribeConnections()) {
+    for await (const ev of subscribeConnections(abort.signal)) {
       handleBatch(ev)
     }
   } catch {
@@ -119,6 +120,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   closed.value = true
+  abort.abort()
 })
 </script>
 

@@ -8,6 +8,7 @@ const logs = ref<{ level: LogLevel; message: string; time: string }[]>([])
 const connected = ref(false)
 const failed = ref(false)
 const closed = ref(false)
+const abort = new AbortController()
 const autoScroll = ref(true)
 const listRef = ref<HTMLElement>()
 const filter = ref<LogLevel | 'all'>('all')
@@ -53,7 +54,7 @@ const handleLogs = (log: Log) => {
 
 const run = async () => {
   try {
-    for await (const log of subscribeLogs()) {
+    for await (const log of subscribeLogs(abort.signal)) {
       handleLogs(log)
     }
   } catch {
@@ -73,6 +74,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   closed.value = true
+  abort.abort()
 })
 </script>
 

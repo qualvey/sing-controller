@@ -14,6 +14,7 @@ const testing = ref<Set<string>>(new Set())
 const connected = ref(false)
 const failed = ref(false)
 const closed = ref(false)
+const abort = new AbortController()
 const testUrl = ref(localStorage.getItem('proxy-test-url') || DEFAULT_TEST_URL)
 
 const allNodes = computed(() => groups.value.flatMap((g) => g.items))
@@ -40,7 +41,7 @@ const handleGroups = (gs: Groups) => {
 
 const run = async () => {
   try {
-    for await (const g of subscribeGroups()) {
+    for await (const g of subscribeGroups(abort.signal)) {
       handleGroups(g)
     }
   } catch {
@@ -150,6 +151,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   closed.value = true
+  abort.abort()
   saveTestUrl()
 })
 </script>

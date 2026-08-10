@@ -33,12 +33,13 @@ export async function* subscribeStream<Req extends DescMessage, Res extends Desc
 }
 
 // 便捷订阅器：返回 AsyncIterable，组件内 for await 消费；AbortSignal 停止
-export const subscribeLogs = () => getClient().subscribeLog({})
-export const subscribeStatus = () => getClient().subscribeStatus({ interval: INTERVAL })
-export const subscribeGroups = () => getClient().subscribeGroups({})
-export const subscribeOutbounds = () => getClient().subscribeOutbounds({})
-export const subscribeConnections = () =>
-  getClient().subscribeConnections({ interval: INTERVAL })
+export const subscribeLogs = (signal?: AbortSignal) => getClient().subscribeLog({}, { signal })
+export const subscribeStatus = (signal?: AbortSignal) =>
+  getClient().subscribeStatus({ interval: INTERVAL }, { signal })
+export const subscribeGroups = (signal?: AbortSignal) => getClient().subscribeGroups({}, { signal })
+export const subscribeOutbounds = (signal?: AbortSignal) => getClient().subscribeOutbounds({}, { signal })
+export const subscribeConnections = (signal?: AbortSignal) =>
+  getClient().subscribeConnections({ interval: INTERVAL }, { signal })
 
 // ============ unary 操作 ============
 
