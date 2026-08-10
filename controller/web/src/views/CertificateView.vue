@@ -28,6 +28,8 @@ const STORE_OPTIONS = ['system', 'mozilla', 'chrome', 'none']
 // certificate_providers（option/certificate_provider.go）：acme
 const PROVIDER_TYPES = ['acme']
 const KEY_TYPE_OPTIONS = ['ed25519', 'p256', 'p384']
+// dns01_challenge.provider 枚举（option/acme.go enum:"alidns,cloudflare,acmedns"）——只读选项，默认 cloudflare
+const DNS01_PROVIDERS = ['alidns', 'cloudflare', 'acmedns'] as const
 
 const providerForm = reactive({
   type: 'acme',
@@ -36,13 +38,13 @@ const providerForm = reactive({
   data_directory: '',
   default_server_name: '',
   email: '',
-  provider: '',
   account_key: '',
   disable_http_challenge: false,
   disable_tls_alpn_challenge: false,
   alternative_http_port: 0,
   alternative_tls_port: 0,
   key_type: '',
+  provider: 'cloudflare',
   extraJson: ''
 })
 
@@ -60,6 +62,7 @@ const resetProviderForm = () => {
   providerForm.alternative_http_port = 0
   providerForm.alternative_tls_port = 0
   providerForm.key_type = ''
+  providerForm.provider = 'cloudflare'
   providerForm.extraJson = ''
 }
 
@@ -117,13 +120,13 @@ function buildProvider(): Record<string, any> {
   if (providerForm.data_directory.trim()) p.data_directory = providerForm.data_directory.trim()
   if (providerForm.default_server_name.trim()) p.default_server_name = providerForm.default_server_name.trim()
   if (providerForm.email.trim()) p.email = providerForm.email.trim()
-  if (providerForm.provider.trim()) p.provider = providerForm.provider.trim()
   if (providerForm.account_key.trim()) p.account_key = providerForm.account_key.trim()
   if (providerForm.disable_http_challenge) p.disable_http_challenge = true
   if (providerForm.disable_tls_alpn_challenge) p.disable_tls_alpn_challenge = true
   if (providerForm.alternative_http_port) p.alternative_http_port = Number(providerForm.alternative_http_port)
   if (providerForm.alternative_tls_port) p.alternative_tls_port = Number(providerForm.alternative_tls_port)
   if (providerForm.key_type) p.key_type = providerForm.key_type
+  // extraJson 兜底（dns01_challenge 特殊合并：provider 走表单枚举）
   if (providerForm.extraJson.trim()) {
     let extra: Record<string, any>
     try {
@@ -131,9 +134,20 @@ function buildProvider(): Record<string, any> {
     } catch (e) {
       throw new Error(`附加字段 JSON 格式错误：${(e as Error).message}`)
     }
+    const d01 = extra.dns01_challenge
+    if (d01 && typeof d01 === 'object') {
+      const merged = { ...d01 }
+      if (providerForm.provider) merged.provider = providerForm.provider
+      p.dns01_challenge = merged
+      delete extra.dns01_challenge
+    } else if (providerForm.provider) {
+      p.dns01_challenge = { provider: providerForm.provider }
+    }
     for (const k of Object.keys(extra)) {
       if (!(k in p) && k !== 'type') p[k] = extra[k]
     }
+  } else if (providerForm.provider) {
+    p.dns01_challenge = { provider: providerForm.provider }
   }
   return p
 }
@@ -156,19 +170,28 @@ function openEditProvider(row: { id: string; provider: Record<string, any> }) {
   providerForm.data_directory = typeof p.data_directory === 'string' ? p.data_directory : ''
   providerForm.default_server_name = typeof p.default_server_name === 'string' ? p.default_server_name : ''
   providerForm.email = typeof p.email === 'string' ? p.email : ''
-  providerForm.provider = typeof p.provider === 'string' ? p.provider : ''
   providerForm.account_key = typeof p.account_key === 'string' ? p.account_key : ''
   providerForm.disable_http_challenge = p.disable_http_challenge === true
   providerForm.disable_tls_alpn_challenge = p.disable_tls_alpn_challenge === true
   providerForm.alternative_http_port = Number(p.alternative_http_port || 0)
   providerForm.alternative_tls_port = Number(p.alternative_tls_port || 0)
   providerForm.key_type = typeof p.key_type === 'string' ? p.key_type : ''
+  const extra: Record<string, any> = {}
+  // dns01_challenge.provider（枚举选择）；其余 dns01 字段（云厂商凭证等）保留在 extraJson
+  const d01 = p.dns01_challenge
+  if (d01 && typeof d01 === 'object') {
+    providerForm.provider = typeof d01.provider === 'string' ? d01.provider : ''
+    const rest: Record<string, any> = { ...d01 }
+    delete rest.provider
+    if (Object.keys(rest).length) extra.dns01_challenge = rest
+  } else {
+    providerForm.provider = ''
+  }
   const known = new Set([
     'type', 'tag', 'domain', 'data_directory', 'default_server_name', 'email', 'provider',
     'account_key', 'disable_http_challenge', 'disable_tls_alpn_challenge',
-    'alternative_http_port', 'alternative_tls_port', 'key_type'
+    'alternative_http_port', 'alternative_tls_port', 'key_type', 'dns01_challenge'
   ])
-  const extra: Record<string, any> = {}
   for (const k of Object.keys(p)) {
     if (!known.has(k)) extra[k] = p[k]
   }
@@ -319,8 +342,11 @@ onMounted(load)
         <el-form-item label="default_server_name">
           <el-input v-model="providerForm.default_server_name" placeholder="默认服务器名（可选）" />
         </el-form-item>
-        <el-form-item label="provider">
-          <el-input v-model="providerForm.provider" placeholder="DNS-01 服务商（alidns/cloudflare/acmedns，可选）" />
+        <el-form-item label="DNS-01 服务商">
+          <el-select v-model="providerForm.provider" clearable style="width: 100%" placeholder="不需要时清空（默认 cloudflare）">
+            <el-option v-for="d in DNS01_PROVIDERS" :key="d" :label="d" :value="d" />
+          </el-select>
+          <div class="field-hint">写入 dns01_challenge.provider（源码枚举 alidns/cloudflare/acmedns）；对应凭证（如 cloudflare.api_token）写在附加字段</div>
         </el-form-item>
         <el-form-item label="account_key">
           <el-input v-model="providerForm.account_key" placeholder="账户密钥（可选）" />
