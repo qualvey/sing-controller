@@ -1,0 +1,10 @@
+{
+  "config": "/etc/sing-controller/sing-box-config.json",
+  "min_port": 8000,
+  "defaults": {
+    "inbound_type": "mixed",
+    "outbound_type": "vless",
+    "listen": "127.0.0.1",
+    "listen_port": 2080
+  }
+}
