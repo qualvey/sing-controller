@@ -71,7 +71,7 @@ npm run dev     # http://localhost:5173
 - **Route CRUD（rule→action 模型）**：action 支持出站 route（默认，outbound 字段）/ direct / bypass / reject / hijack-dns / sniff / resolve / route-options；稳定 id 存旁车 meta；引用保护（删除被路由/组引用的对象会被拦截）
 - **新建 outbound 自动并入 Proxy**（settings 默认开，可配目标 selector tag）
 - **粘贴 JSON 解析**：表单粘贴 JSON → 后端解析校验 → 填充字段
-- **Config 页使用 CodeMirror 6 编辑器**：实时 JSON 校验/lint、折叠、Tab 缩进、一键格式化、暗色主题
+- **Config 页使用 CodeMirror 6 编辑器（JSONC）**：支持 `//` 与 `/* */` 注释、尾逗号（自建 Lezer grammar，语法树完整 → 折叠/缩进不丢）；实时 lint 用微软 jsonc-parser（VSCode 同款引擎）；一键格式化/Ctrl+Shift+F = VSCode 同款格式化（保留注释）；保存兼容 JSONC 原文（注释忽略、尾逗号容忍）
 - **完整校验管线**：所有写操作 = 严格解码（未知字段/多态/重复 tag 检查）→ `box.New` 干跑预检 → 原子写盘（.bak 备份）；失败不落盘、内存回滚
 - **JSON Schema 自动生成**（`GET /api/schema`，与代码同步）
 

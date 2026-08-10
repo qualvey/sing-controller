@@ -1,0 +1,30 @@
+// JSONC grammar（JSON + // 行注释 + /* */ 块注释 + 尾逗号宽容）
+// 基于 @lezer/json 官方 grammar，仅增加注释 token；@lezer/generator 的 rollup 插件在构建时编译
+// 注意：@lezer/generator 1.8 起字符集需 $[...] / ![...] 前缀写法
+@top Document { Value }
+
+Value { String | Number | Object | Array | True | False | Null }
+
+String { string }
+
+Number { number }
+
+Object { "{" (Prop ("," Prop)* ","?)? "}" }
+Prop { PropertyName ":" Value }
+PropertyName { string }
+
+Array { "[" (Value ("," Value)* ","?)? "]" }
+
+True { "true" }
+False { "false" }
+Null { "null" }
+
+@tokens {
+  string { "\"" (!["\\] | "\\" _)* "\"" }
+  number { "-"? @digit+ ("." @digit+)? ($[eE] $[-+]? @digit+)? }
+  space { @whitespace+ }
+  LineComment { "//" ![\n]* }
+  BlockComment { "/*" (![*] | "*" ![\/])* "*/" }
+}
+
+@skip { space | LineComment | BlockComment }

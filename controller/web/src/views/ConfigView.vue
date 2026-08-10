@@ -4,9 +4,9 @@ import { ElMessage } from 'element-plus'
 import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
-import { json, jsonParseLinter } from '@codemirror/lang-json'
+import { jsonc, jsoncLinter, formatJsoncDoc, parseJsonc } from '../editor/jsonc'
 import { oneDark } from '@codemirror/theme-one-dark'
-import { linter, lintGutter } from '@codemirror/lint'
+import { lintGutter } from '@codemirror/lint'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
 import { foldGutter } from '@codemirror/language'
 import { api } from '../api'
@@ -31,34 +31,29 @@ const loadConfig = async () => {
   }
 }
 
-// 格式化：JSON.stringify 重排当前文档
+// 格式化：VSCode 同款 JSONC 格式化（jsonc-parser），保留注释与尾逗号
 const format = () => {
-  try {
-    const text = editor.value?.state.doc.toString() ?? ''
-    const parsed = JSON.parse(text)
-    editor.value?.dispatch({ changes: { from: 0, to: editor.value.state.doc.length, insert: JSON.stringify(parsed, null, 2) } })
-    ElMessage.success('已格式化')
-  } catch (e) {
-    ElMessage.error(`JSON 格式错误：${(e as Error).message}`)
+  const ed = editor.value
+  if (!ed) return
+  if (formatJsoncDoc(ed)) {
+    ElMessage.success('已格式化（保留注释）')
   }
 }
 
 const save = async () => {
   const text = editor.value?.state.doc.toString() ?? ''
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch (e) {
-    ElMessage.error(`JSON 格式错误：${(e as Error).message}`)
+  const parsed = parseJsonc(text)
+  if (!parsed.ok) {
+    ElMessage.error(`配置格式错误：${parsed.message}`)
     return
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+  if (typeof parsed.value !== 'object' || parsed.value === null || Array.isArray(parsed.value)) {
     ElMessage.error('配置必须是 JSON 对象')
     return
   }
   saving.value = true
   try {
-    const res = (await api.saveConfig(parsed)) as { load_error?: string; message?: string }
+    const res = (await api.saveConfig(parsed.value)) as { load_error?: string; message?: string }
     if (res.load_error) {
       ElMessage.warning(res.message || `配置已保存，但加载新配置失败：${res.load_error}`)
     } else {
@@ -78,12 +73,12 @@ onMounted(() => {
     doc: '{}',
     extensions: [
       basicSetup,
-      json(),
+      jsonc(),
       oneDark,
       foldGutter(),
       lintGutter(),
-      linter(jsonParseLinter()),
-      keymap.of([indentWithTab, ...defaultKeymap]),
+      jsoncLinter(),
+      keymap.of([indentWithTab, { key: 'Mod-Shift-f', run: formatJsoncDoc }, ...defaultKeymap]),
       EditorView.lineWrapping
     ]
   })
@@ -102,7 +97,7 @@ onBeforeUnmount(() => {
     <div class="toolbar">
       <el-button :loading="loading" @click="loadConfig">刷新</el-button>
       <el-button @click="format">格式化</el-button>
-      <span class="hint">直接编辑 sing-box 主配置 JSON（CodeMirror：实时 JSON 校验、折叠、Tab 缩进）；保存时后端做完整校验</span>
+      <span class="hint">直接编辑 sing-box 主配置（JSONC：支持 // 与 /* */ 注释、尾逗号；实时校验、折叠、Ctrl+Shift+F 格式化，与 VSCode 行为一致）；保存时后端做完整校验</span>
       <span class="spacer" />
       <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
     </div>
