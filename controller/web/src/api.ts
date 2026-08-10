@@ -27,6 +27,13 @@ export interface ControllerSettings {
     level: string
   }
   min_port: number
+  reload?: {
+    mode: string
+    service?: string
+    pid_file?: string
+    hook?: string
+    after_save?: boolean
+  }
   defaults: {
     inbound_type: string
     outbound_type: string
@@ -148,6 +155,9 @@ export const api = {
   updateDnsRule: (id: string, rule: RouteRule) => http.put(`/dns/rules/${encodeURIComponent(id)}`, rule).then((r) => r.data),
   deleteDnsRule: (id: string) => http.delete(`/dns/rules/${encodeURIComponent(id)}`).then((r) => r.data),
   updateDnsOptions: (o: Record<string, unknown>) => http.put('/dns/options', o).then((r) => r.data),
+
+  // 重载 sing-box
+  reload: () => http.post('/reload').then((r) => r.data),
 
   // 诊断
   diagnostics: () => http.get<{ diagnostics: Array<{ level: string; message: string }> }>('/diagnostics').then((r) => r.data),

@@ -35,12 +35,53 @@ type LogOptions struct {
 	Level string `json:"level,omitempty"`
 }
 
+// ReloadOptions 配置保存后/手动触发 sing-box 重载的方式。
+// sing-box 官方重载机制只有 SIGHUP（cmd_run.go 收到 SIGHUP 重载配置）：
+//   - systemd：systemctl reload <service>（推荐，默认服务名 sing-box）
+//   - pidfile：读 pid 文件后 kill -HUP
+//   - hook：自定义 shell 命令（最灵活）
+//   - none/空：不启用
+// clash_api 无 reload 端点（已查源码确认），不走该方案。
+type ReloadOptions struct {
+	Mode      string `json:"mode,omitempty"`
+	Service   string `json:"service,omitempty"`
+	PidFile   string `json:"pid_file,omitempty"`
+	Hook      string `json:"hook,omitempty"`
+	AfterSave bool   `json:"after_save,omitempty"`
+}
+
+func (o *ReloadOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+	switch o.Mode {
+	case "", "none":
+		o.Mode = "none"
+		return nil
+	case "systemd":
+		return nil
+	case "pidfile":
+		if o.PidFile == "" {
+			return errors.New("pidfile 模式需要 pid_file")
+		}
+		return nil
+	case "hook":
+		if o.Hook == "" {
+			return errors.New("hook 模式需要 hook 命令")
+		}
+		return nil
+	default:
+		return errors.New("未知 reload 模式: " + o.Mode + "（systemd/pidfile/hook/none）")
+	}
+}
+
 type Settings struct {
-	Config   string      `json:"config"`
-	Listen   string      `json:"listen,omitempty"`
-	Log      *LogOptions `json:"log,omitempty"`
-	MinPort  uint16      `json:"min_port,omitempty"`
-	Defaults Defaults    `json:"defaults,omitempty"`
+	Config   string         `json:"config"`
+	Listen   string         `json:"listen,omitempty"`
+	Log      *LogOptions    `json:"log,omitempty"`
+	MinPort  uint16         `json:"min_port,omitempty"`
+	Defaults Defaults       `json:"defaults,omitempty"`
+	Reload   *ReloadOptions `json:"reload,omitempty"`
 }
 
 type Manager struct {
