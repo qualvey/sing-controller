@@ -24,8 +24,10 @@ import (
 // Meta 是配置的旁车元数据（sing-box 配置本身没有的字段，如规则 id）。
 // 存于 <config>.meta，与配置同目录，保证规则 CRUD 有稳定 id。
 type Meta struct {
-	RuleIDs    []string `json:"rules,omitempty"`
-	DNSRuleIDs []string `json:"dns_rules,omitempty"`
+	RuleIDs               []string `json:"rules,omitempty"`
+	DNSRuleIDs            []string `json:"dns_rules,omitempty"`
+	RuleSetIDs            []string `json:"rule_sets,omitempty"`
+	CertificateProviderIDs []string `json:"certificate_providers,omitempty"`
 }
 
 type Store struct {
@@ -111,7 +113,11 @@ func (s *Store) Load(ctx context.Context, defaults DefaultConfig) error {
 	if options.DNS != nil {
 		dnsRuleCount = len(options.DNS.Rules)
 	}
-	s.Meta = loadMeta(s.metaPath, len(options.Route.Rules), dnsRuleCount)
+	ruleSetCount := 0
+	if options.Route != nil {
+		ruleSetCount = len(options.Route.RuleSet)
+	}
+	s.Meta = loadMeta(s.metaPath, len(options.Route.Rules), dnsRuleCount, ruleSetCount, len(options.CertificateProviders))
 	return nil
 }
 
@@ -235,7 +241,7 @@ func (s *Store) saveLocked(ctx context.Context) error {
 	return os.WriteFile(s.metaPath, metaContent, 0o644)
 }
 
-func loadMeta(path string, ruleCount, dnsRuleCount int) Meta {
+func loadMeta(path string, ruleCount, dnsRuleCount, ruleSetCount, certProviderCount int) Meta {
 	var meta Meta
 	content, err := os.ReadFile(path)
 	if err == nil {
@@ -254,10 +260,22 @@ func loadMeta(path string, ruleCount, dnsRuleCount int) Meta {
 			meta.DNSRuleIDs[i] = NewUUID()
 		}
 	}
+	if len(meta.RuleSetIDs) != ruleSetCount {
+		meta.RuleSetIDs = make([]string, ruleSetCount)
+		for i := range meta.RuleSetIDs {
+			meta.RuleSetIDs[i] = NewUUID()
+		}
+	}
+	if len(meta.CertificateProviderIDs) != certProviderCount {
+		meta.CertificateProviderIDs = make([]string, certProviderCount)
+		for i := range meta.CertificateProviderIDs {
+			meta.CertificateProviderIDs[i] = NewUUID()
+		}
+	}
 	return meta
 }
 
-// AlignMeta 确保 RuleIDs/DNSRuleIDs 与 route.rules / dns.rules 数量对齐（外部编辑后自愈）。
+// AlignMeta 确保 meta id 数组与配置段数量对齐（外部编辑后自愈）。
 func (s *Store) AlignMeta() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -265,7 +283,11 @@ func (s *Store) AlignMeta() {
 	if s.Options.DNS != nil {
 		dnsRuleCount = len(s.Options.DNS.Rules)
 	}
-	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules), dnsRuleCount)
+	ruleSetCount := 0
+	if s.Options.Route != nil {
+		ruleSetCount = len(s.Options.Route.RuleSet)
+	}
+	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules), dnsRuleCount, ruleSetCount, len(s.Options.CertificateProviders))
 }
 
 // Update 加锁执行 mutate，然后全量校验（解码 + box.New 干跑）并原子写盘。

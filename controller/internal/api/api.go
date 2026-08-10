@@ -117,6 +117,19 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	// 诊断
 	mux.HandleFunc("GET /api/diagnostics", h.handleDiagnostics)
 
+	// 规则集（route.rule_set 段）
+	mux.HandleFunc("GET /api/rule-sets", h.handleListRuleSets)
+	mux.HandleFunc("POST /api/rule-sets", h.handleCreateRuleSet)
+	mux.HandleFunc("PUT /api/rule-sets/{id}", h.handleUpdateRuleSet)
+	mux.HandleFunc("DELETE /api/rule-sets/{id}", h.handleDeleteRuleSet)
+
+	// 证书
+	mux.HandleFunc("GET /api/certificate", h.handleGetCertificate)
+	mux.HandleFunc("PUT /api/certificate", h.handlePutCertificate)
+	mux.HandleFunc("POST /api/certificate/providers", h.handleCreateCertProvider)
+	mux.HandleFunc("PUT /api/certificate/providers/{id}", h.handleUpdateCertProvider)
+	mux.HandleFunc("DELETE /api/certificate/providers/{id}", h.handleDeleteCertProvider)
+
 	return h.withMiddleware(mux)
 }
 
