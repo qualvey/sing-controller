@@ -108,8 +108,9 @@ const openCreate = () => {
 const openEdit = (row: RouteRule) => {
   isEdit.value = true
   editingId.value = typeof row.id === 'string' ? row.id : ''
-  ruleForm.inbound = Array.isArray(row.inbound) ? row.inbound.map(String) : []
-  ruleForm.network = Array.isArray(row.network) ? row.network.map(String) : []
+  // sing-box Listable 单值序列化为字符串，需兼容回填
+  ruleForm.inbound = row.inbound == null ? [] : Array.isArray(row.inbound) ? row.inbound.map(String) : [String(row.inbound)]
+  ruleForm.network = row.network == null ? [] : Array.isArray(row.network) ? row.network.map(String) : [String(row.network)]
   ruleForm.outbound = typeof row.outbound === 'string' ? row.outbound : ''
   const extra: Record<string, unknown> = {}
   for (const k of Object.keys(row)) {
