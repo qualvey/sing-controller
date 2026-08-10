@@ -62,6 +62,7 @@ export const useLogsStore = defineStore('logs', () => {
       pushMessage(m.level, m.message)
     }
     connected.value = true
+    failed.value = false
   }
 
   async function run() {

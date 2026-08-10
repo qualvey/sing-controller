@@ -7,13 +7,9 @@ import VirtualScroller from '@/components/common/VirtualScroller.vue'
 import LogsCard from '@/components/logs/LogsCard.vue'
 import { useLogsStore } from '@/stores/logs'
 import { LogLevel } from '@/gen/daemon/started_service_pb'
-import { onMounted, onBeforeUnmount } from 'vue'
 
 const logsStore = useLogsStore()
 
-// 日志流全局启动（App 级更优，这里先按需启动；组件卸载不停止流——多页面切换保留历史）
-onMounted(() => logsStore.start())
-onBeforeUnmount(() => logsStore.stop())
 
 const LEVEL_OPTIONS = [
   { label: '全部', value: 'all' },

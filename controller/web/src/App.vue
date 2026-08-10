@@ -22,11 +22,13 @@ import { api } from './api'
 import { useStatusStore } from './stores/status'
 import { useThemeStore } from './stores/theme'
 import { useRuntimeStore } from './stores/runtime'
+import { useLogsStore } from './stores/logs'
 
 const route = useRoute()
 const statusStore = useStatusStore()
 const themeStore = useThemeStore()
 const runtimeStore = useRuntimeStore()
+const logsStore = useLogsStore()
 const reloading = ref(false)
 // 移动端：侧边栏展开状态（折叠图标栏 ↔ 完整菜单）
 const mobileExpanded = ref(false)
@@ -63,6 +65,7 @@ const menuItems = [
 onMounted(() => {
   statusStore.refresh()
   runtimeStore.start()
+  logsStore.start()
   syncTabIndicator()
   navResizeObserver = new ResizeObserver(() => syncTabIndicator())
   if (navRef.value) navResizeObserver.observe(navRef.value)
