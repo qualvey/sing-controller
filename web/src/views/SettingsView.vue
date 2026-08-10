@@ -6,6 +6,7 @@ import type { ControllerSettings } from '../api'
 
 const form = ref<ControllerSettings>({
   config: './sing-box-config.json',
+  listen: '127.0.0.1:8080',
   min_port: 8000,
   defaults: {
     inbound_type: 'mixed',
@@ -65,6 +66,10 @@ onMounted(load)
         <el-form-item label="sing-box 主配置路径">
           <el-input v-model="form.config" placeholder="./sing-box-config.json" />
           <div class="field-hint">controller 只读/写这个文件。路径变更后立即生效，新路径不存在则自动生成骨架。</div>
+        </el-form-item>
+        <el-form-item label="HTTP 监听地址">
+          <el-input v-model="form.listen" placeholder="127.0.0.1:8080" />
+          <div class="field-hint">webui 访问地址，格式 host:port。修改后需重启 sing-controller 服务才生效（deb 部署：systemctl restart sing-controller）。</div>
         </el-form-item>
         <el-form-item label="端口分配起点 (min_port)">
           <el-input-number v-model="form.min_port" :min="1024" :max="65535" />

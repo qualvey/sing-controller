@@ -1,6 +1,6 @@
-﻿// Package api æä¾› RESTful é…ç½®ç®¡ç† APIã€‚
-// è®¾è®¡åŽŸåˆ™ï¼šæ‰€æœ‰å†™æ“ä½œèµ° store.Update æ ¡éªŒç®¡çº¿ï¼ˆè§£ç  â†’ box.New å¹²è·‘ â†’ åŽŸå­å†™ç›˜ï¼‰ï¼Œ
-// æ ¡éªŒå¤±è´¥ä¸€å¾‹ä¸è½ç›˜ã€å†…å­˜å›žæ»šã€‚
+// Package api 提供 RESTful 配置管理 API。
+// 设计原则：所有写操作走 store.Update 校验管线（解码 → box.New 干跑 → 原子写盘），
+// 校验失败一律不落盘、内存回滚。
 package api
 
 import (
@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"reflect"
 	"sync"
@@ -35,7 +36,7 @@ type Handler struct {
 	schemaErr  error
 }
 
-// metaType åˆ«åï¼Œç®€åŒ– handler ç­¾åä¹¦å†™
+// metaType 别名，简化 handler 签名书写
 type metaType = store.Meta
 
 func NewHandler(opts HandlerOptions) http.Handler {
@@ -46,7 +47,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	}
 	mux := http.NewServeMux()
 
-	// çŠ¶æ€ / é…ç½® / è®¾ç½®
+	// 状态 / 配置 / 设置
 	mux.HandleFunc("GET /api/status", h.handleStatus)
 	mux.HandleFunc("GET /api/config", h.handleGetConfig)
 	mux.HandleFunc("PUT /api/config", h.handlePutConfig)
@@ -56,7 +57,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("PUT /api/settings", h.handlePutSettings)
 	mux.HandleFunc("GET /api/ports/available", h.handlePortAvailable)
 
-	// å·¥å…·
+	// 工具
 	mux.HandleFunc("POST /api/tools/uuid", h.handleToolUUID)
 	mux.HandleFunc("POST /api/tools/reality-keypair", h.handleToolRealityKeypair)
 	mux.HandleFunc("POST /api/tools/parse-json", h.handleToolParseJSON)
@@ -75,7 +76,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("PUT /api/inbounds/{tag}", h.handleUpdateInbound)
 	mux.HandleFunc("DELETE /api/inbounds/{tag}", h.handleDeleteInbound)
 
-	// route rule CRUDï¼ˆç®€å•è§„åˆ™ï¼Œid å­˜äºŽ meta æ—è½¦ï¼‰
+	// route rule CRUD（简单规则，id 存于 meta 旁车）
 	mux.HandleFunc("GET /api/routes", h.handleListRoutes)
 	mux.HandleFunc("POST /api/routes", h.handleCreateRoute)
 	mux.HandleFunc("PUT /api/routes/{id}", h.handleUpdateRoute)
@@ -86,7 +87,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 
 func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORSï¼ˆwebui dev server è·¨ç«¯å£ï¼‰
+		// CORS（webui dev server 跨端口）
 		origin := r.Header.Get("Origin")
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -98,7 +99,7 @@ func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		// é‰´æƒ
+		// 鉴权
 		if h.secret != "" {
 			if r.Header.Get("X-Secret") != h.secret && r.URL.Query().Get("token") != h.secret {
 				writeError(w, http.StatusUnauthorized, errors.New("invalid secret"))
@@ -122,7 +123,7 @@ func (h *Handler) schema() ([]byte, error) {
 	return h.schemaJSON, h.schemaErr
 }
 
-// commit æ‰§è¡Œ"å†…å­˜ä¿®æ”¹ â†’ å…¨é‡æ ¡éªŒ â†’ åŽŸå­å†™ç›˜"ç®¡çº¿ã€‚
+// commit 执行"内存修改 → 全量校验 → 原子写盘"管线。
 func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*option.Options, *store.Meta) error) {
 	if err := h.store.Update(h.ctx(r), mutate); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -157,13 +158,14 @@ func readRawBody(r *http.Request) ([]byte, error) {
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	values := h.settings.Values()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"config_path":        h.store.Path(),
-		"controller_config":  h.settings.Path(),
-		"min_port":           values.MinPort,
-		"defaults":           values.Defaults,
-		"inbounds":           len(h.store.Options.Inbounds),
-		"outbounds":          len(h.store.Options.Outbounds),
-		"rules":              len(h.store.Options.Route.Rules),
+		"config_path":       h.store.Path(),
+		"controller_config": h.settings.Path(),
+		"listen":            values.Listen,
+		"min_port":          values.MinPort,
+		"defaults":          values.Defaults,
+		"inbounds":          len(h.store.Options.Inbounds),
+		"outbounds":         len(h.store.Options.Outbounds),
+		"rules":             len(h.store.Options.Route.Rules),
 	})
 }
 
@@ -207,11 +209,17 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if newValues.Config == "" {
-		writeError(w, http.StatusBadRequest, errors.New("config è·¯å¾„ä¸èƒ½ä¸ºç©º"))
+		writeError(w, http.StatusBadRequest, errors.New("config 路径不能为空"))
 		return
 	}
+	if newValues.Listen != "" {
+		if _, _, err := net.SplitHostPort(newValues.Listen); err != nil {
+			writeError(w, http.StatusBadRequest, errors.New("listen 格式应为 host:port，如 127.0.0.1:8080"))
+			return
+		}
+	}
 	if newValues.MinPort < 1024 || newValues.MinPort > 65535 {
-		writeError(w, http.StatusBadRequest, errors.New("min_port éœ€åœ¨ 1024-65535 ä¹‹é—´"))
+		writeError(w, http.StatusBadRequest, errors.New("min_port 需在 1024-65535 之间"))
 		return
 	}
 	ctx := h.ctx(r)
@@ -222,7 +230,7 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	// config è·¯å¾„å˜æ›´ â†’ åˆ‡æ¢ä¸»é…ç½®å­˜å‚¨
+	// config 路径变更 → 切换主配置存储
 	if h.store.Path() != newValues.Config {
 		h.store.SetPath(newValues.Config)
 		if err := h.store.Load(ctx, store.DefaultConfig{
@@ -233,7 +241,7 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"saved":     true,
 				"load_error": err.Error(),
-				"message":   "controller é…ç½®å·²ä¿å­˜ï¼Œä½†æ–°ä¸»é…ç½®è·¯å¾„åŠ è½½å¤±è´¥",
+				"message":   "controller 配置已保存，但新主配置路径加载失败",
 			})
 			return
 		}
@@ -260,7 +268,7 @@ func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	// å…ˆå®Œæ•´æ ¡éªŒï¼Œå†è½ç›˜
+	// 先完整校验，再落盘
 	if err := store.Validate(h.ctx(r), body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return

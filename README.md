@@ -32,6 +32,7 @@ go build -tags "with_quic with_utls" -o sing-box-controller.exe .
 ```jsonc
 {
   "config": "./sing-box-config.json",   // sing-box 主配置文件路径（相对 controller 工作目录）
+  "listen": "127.0.0.1:8080",           // controller HTTP 监听地址（webui 访问地址，改后需重启服务）
   "min_port": 8000,                     // 自动分配端口的最小起点
   "defaults": {                         // 前端新建 inbound/outbound 时的默认值
     "inbound_type": "mixed",
@@ -44,6 +45,7 @@ go build -tags "with_quic with_utls" -o sing-box-controller.exe .
 
 - 首次启动自动生成该文件；`config` 指向的主配置文件不存在时，自动生成骨架
   （默认 inbound + direct/block outbound + route.final）
+- 命令行 `-listen` 优先于配置文件 `listen`；配置里的 listen 修改后需重启 controller 才生效
 - 前端 Settings 页可在线修改；修改 `config` 路径立即生效（新路径不存在则重新生成骨架）
 
 ## 功能

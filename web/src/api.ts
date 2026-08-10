@@ -4,6 +4,7 @@ import type { AxiosError } from 'axios'
 export interface StatusInfo {
   config_path: string
   controller_config: string
+  listen: string
   min_port: number
   defaults: {
     inbound_type: string
@@ -18,6 +19,7 @@ export interface StatusInfo {
 
 export interface ControllerSettings {
   config: string
+  listen: string
   min_port: number
   defaults: {
     inbound_type: string

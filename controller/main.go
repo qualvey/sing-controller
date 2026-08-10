@@ -1,6 +1,6 @@
-﻿// sing-box-controllerï¼šsing-box é…ç½®ç®¡ç†æœåŠ¡ï¼ˆä¸è¿è¡Œ sing-box å®žä¾‹ï¼‰ã€‚
-// èŒè´£ï¼šè¯»å–/æ ¡éªŒ/ç”Ÿæˆ sing-box ä¸»é…ç½®æ–‡ä»¶ï¼Œé€šè¿‡ RESTful API æä¾›ç»™ webuiã€‚
-// è‡ªèº«é…ç½® config.jsonï¼š{"config": "<ä¸»é…ç½®è·¯å¾„>", "min_port": 8000, "defaults": {...}}
+// sing-box-controller：sing-box 配置管理服务（不运行 sing-box 实例）。
+// 职责：读取/校验/生成 sing-box 主配置文件，通过 RESTful API 提供给 webui。
+// 自身配置 config.json：{"config": "<主配置路径>", "listen": "127.0.0.1:8080", "min_port": 8000, "defaults": {...}}
 package main
 
 import (
@@ -20,21 +20,26 @@ func main() {
 		settingsPath string
 		secret       string
 	)
-	flag.StringVar(&listenAddr, "listen", "127.0.0.1:8080", "HTTP listen address")
+	flag.StringVar(&listenAddr, "listen", "", "HTTP listen address (override config.json listen)")
 	flag.StringVar(&settingsPath, "config", "config.json", "controller config file path")
 	flag.StringVar(&secret, "secret", "", "optional API secret (X-Secret header)")
 	flag.Parse()
 
 	ctx := context.Background()
 
-	// controller è‡ªèº«é…ç½®
+	// controller 自身配置
 	cfg := settings.New(settingsPath)
 	if err := cfg.Load(); err != nil {
 		log.Fatalf("load controller config: %v", err)
 	}
 
-	// sing-box ä¸»é…ç½®å­˜å‚¨ï¼ˆè·¯å¾„æ¥è‡ª settings.configï¼‰
+	// 监听地址：命令行 -listen 优先，否则取 config.json 的 listen
 	values := cfg.Values()
+	if listenAddr == "" {
+		listenAddr = values.Listen
+	}
+
+	// sing-box 主配置存储（路径来自 settings.config）
 	cfgStore := store.New(values.Config)
 	defaults := store.DefaultConfig{
 		InboundType: values.Defaults.InboundType,
@@ -46,9 +51,9 @@ func main() {
 	}
 
 	handler := api.NewHandler(api.HandlerOptions{
-		Store:   cfgStore,
+		Store:    cfgStore,
 		Settings: cfg,
-		Secret:  secret,
+		Secret:   secret,
 	})
 	log.Printf("sing-box-controller listening on %s (controller config: %s, sing-box config: %s)",
 		listenAddr, settingsPath, cfgStore.Path())

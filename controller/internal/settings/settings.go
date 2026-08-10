@@ -29,6 +29,7 @@ type Defaults struct {
 
 type Settings struct {
 	Config   string   `json:"config"`
+	Listen   string   `json:"listen,omitempty"`
 	MinPort  uint16   `json:"min_port,omitempty"`
 	Defaults Defaults `json:"defaults,omitempty"`
 }
@@ -46,6 +47,7 @@ func (m *Manager) Path() string { return m.path }
 func defaultSettings() Settings {
 	return Settings{
 		Config:  "./sing-box-config.json",
+		Listen:  "127.0.0.1:8080",
 		MinPort: 8000,
 		Defaults: Defaults{
 			InboundType:  "mixed",
@@ -74,6 +76,9 @@ func (m *Manager) Load() error {
 	}
 	if values.Config == "" {
 		values.Config = "./sing-box-config.json"
+	}
+	if values.Listen == "" {
+		values.Listen = "127.0.0.1:8080"
 	}
 	if values.MinPort == 0 {
 		values.MinPort = 8000

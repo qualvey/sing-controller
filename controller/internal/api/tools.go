@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"crypto/ecdh"
@@ -15,7 +15,7 @@ func (h *Handler) handleToolUUID(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"uuid": store.NewUUID()})
 }
 
-// handleToolRealityKeypair ç”Ÿæˆ Reality X25519 å¯†é’¥å¯¹ï¼ˆä¸Ž sing-box generate reality-keypair ä¸€è‡´ï¼ŒURL-safe base64ï¼‰ã€‚
+// handleToolRealityKeypair 生成 Reality X25519 密钥对（与 sing-box generate reality-keypair 一致，URL-safe base64）。
 func (h *Handler) handleToolRealityKeypair(w http.ResponseWriter, r *http.Request) {
 	privateKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
@@ -29,8 +29,8 @@ func (h *Handler) handleToolRealityKeypair(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// handleToolParseJSON è§£æžä»»æ„ JSON æ–‡æœ¬ï¼ˆå‰ç«¯"ç²˜è´´ JSON è§£æžå­—æ®µ"ç”¨ï¼‰ï¼š
-// åˆæ³• â†’ {ok:true, data:<è§£æžç»“æžœ>}ï¼›éžæ³• â†’ 400 å¸¦é”™è¯¯ä¿¡æ¯ã€‚
+// handleToolParseJSON 解析任意 JSON 文本（前端"粘贴 JSON 解析字段"用）：
+// 合法 → {ok:true, data:<解析结果>}；非法 → 400 带错误信息。
 func (h *Handler) handleToolParseJSON(w http.ResponseWriter, r *http.Request) {
 	body, err := readRawBody(r)
 	if err != nil {
@@ -52,8 +52,8 @@ func (h *Handler) handleToolParseJSON(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": data})
 }
 
-// handlePortAvailable è¿”å›žå¯ç”¨ç«¯å£ï¼šGET /api/ports/available?start=NNN
-// æœªæŒ‡å®š start æ—¶ä½¿ç”¨ controller é…ç½®çš„ min_portï¼ˆé»˜è®¤ 8000ï¼‰ã€‚
+// handlePortAvailable 返回可用端口：GET /api/ports/available?start=NNN
+// 未指定 start 时使用 controller 配置的 min_port（默认 8000）。
 func (h *Handler) handlePortAvailable(w http.ResponseWriter, r *http.Request) {
 	start := h.settings.Values().MinPort
 	if raw := r.URL.Query().Get("start"); raw != "" {
