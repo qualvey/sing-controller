@@ -17,7 +17,8 @@ RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/etc/sing-controller
+# /etc/sing-controller: controller 自身配置；/etc/sing-box: 主配置（原子写盘 tmp+rename 需可写）
+ReadWritePaths=/etc/sing-controller /etc/sing-box
 
 [Install]
 WantedBy=multi-user.target
