@@ -1,0 +1,7 @@
+sing-box-webui.exe
+config.json
+config.json.meta
+web/node_modules
+web/dist
+testdata/
+*.log

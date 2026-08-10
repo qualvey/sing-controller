@@ -1,0 +1,230 @@
+// Package store 负责 sing-box 配置文件的加载、校验、持久化。
+// 校验管线完全复用 sing-box 自身的解码器 + 实例化器：
+//   parse(严格解码+checkOptions) → box.New 干跑 → 原子写 → (runner reload)
+package store
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/include"
+	"github.com/sagernet/sing-box/option"
+	sjson "github.com/sagernet/sing/common/json"
+)
+
+// Meta 是配置的旁车元数据（sing-box 配置本身没有的字段，如规则 id）。
+// 存于 <config>.meta，与配置同目录，保证规则 CRUD 有稳定 id。
+type Meta struct {
+	RuleIDs []string `json:"rules,omitempty"`
+}
+
+type Store struct {
+	mu       sync.Mutex
+	path     string
+	metaPath string
+	Options  option.Options
+	Meta     Meta
+}
+
+func New(path string) *Store {
+	return &Store{path: path, metaPath: path + ".meta"}
+}
+
+func (s *Store) Path() string { return s.path }
+
+// Parse 严格解码（未知字段报错、重复 tag 检查），不做实例化。
+func Parse(ctx context.Context, content []byte) (option.Options, error) {
+	return sjson.UnmarshalExtendedContext[option.Options](ctx, content)
+}
+
+// Validate 完整校验：解码 + box.New 干跑（复用 daemon.CheckConfig 模式）。
+func Validate(ctx context.Context, content []byte) error {
+	options, err := Parse(ctx, content)
+	if err != nil {
+		return err
+	}
+	cctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	instance, err := box.New(box.Options{Context: cctx, Options: options})
+	if err != nil {
+		return err
+	}
+	instance.Close()
+	return nil
+}
+
+func defaultConfig() option.Options {
+	content := []byte(`{
+  "log": { "level": "info", "timestamp": true },
+  "inbounds": [
+    { "type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 2080 }
+  ],
+  "outbounds": [
+    { "type": "direct", "tag": "direct" },
+    { "type": "block", "tag": "block" }
+  ],
+  "route": { "final": "direct" }
+}`)
+	options, err := Parse(include.Context(context.Background()), content)
+	if err != nil {
+		panic(fmt.Sprintf("bad default config: %v", err))
+	}
+	return options
+}
+
+// Load 读取配置文件；不存在时生成默认骨架。
+func (s *Store) Load(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	content, err := os.ReadFile(s.path)
+	if errors.Is(err, os.ErrNotExist) {
+		s.Options = defaultConfig()
+		if err := s.saveLocked(ctx); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+	options, err := Parse(ctx, content)
+	if err != nil {
+		return fmt.Errorf("decode config: %w", err)
+	}
+	s.Options = options
+	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules))
+	return nil
+}
+
+// Content 返回当前配置的格式化 JSON。
+func (s *Store) Content(ctx context.Context) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return marshalOptions(ctx, s.Options)
+}
+
+func marshalOptions(ctx context.Context, options option.Options) ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := sjson.NewEncoderContext(ctx, &buffer)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(options); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+// Save 将当前内存中的 Options 原子写盘（temp + rename），保留 .bak 备份。
+func (s *Store) Save(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveLocked(ctx)
+}
+
+func (s *Store) saveLocked(ctx context.Context) error {
+	content, err := marshalOptions(ctx, s.Options)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	// 备份
+	if _, err := os.Stat(s.path); err == nil {
+		_ = os.WriteFile(s.path+".bak", content, 0o644)
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, content, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		return err
+	}
+	// 元数据
+	metaContent, err := json.Marshal(s.Meta)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.metaPath, metaContent, 0o644)
+}
+
+func loadMeta(path string, ruleCount int) Meta {
+	var meta Meta
+	content, err := os.ReadFile(path)
+	if err == nil {
+		_ = json.Unmarshal(content, &meta)
+	}
+	// 数量不匹配（外部手动改过配置）→ 重新生成 id
+	if len(meta.RuleIDs) != ruleCount {
+		meta.RuleIDs = make([]string, ruleCount)
+		for i := range meta.RuleIDs {
+			meta.RuleIDs[i] = NewUUID()
+		}
+	}
+	return meta
+}
+
+// AlignMeta 确保 RuleIDs 与 route.rules 数量对齐（外部编辑后自愈）。
+func (s *Store) AlignMeta() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules))
+}
+
+// Update 加锁执行 mutate，然后全量校验（解码 + box.New 干跑）并原子写盘。
+// 校验失败不落盘，内存状态回滚（深拷贝快照），返回错误。
+func (s *Store) Update(ctx context.Context, mutate func(*option.Options, *Meta) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	snapshotOptions, snapshotMeta := s.snapshot(ctx)
+	if err := mutate(&s.Options, &s.Meta); err != nil {
+		return err
+	}
+	content, err := marshalOptions(ctx, s.Options)
+	if err != nil {
+		s.restore(snapshotOptions, snapshotMeta)
+		return err
+	}
+	if err := Validate(ctx, content); err != nil {
+		s.restore(snapshotOptions, snapshotMeta)
+		return err
+	}
+	return s.saveLocked(ctx)
+}
+
+// snapshot 通过 JSON 往返深拷贝当前状态。
+func (s *Store) snapshot(ctx context.Context) (option.Options, *Meta) {
+	content, err := marshalOptions(ctx, s.Options)
+	if err != nil {
+		return s.Options, &s.Meta
+	}
+	options, err := Parse(ctx, content)
+	if err != nil {
+		return s.Options, &s.Meta
+	}
+	ruleIDs := make([]string, len(s.Meta.RuleIDs))
+	copy(ruleIDs, s.Meta.RuleIDs)
+	return options, &Meta{RuleIDs: ruleIDs}
+}
+
+func (s *Store) restore(options option.Options, meta *Meta) {
+	s.Options = options
+	s.Meta = *meta
+}
+
+// NewUUID 生成 v4 风格 uuid（无横杠校验，仅作稳定 id 用）。
+func NewUUID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
