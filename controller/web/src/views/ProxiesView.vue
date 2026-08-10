@@ -12,6 +12,7 @@ const latencyMap = ref<Record<string, number>>({})
 const expanded = ref<Set<string>>(new Set())
 const testing = ref<Set<string>>(new Set())
 const connected = ref(false)
+const failed = ref(false)
 const closed = ref(false)
 const testUrl = ref(localStorage.getItem('proxy-test-url') || DEFAULT_TEST_URL)
 
@@ -44,6 +45,7 @@ const run = async () => {
     }
   } catch {
     connected.value = false
+    failed.value = true
   }
 }
 
@@ -230,6 +232,6 @@ onBeforeUnmount(() => {
     </div>
 
     <el-empty v-if="connected && !groups.length" description="无代理组（配置里没有 selector/urltest 等组）" />
-    <el-empty v-else-if="!connected" description="service API 未配置或不可用（sing-box 需启用 services[type=api]）" />
+    <el-empty v-else-if="!connected" :description="failed ? 'service API 不可用（检查 sing-box services[type=api] 配置）' : '连接中…'" />
   </div>
 </template>

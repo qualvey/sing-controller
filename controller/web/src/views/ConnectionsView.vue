@@ -18,6 +18,7 @@ const connMap = ref<Map<string, Connection>>(new Map())
 const upSpeed = ref(0)
 const downSpeed = ref(0)
 const connected = ref(false)
+const failed = ref(false)
 const closed = ref(false)
 
 let lastBatchAt = Date.now()
@@ -90,6 +91,7 @@ const run = async () => {
     }
   } catch {
     connected.value = false
+    failed.value = true
   }
 }
 
@@ -137,8 +139,8 @@ onBeforeUnmount(() => {
       <span class="text-sm font-semibold">{{ connections.length }}</span>
       <span class="ml-auto flex items-center gap-2">
         <span class="flex items-center gap-1 text-xs" :class="connected ? 'text-[var(--el-text-color-secondary)]' : 'text-red-500'">
-          <span class="inline-block h-2 w-2 animate-pulse rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'" />
-          {{ connected ? '实时推送中' : 'service API 不可用' }}
+          <span class="inline-block h-2 w-2 animate-pulse rounded-full" :class="connected ? 'bg-green-500' : (failed ? 'bg-red-500' : 'bg-yellow-500')" />
+          {{ connected ? '实时推送中' : (failed ? 'service API 不可用' : '连接中…') }}
         </span>
         <el-button size="small" :icon="Close" :disabled="!connections.length" @click="closeAll">断开全部</el-button>
       </span>

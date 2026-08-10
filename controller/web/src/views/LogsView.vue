@@ -6,6 +6,7 @@ import { LogLevel, type Log } from '@/gen/daemon/started_service_pb'
 const MAX_LOGS = 500
 const logs = ref<{ level: LogLevel; message: string; time: string }[]>([])
 const connected = ref(false)
+const failed = ref(false)
 const closed = ref(false)
 const autoScroll = ref(true)
 const listRef = ref<HTMLElement>()
@@ -57,6 +58,7 @@ const run = async () => {
     }
   } catch {
     connected.value = false
+    failed.value = true
   }
 }
 
@@ -86,8 +88,8 @@ onBeforeUnmount(() => {
         <el-radio-button value="debug">DEBUG</el-radio-button>
       </el-radio-group>
       <span class="ml-auto flex items-center gap-2 text-xs text-[var(--el-text-color-secondary)]">
-        <span class="inline-block h-2 w-2 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></span>
-        {{ connected ? '实时日志' : 'service API 不可用' }}
+        <span class="inline-block h-2 w-2 rounded-full" :class="connected ? 'bg-green-500' : (failed ? 'bg-red-500' : 'bg-yellow-500')"></span>
+        {{ connected ? '实时日志' : (failed ? 'service API 不可用' : '连接中…') }}
         <el-switch v-model="autoScroll" size="small" active-text="自动滚动" />
       </span>
     </div>
