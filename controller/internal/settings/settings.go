@@ -75,6 +75,14 @@ func (o *ReloadOptions) Validate() error {
 	}
 }
 
+// ClashAPIOptions controller ?? clash API ????（可选）
+// ??:?? sing-box ? experimental.clash_api ??（external_controller/secret）
+// 显式配置??（?? sing-box ?? clash_api ?指向外部核心）
+type ClashAPIOptions struct {
+	Address string `json:"address,omitempty"` // ??: http://127.0.0.1:9090
+	Secret  string `json:"secret,omitempty"`
+}
+
 type Settings struct {
 	Config   string         `json:"config"`
 	Listen   string         `json:"listen,omitempty"`
@@ -82,6 +90,7 @@ type Settings struct {
 	MinPort  uint16         `json:"min_port,omitempty"`
 	Defaults Defaults       `json:"defaults,omitempty"`
 	Reload   *ReloadOptions `json:"reload,omitempty"`
+	ClashAPI *ClashAPIOptions `json:"clash_api,omitempty"`
 }
 
 type Manager struct {

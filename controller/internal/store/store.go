@@ -114,10 +114,12 @@ func (s *Store) Load(ctx context.Context, defaults DefaultConfig) error {
 		dnsRuleCount = len(options.DNS.Rules)
 	}
 	ruleSetCount := 0
+	routeRuleCount := 0
 	if options.Route != nil {
 		ruleSetCount = len(options.Route.RuleSet)
+		routeRuleCount = len(options.Route.Rules)
 	}
-	s.Meta = loadMeta(s.metaPath, len(options.Route.Rules), dnsRuleCount, ruleSetCount, len(options.CertificateProviders))
+	s.Meta = loadMeta(s.metaPath, routeRuleCount, dnsRuleCount, ruleSetCount, len(options.CertificateProviders))
 	return nil
 }
 

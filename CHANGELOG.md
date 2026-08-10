@@ -40,3 +40,10 @@
   （transform 0.55s cubic-bezier(0.22,1.5,0.36,1) + width/height 0.32s），激活项文字平滑变色；
   prefers-reduced-motion 自动降级
 - 修复：router.isReady() 后再挂载应用（整页刷新 deep-link 时 el-menu 高亮丢失）
+
+- **clash API 反向代理**：controller 新增 `/api/clash/*` 代理 → sing-box
+  `experimental.clash_api`（自动注入 secret，前端同源访问、secret 不落浏览器）
+- settings 新增 `clash_api` 段（address/secret，可选；默认从 sing-box 配置推断）
+- 前端移植 zashboard 的 clash API 客户端（`src/api/clash.ts`，MIT）：
+  proxies/select/延迟/规则/configs/DNS 查询/fakeip flush + connections/logs/traffic WS 流
+- 修复 store.Load 真实 bug：无 route 段的配置空指针崩溃

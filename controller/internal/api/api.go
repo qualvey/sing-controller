@@ -44,6 +44,9 @@ type Handler struct {
 	schemaOnce sync.Once
 	schemaJSON []byte
 	schemaErr  error
+
+	clashProxyMu    sync.Mutex
+	clashProxyCache *clashProxy
 }
 
 // metaType 别名，简化 handler 签名书写
@@ -63,7 +66,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	if opts.Static != nil {
 		mux.Handle("/", opts.Static)
 	} else {
-		mux.HandleFunc("GET /", h.handleRoot)
+		mux.HandleFunc("/", h.handleRoot)
 	}
 	mux.HandleFunc("GET /healthz", h.handleHealthz)
 
@@ -78,6 +81,9 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("GET /api/settings", h.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", h.handlePutSettings)
 	mux.HandleFunc("GET /api/ports/available", h.handlePortAvailable)
+
+	// clash API ??（?? /api/clash/* ?? sing-box external_controller,?? secret）
+	mux.HandleFunc("/api/clash/", h.handleClashProxy)
 
 	// 工具
 	mux.HandleFunc("POST /api/tools/uuid", h.handleToolUUID)

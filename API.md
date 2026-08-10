@@ -11,6 +11,7 @@ Base URL: `http://127.0.0.1:8080`（由 controller 配置 `listen` 决定，页�
 |---|---|---|
 | GET | `/` | webui 页面（嵌入的 SPA，含前端路由 fallback）。`web/dist` 未构建时返回纯文本提示（API-only 模式） |
 | GET | `/healthz` | 健康检查 `{"status":"ok"}`（systemd/监控探活） |
+| * | /api/clash/* | **clash API 反向代理**（转发到 sing-box external_controller，自动注入 secret；覆盖 /proxies /connections /logs /traffic /rules /configs /dns/query 等 clash API 全部端点） |
 
 静态资源：`/assets/*`（带 hash）返回 `Cache-Control: public, max-age=31536000, immutable`；`index.html` 不缓存。
 

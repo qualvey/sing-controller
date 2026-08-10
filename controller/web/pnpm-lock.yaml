@@ -56,6 +56,9 @@ importers:
       pinia:
         specifier: ^2.1.0
         version: 2.3.1(typescript@5.4.5)(vue@3.5.41(typescript@5.4.5))
+      reconnectingwebsocket:
+        specifier: ^1.0.0
+        version: 1.0.0
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
@@ -69,6 +72,9 @@ importers:
       '@lezer/generator':
         specifier: ^1.8.0
         version: 1.8.0
+      '@types/reconnectingwebsocket':
+        specifier: ^1.0.10
+        version: 1.0.10
       '@vitejs/plugin-vue':
         specifier: ^5.0.0
         version: 5.2.4(vite@5.4.21(lightningcss@1.32.0))(vue@3.5.41(typescript@5.4.5))
@@ -564,6 +570,9 @@ packages:
   '@types/lodash@4.17.25':
     resolution: {integrity: sha512-+K1NIO8I+F9/wNulfVvu23QYd0Pe9/OCqRrim4NoYIf1VoEDL90Ve4ClzpyqBLc7NpGGWRvYNCKZ1BE/Jpf8dQ==}
 
+  '@types/reconnectingwebsocket@1.0.10':
+    resolution: {integrity: sha512-30Pq4D3o8BKcdY53dzr0elGFyB/ChYpGrHiRH/GuaZKXXGWq/CsD1QBEu1b8IgdHReOKpo9tjk80UaxSbuXoTQ==}
+
   '@types/web-bluetooth@0.0.21':
     resolution: {integrity: sha512-oIQLCGWtcFZy2JW77j9k8nHzAOpqMHLQejDA48XXMWH6tjCQHz5RCFz1bzsmROyL6PUm+LLnUiI4BCn221inxA==}
 
@@ -948,6 +957,9 @@ packages:
   proxy-from-env@2.1.0:
     resolution: {integrity: sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==}
     engines: {node: '>=10'}
+
+  reconnectingwebsocket@1.0.0:
+    resolution: {integrity: sha512-r7H/dwkkfBu9x5eMGIt8td5WLqNbqy675x8Xg0+SoXaUS3xzniVlmfO7t7HSYmN/ZGzYjOKa9G2W4xCgCo7Zlg==}
 
   rollup@4.62.4:
     resolution: {integrity: sha512-RXOqwaPsBGjMNMa4sQjDjHieHEZDFoj/Rdr46l2MU5DfEs16wHJPC2RPTPHWhNl+M3aI472LLqFkFKut4SblOg==}
@@ -1389,6 +1401,8 @@ snapshots:
 
   '@types/lodash@4.17.25': {}
 
+  '@types/reconnectingwebsocket@1.0.10': {}
+
   '@types/web-bluetooth@0.0.21': {}
 
   '@vitejs/plugin-vue@5.2.4(vite@5.4.21(lightningcss@1.32.0))(vue@3.5.41(typescript@5.4.5))':
@@ -1801,6 +1815,8 @@ snapshots:
       source-map-js: 1.2.1
 
   proxy-from-env@2.1.0: {}
+
+  reconnectingwebsocket@1.0.0: {}
 
   rollup@4.62.4:
     dependencies:
