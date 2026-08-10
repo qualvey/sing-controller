@@ -306,13 +306,16 @@ function buildDnsRule(): Record<string, any> {
 }
 
 // action 与参数（route=server 字段模型；其余动作参数各有 JSON 本体）——default/logical 共用
+// 注意：非 route action 时保留 server 字段（防静默丢数据，sing-box 接受与否由校验决定）
 function buildDnsAction(rule: Record<string, any>) {
   const action = ruleForm.action
   if (action === 'reject') {
     rule.action = 'reject'
     if (String(ruleForm.reject_method).trim()) rule.method = String(ruleForm.reject_method).trim()
+    if (ruleForm.server) rule.server = String(ruleForm.server)
   } else if (action === 'respond') {
     rule.action = 'respond'
+    if (ruleForm.server) rule.server = String(ruleForm.server)
   } else if (action === 'evaluate') {
     rule.action = 'evaluate'
     if (ruleForm.server) rule.server = String(ruleForm.server)

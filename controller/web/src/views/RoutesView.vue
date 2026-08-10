@@ -282,11 +282,14 @@ function buildRule(): RouteRule {
 }
 
 // action 构建（default/logical 共用）
+// 注意：sing-box 接受 action=bypass/direct 等与 outbound 并存的写法（实测），
+// 编辑保存时必须保留 outbound 字段，否则静默丢数据
 function buildAction(rule: RouteRule) {
   if (isRouteAction.value) {
     rule.outbound = ruleForm.outbound as string
   } else {
     rule.action = ruleForm.action as string
+    if (String(ruleForm.outbound)) rule.outbound = ruleForm.outbound as string
     if (ruleForm.action === 'sniff' && (ruleForm.sniffers as string[]).length) {
       rule.sniffer = [...(ruleForm.sniffers as string[])]
     }
