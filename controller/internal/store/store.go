@@ -42,7 +42,10 @@ func New(path string) *Store {
 func (s *Store) Path() string { return s.path }
 
 // Parse 严格解码（未知字段报错、重复 tag 检查），不做实例化。
+// 内部强制注入 include.Context（含全部 registry），保证任何调用入口
+// （启动加载、API 请求）都能解码 inbounds/outbounds/endpoints/services 等多态类型。
 func Parse(ctx context.Context, content []byte) (option.Options, error) {
+	ctx = include.Context(ctx)
 	return sjson.UnmarshalExtendedContext[option.Options](ctx, content)
 }
 

@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/sagernet/sing-box/include"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/schema"
 	"github.com/qualvey/sing-controller/internal/settings"
@@ -161,6 +162,7 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"config_path":       h.store.Path(),
 		"controller_config": h.settings.Path(),
 		"listen":            values.Listen,
+		"log_level":         values.Log.Level,
 		"min_port":          values.MinPort,
 		"defaults":          values.Defaults,
 		"inbounds":          len(h.store.Options.Inbounds),
@@ -215,6 +217,12 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if newValues.Listen != "" {
 		if _, _, err := net.SplitHostPort(newValues.Listen); err != nil {
 			writeError(w, http.StatusBadRequest, errors.New("listen 格式应为 host:port，如 127.0.0.1:8080"))
+			return
+		}
+	}
+	if newValues.Log != nil && newValues.Log.Level != "" {
+		if _, err := log.ParseLevel(newValues.Log.Level); err != nil {
+			writeError(w, http.StatusBadRequest, err)
 			return
 		}
 	}

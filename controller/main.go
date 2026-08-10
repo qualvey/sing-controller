@@ -1,14 +1,15 @@
 // sing-box-controller：sing-box 配置管理服务（不运行 sing-box 实例）。
 // 职责：读取/校验/生成 sing-box 主配置文件，通过 RESTful API 提供给 webui。
-// 自身配置 config.json：{"config": "<主配置路径>", "listen": "127.0.0.1:8080", "min_port": 8000, "defaults": {...}}
+// 自身配置 config.json：{"config": "<主配置路径>", "listen": "127.0.0.1:8080", "log": {"level": "info"}, "min_port": 8000, "defaults": {...}}
 package main
 
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"net/http"
 
+	"github.com/sagernet/sing-box/log"
 	"github.com/qualvey/sing-controller/internal/api"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
@@ -30,11 +31,16 @@ func main() {
 	// controller 自身配置
 	cfg := settings.New(settingsPath)
 	if err := cfg.Load(); err != nil {
-		log.Fatalf("load controller config: %v", err)
+		slog.Error("load controller config", "path", settingsPath, "error", err)
+		return
 	}
 
-	// 监听地址：命令行 -listen 优先，否则取 config.json 的 listen
 	values := cfg.Values()
+
+	// 日志级别（复用 sing-box 的 level 枚举/解析）
+	setLogLevel(values.Log.Level)
+
+	// 监听地址：命令行 -listen 优先，否则取 config.json 的 listen
 	if listenAddr == "" {
 		listenAddr = values.Listen
 	}
@@ -47,7 +53,8 @@ func main() {
 		ListenPort:  values.Defaults.ListenPort,
 	}
 	if err := cfgStore.Load(ctx, defaults); err != nil {
-		log.Fatalf("load sing-box config: %v", err)
+		slog.Error("load sing-box config", "path", values.Config, "error", err)
+		return
 	}
 
 	handler := api.NewHandler(api.HandlerOptions{
@@ -55,9 +62,34 @@ func main() {
 		Settings: cfg,
 		Secret:   secret,
 	})
-	log.Printf("sing-box-controller listening on %s (controller config: %s, sing-box config: %s)",
-		listenAddr, settingsPath, cfgStore.Path())
+	slog.Info("sing-box-controller started",
+		"listen", listenAddr,
+		"controller_config", settingsPath,
+		"sing_box_config", cfgStore.Path(),
+		"log_level", values.Log.Level,
+	)
 	if err := http.ListenAndServe(listenAddr, handler); err != nil {
-		log.Fatal(err)
+		slog.Error("http server", "error", err)
 	}
+}
+
+// setLogLevel 将 sing-box 的日志级别映射到 slog 并设置全局级别。
+func setLogLevel(levelText string) {
+	level, err := log.ParseLevel(levelText)
+	if err != nil {
+		slog.Warn("unknown log level, fallback to info", "level", levelText)
+		level = log.LevelInfo
+	}
+	var slogLevel slog.Level
+	switch level {
+	case log.LevelTrace, log.LevelDebug:
+		slogLevel = slog.LevelDebug
+	case log.LevelInfo:
+		slogLevel = slog.LevelInfo
+	case log.LevelWarn:
+		slogLevel = slog.LevelWarn
+	case log.LevelError, log.LevelFatal, log.LevelPanic:
+		slogLevel = slog.LevelError
+	}
+	slog.SetLogLoggerLevel(slogLevel)
 }

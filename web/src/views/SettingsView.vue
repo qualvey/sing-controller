@@ -7,6 +7,7 @@ import type { ControllerSettings } from '../api'
 const form = ref<ControllerSettings>({
   config: './sing-box-config.json',
   listen: '127.0.0.1:8080',
+  log: { level: 'info' },
   min_port: 8000,
   defaults: {
     inbound_type: 'mixed',
@@ -70,6 +71,12 @@ onMounted(load)
         <el-form-item label="HTTP 监听地址">
           <el-input v-model="form.listen" placeholder="127.0.0.1:8080" />
           <div class="field-hint">webui 访问地址，格式 host:port。修改后需重启 sing-controller 服务才生效（deb 部署：systemctl restart sing-controller）。</div>
+        </el-form-item>
+        <el-form-item label="日志级别">
+          <el-select v-model="form.log!.level" style="width: 200px">
+            <el-option v-for="l in ['trace', 'debug', 'info', 'warn', 'error', 'fatal']" :key="l" :label="l" :value="l" />
+          </el-select>
+          <div class="field-hint">级别枚举与 sing-box 一致（journald 查看：journalctl -u sing-controller）。</div>
         </el-form-item>
         <el-form-item label="端口分配起点 (min_port)">
           <el-input-number v-model="form.min_port" :min="1024" :max="65535" />

@@ -27,11 +27,17 @@ type Defaults struct {
 	ListenPort   uint16 `json:"listen_port,omitempty"`
 }
 
+// LogOptions 与 sing-box 配置的 log 段同构（level 枚举复用 sing-box 的）。
+type LogOptions struct {
+	Level string `json:"level,omitempty"`
+}
+
 type Settings struct {
-	Config   string   `json:"config"`
-	Listen   string   `json:"listen,omitempty"`
-	MinPort  uint16   `json:"min_port,omitempty"`
-	Defaults Defaults `json:"defaults,omitempty"`
+	Config   string      `json:"config"`
+	Listen   string      `json:"listen,omitempty"`
+	Log      *LogOptions `json:"log,omitempty"`
+	MinPort  uint16      `json:"min_port,omitempty"`
+	Defaults Defaults    `json:"defaults,omitempty"`
 }
 
 type Manager struct {
@@ -48,6 +54,7 @@ func defaultSettings() Settings {
 	return Settings{
 		Config:  "./sing-box-config.json",
 		Listen:  "127.0.0.1:8080",
+		Log:     &LogOptions{Level: "info"},
 		MinPort: 8000,
 		Defaults: Defaults{
 			InboundType:  "mixed",
@@ -79,6 +86,9 @@ func (m *Manager) Load() error {
 	}
 	if values.Listen == "" {
 		values.Listen = "127.0.0.1:8080"
+	}
+	if values.Log == nil {
+		values.Log = &LogOptions{Level: "info"}
 	}
 	if values.MinPort == 0 {
 		values.MinPort = 8000

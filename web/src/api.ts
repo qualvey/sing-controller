@@ -20,6 +20,9 @@ export interface StatusInfo {
 export interface ControllerSettings {
   config: string
   listen: string
+  log?: {
+    level: string
+  }
   min_port: number
   defaults: {
     inbound_type: string
