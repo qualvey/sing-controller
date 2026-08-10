@@ -49,7 +49,6 @@ const ruleForm = reactive<Record<string, unknown>>({
   outbound: '',
   sniffers: [] as string[],
   resolve_server: '',
-  extraJson: ''
 })
 // 从 sing-box RawDefaultRule 整理的字段表初始化表单
 for (const f of RULE_FIELDS) {
@@ -165,7 +164,6 @@ const resetForm = () => {
   ruleForm.outbound = ''
   ruleForm.sniffers = []
   ruleForm.resolve_server = ''
-  ruleForm.extraJson = ''
   for (const f of RULE_FIELDS) {
     if (f.type === 'bool') ruleForm[f.key] = false
     else if (f.type === 'select' || f.type === 'string') ruleForm[f.key] = ''
@@ -207,14 +205,12 @@ const openEdit = (row: RouteRule) => {
     else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
   }
   fillAction(rowRec)
-  // 字段表之外的字段（action 参数、复杂 map 结构等）→ extraJson 兜底
   const extra: Record<string, unknown> = {}
   for (const k of Object.keys(rowRec)) {
     if (k !== 'id' && !RULE_FIELD_KEYS.includes(k) && !['action', 'outbound', 'sniffer', 'server', 'type', 'mode', 'rules'].includes(k)) {
       extra[k] = rowRec[k]
     }
   }
-  ruleForm.extraJson = Object.keys(extra).length ? JSON.stringify(extra, null, 2) : ''
   routeDialogVisible.value = true
   ruleFormRef.value?.clearValidate()
 }
@@ -269,21 +265,6 @@ function buildRule(): RouteRule {
         : [...(v as string[])]
   }
   buildAction(rule)
-  // extraJson 兜底：字段表之外的字段（表单字段优先，不覆盖）
-  if (String(ruleForm.extraJson).trim()) {
-    let extra: Record<string, unknown>
-    try {
-      extra = JSON.parse(String(ruleForm.extraJson).trim())
-    } catch (e) {
-      throw new Error(`附加字段 JSON 格式错误：${(e as Error).message}`)
-    }
-    if (typeof extra !== 'object' || extra === null || Array.isArray(extra)) {
-      throw new Error('附加字段必须为 JSON 对象')
-    }
-    for (const k of Object.keys(extra)) {
-      if (!(k in rule)) rule[k] = extra[k]
-    }
-  }
   return rule
 }
 
@@ -487,18 +468,6 @@ onMounted(() => {
               title="动作说明"
               description="route=默认出站（选 outbound）；direct=直连；bypass=绕过；reject=拒绝；hijack-dns=DNS 劫持；sniff=协议嗅探；resolve=DNS 解析；route-options=路由选项（参数写在附加字段）"
             />
-          </el-tab-pane>
-          <el-tab-pane label="其他字段 (JSON)">
-            <el-form-item label="附加字段">
-              <el-input
-                v-model="ruleForm.extraJson"
-                type="textarea"
-                :rows="10"
-                class="mono"
-                placeholder='{"interface_address": {"eth0": ["10.0.0.0/8"]}}'
-              />
-            </el-form-item>
-            <span class="hint">字段表未覆盖的复杂字段（interface_address、network_interface_address 等）写在这里；表单字段优先</span>
           </el-tab-pane>
         </el-tabs>
       </el-form>

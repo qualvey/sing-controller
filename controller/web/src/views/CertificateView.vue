@@ -48,7 +48,7 @@ const providerForm = reactive({
   alternative_tls_port: 0,
   key_type: '',
   provider: 'cloudflare',
-  extraJson: ''
+  dns01_challenge_json: ''
 })
 
 const resetProviderForm = () => {
@@ -66,7 +66,7 @@ const resetProviderForm = () => {
   providerForm.alternative_tls_port = 0
   providerForm.key_type = ''
   providerForm.provider = 'cloudflare'
-  providerForm.extraJson = ''
+  providerForm.dns01_challenge_json = ''
 }
 
 const load = async () => {
@@ -129,29 +129,24 @@ function buildProvider(): Record<string, any> {
   if (providerForm.alternative_http_port) p.alternative_http_port = Number(providerForm.alternative_http_port)
   if (providerForm.alternative_tls_port) p.alternative_tls_port = Number(providerForm.alternative_tls_port)
   if (providerForm.key_type) p.key_type = providerForm.key_type
-  // extraJson 兜底（dns01_challenge 特殊合并：provider 走表单枚举）
-  if (providerForm.extraJson.trim()) {
-    let extra: Record<string, any>
+  // dns01_challenge：字段级 JSON（云厂商凭证等）+ provider 下拉（表单值优先）
+  let d01: Record<string, any> | undefined
+  if (providerForm.dns01_challenge_json.trim()) {
     try {
-      extra = JSON.parse(providerForm.extraJson.trim())
+      const parsed = JSON.parse(providerForm.dns01_challenge_json.trim())
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('dns01_challenge 必须为 JSON 对象')
+      }
+      d01 = { ...parsed }
     } catch (e) {
-      throw new Error(`附加字段 JSON 格式错误：${(e as Error).message}`)
+      throw new Error(`dns01_challenge JSON 格式错误：${(e as Error).message}`)
     }
-    const d01 = extra.dns01_challenge
-    if (d01 && typeof d01 === 'object') {
-      const merged = { ...d01 }
-      if (providerForm.provider) merged.provider = providerForm.provider
-      p.dns01_challenge = merged
-      delete extra.dns01_challenge
-    } else if (providerForm.provider) {
-      p.dns01_challenge = { provider: providerForm.provider }
-    }
-    for (const k of Object.keys(extra)) {
-      if (!(k in p) && k !== 'type') p[k] = extra[k]
-    }
-  } else if (providerForm.provider) {
-    p.dns01_challenge = { provider: providerForm.provider }
   }
+  if (providerForm.provider) {
+    d01 = d01 || {}
+    d01.provider = providerForm.provider
+  }
+  if (d01) p.dns01_challenge = d01
   return p
 }
 
@@ -181,26 +176,17 @@ function openEditProvider(row: { id: string; provider: Record<string, any> }) {
   providerForm.alternative_http_port = Number(p.alternative_http_port || 0)
   providerForm.alternative_tls_port = Number(p.alternative_tls_port || 0)
   providerForm.key_type = typeof p.key_type === 'string' ? p.key_type : ''
-  const extra: Record<string, any> = {}
-  // dns01_challenge.provider（枚举选择）；其余 dns01 字段（云厂商凭证等）保留在 extraJson
+  // dns01_challenge.provider（枚举选择）；其余 dns01 字段（云厂商凭证等）保留在字段级 JSON
   const d01 = p.dns01_challenge
   if (d01 && typeof d01 === 'object') {
     providerForm.provider = typeof d01.provider === 'string' ? d01.provider : ''
     const rest: Record<string, any> = { ...d01 }
     delete rest.provider
-    if (Object.keys(rest).length) extra.dns01_challenge = rest
+    providerForm.dns01_challenge_json = Object.keys(rest).length ? JSON.stringify(rest, null, 2) : ''
   } else {
     providerForm.provider = ''
+    providerForm.dns01_challenge_json = ''
   }
-  const known = new Set([
-    'type', 'tag', 'domain', 'data_directory', 'default_server_name', 'email', 'provider',
-    'account_key', 'disable_http_challenge', 'disable_tls_alpn_challenge',
-    'alternative_http_port', 'alternative_tls_port', 'key_type', 'dns01_challenge'
-  ])
-  for (const k of Object.keys(p)) {
-    if (!known.has(k)) extra[k] = p[k]
-  }
-  providerForm.extraJson = Object.keys(extra).length ? JSON.stringify(extra, null, 2) : ''
   dialogVisible.value = true
 }
 
@@ -375,8 +361,9 @@ onMounted(load)
         <el-form-item label="alternative_tls_port">
           <el-input-number v-model="providerForm.alternative_tls_port" :min="0" :max="65535" />
         </el-form-item>
-        <el-form-item label="附加字段 (JSON)">
-          <el-input v-model="providerForm.extraJson" type="textarea" :rows="4" class="mono" placeholder='{"dns01_challenge": {"provider": "cloudflare", "cloudflare": {"api_token": "..."}}}' />
+        <el-form-item label="dns01_challenge (JSON)">
+          <el-input v-model="providerForm.dns01_challenge_json" type="textarea" :rows="4" class="mono" placeholder='{"cloudflare": {"api_token": "..."}, "ttl": "300s"}' />
+          <div class="field-hint">云厂商凭证等 dns01_challenge 子字段（provider 由上方下拉决定，此处不需写）；其余字段（external_account/http_client 等）用「源码」tab</div>
         </el-form-item>
       </el-form>
       </el-tab-pane>

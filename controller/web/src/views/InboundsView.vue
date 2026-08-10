@@ -31,7 +31,6 @@ interface InboundForm {
   listen: string
   listen_port?: number
   users: { username: string; password: string }[]
-  rawJson: string
 }
 
 const form = reactive<InboundForm>({
@@ -40,7 +39,6 @@ const form = reactive<InboundForm>({
   listen: '',
   listen_port: undefined,
   users: [{ username: '', password: '' }],
-  rawJson: ''
 })
 
 const isMixed = computed(() => form.type === 'mixed')
@@ -73,7 +71,6 @@ function resetForm(type: string) {
   form.listen = ''
   form.listen_port = undefined
   form.users = [{ username: '', password: '' }]
-  form.rawJson = ''
 }
 
 function fillForm(obj: Inbound) {
@@ -88,15 +85,8 @@ function fillForm(obj: Inbound) {
           return { username: str(rec.username), password: str(rec.password) }
         })
       : [{ username: '', password: '' }]
-    form.rawJson = ''
   } else {
     form.users = []
-    const rest: Record<string, unknown> = { ...obj }
-    delete rest.type
-    delete rest.tag
-    delete rest.listen
-    delete rest.listen_port
-    form.rawJson = Object.keys(rest).length ? JSON.stringify(rest, null, 2) : ''
   }
 }
 
@@ -195,20 +185,9 @@ function buildBody(): Inbound {
       throw new Error('用户名和密码需同时填写')
     }
     if (users.length) body.users = users
-  } else if (form.rawJson.trim()) {
-    let extra: Record<string, unknown>
-    try {
-      extra = JSON.parse(form.rawJson.trim())
-    } catch (e) {
-      throw new Error(`原始 JSON 格式错误：${(e as Error).message}`)
-    }
-    if (typeof extra !== 'object' || extra === null || Array.isArray(extra)) {
-      throw new Error('原始 JSON 必须为 JSON 对象')
-    }
-    Object.assign(body, extra)
-    body.type = form.type
-    if (!body.tag) body.tag = form.tag.trim()
   }
+  body.type = form.type
+  if (!body.tag) body.tag = form.tag.trim()
   return body
 }
 
@@ -362,15 +341,6 @@ onMounted(async () => {
               <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
               <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
             </div>
-          </el-form-item>
-          <el-form-item label="其他字段 (JSON)">
-            <el-input
-              v-model="form.rawJson"
-              type="textarea"
-              :rows="8"
-              class="mono"
-              placeholder='{"network": "tcp", "sniff": true}'
-            />
           </el-form-item>
         </template>
       </el-form>
