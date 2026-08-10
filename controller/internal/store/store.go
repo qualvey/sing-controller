@@ -24,7 +24,8 @@ import (
 // Meta 是配置的旁车元数据（sing-box 配置本身没有的字段，如规则 id）。
 // 存于 <config>.meta，与配置同目录，保证规则 CRUD 有稳定 id。
 type Meta struct {
-	RuleIDs []string `json:"rules,omitempty"`
+	RuleIDs    []string `json:"rules,omitempty"`
+	DNSRuleIDs []string `json:"dns_rules,omitempty"`
 }
 
 type Store struct {
@@ -106,7 +107,11 @@ func (s *Store) Load(ctx context.Context, defaults DefaultConfig) error {
 		return fmt.Errorf("decode config: %w", err)
 	}
 	s.Options = options
-	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules))
+	dnsRuleCount := 0
+	if options.DNS != nil {
+		dnsRuleCount = len(options.DNS.Rules)
+	}
+	s.Meta = loadMeta(s.metaPath, len(options.Route.Rules), dnsRuleCount)
 	return nil
 }
 
@@ -177,7 +182,7 @@ func (s *Store) saveLocked(ctx context.Context) error {
 	return os.WriteFile(s.metaPath, metaContent, 0o644)
 }
 
-func loadMeta(path string, ruleCount int) Meta {
+func loadMeta(path string, ruleCount, dnsRuleCount int) Meta {
 	var meta Meta
 	content, err := os.ReadFile(path)
 	if err == nil {
@@ -190,14 +195,24 @@ func loadMeta(path string, ruleCount int) Meta {
 			meta.RuleIDs[i] = NewUUID()
 		}
 	}
+	if len(meta.DNSRuleIDs) != dnsRuleCount {
+		meta.DNSRuleIDs = make([]string, dnsRuleCount)
+		for i := range meta.DNSRuleIDs {
+			meta.DNSRuleIDs[i] = NewUUID()
+		}
+	}
 	return meta
 }
 
-// AlignMeta 确保 RuleIDs 与 route.rules 数量对齐（外部编辑后自愈）。
+// AlignMeta 确保 RuleIDs/DNSRuleIDs 与 route.rules / dns.rules 数量对齐（外部编辑后自愈）。
 func (s *Store) AlignMeta() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules))
+	dnsRuleCount := 0
+	if s.Options.DNS != nil {
+		dnsRuleCount = len(s.Options.DNS.Rules)
+	}
+	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules), dnsRuleCount)
 }
 
 // Update 加锁执行 mutate，然后全量校验（解码 + box.New 干跑）并原子写盘。

@@ -132,5 +132,20 @@ export const api = {
   routes: () => http.get<RouteInfo>('/routes').then((r) => r.data),
   createRoute: (rule: RouteRule) => http.post('/routes', rule).then((r) => r.data),
   updateRoute: (id: string, rule: RouteRule) => http.put(`/routes/${encodeURIComponent(id)}`, rule).then((r) => r.data),
-  deleteRoute: (id: string) => http.delete(`/routes/${encodeURIComponent(id)}`).then((r) => r.data)
+  deleteRoute: (id: string) => http.delete(`/routes/${encodeURIComponent(id)}`).then((r) => r.data),
+
+  // DNS 管理
+  dns: () => http.get('/dns').then((r) => r.data),
+  createDnsServer: (s: Record<string, unknown>) => http.post('/dns/servers', s).then((r) => r.data),
+  updateDnsServer: (tag: string, s: Record<string, unknown>) =>
+    http.put(`/dns/servers/${encodeURIComponent(tag)}`, s).then((r) => r.data),
+  deleteDnsServer: (tag: string, force = false) =>
+    http.delete(`/dns/servers/${encodeURIComponent(tag)}${force ? '?force=true' : ''}`).then((r) => r.data),
+  createDnsRule: (rule: RouteRule) => http.post('/dns/rules', rule).then((r) => r.data),
+  updateDnsRule: (id: string, rule: RouteRule) => http.put(`/dns/rules/${encodeURIComponent(id)}`, rule).then((r) => r.data),
+  deleteDnsRule: (id: string) => http.delete(`/dns/rules/${encodeURIComponent(id)}`).then((r) => r.data),
+  updateDnsOptions: (o: Record<string, unknown>) => http.put('/dns/options', o).then((r) => r.data),
+
+  // 诊断
+  diagnostics: () => http.get<{ diagnostics: Array<{ level: string; message: string }> }>('/diagnostics').then((r) => r.data)
 }

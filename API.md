@@ -124,6 +124,30 @@ mixed 示例：
 - **注意**：sing-box `Listable` 单值序列化为字符串（如 `"inbound": "mixed-in"` 而非数组），前端回填需兼容
 - 外部手工改配置后 meta 数量不匹配会自动重新生成 id（旧 id 失效）
 
+## DNS 管理
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/dns` | `{servers: [...], rules: [{id, rule}, ...], options: {final, strategy, timeout, disable_cache, independent_cache, reverse_mapping, client_subnet}}` |
+| POST | `/api/dns/servers` | 新建 DNS server（多态 transport：local/udp/tcp/tls/https/quic/h3/fakeip/hosts/dhcp/mdns，registry 解码）；tag 必填且唯一 |
+| PUT | `/api/dns/servers/{tag}` | 整体替换（body tag 需与路径一致） |
+| DELETE | `/api/dns/servers/{tag}` | 被 `dns.final`/规则引用时返回 409 + references；`?force=true` 自动清除引用后删除 |
+| POST | `/api/dns/rules` | 新建 DNS 规则（`server` 字段指向 DNS server，旧 `outbound` 字段兼容）；id 存旁车 meta |
+| PUT | `/api/dns/rules/{id}` | 替换 |
+| DELETE | `/api/dns/rules/{id}` | 删除 |
+| PUT | `/api/dns/options` | 部分更新 `{final, strategy, timeout, disable_cache, independent_cache, reverse_mapping}`；final 引用不存在时 400 |
+
+- **注意（sing-box 1.14 testing）**：DNS 规则动作字段是 `server`（不是 route 规则的 `outbound`）；`outbound` 已废弃但兼容解码
+- 所有写操作走统一校验管线（box.New 干跑）；DNS 段不存在时自动创建
+
+## 配置诊断
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/diagnostics` | `{diagnostics: [{level: error\|warning\|info, message}]}` 静态分析：重复 tag、route/dns 悬空引用（final/规则/组/rule_set/detour）、inbound 监听冲突、未使用 outbound、缺 route/dns 段警告、资源统计 |
+
+> 说明：sing-box 校验不拦截悬空引用（`box.New` 通过），诊断页是这些问题的唯一发现渠道。
+
 ## 工具
 
 | 方法 | 路径 | 说明 |

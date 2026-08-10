@@ -72,6 +72,8 @@ npm run dev     # http://localhost:5173
 - **新建 outbound 自动并入 Proxy**（settings 默认开，可配目标 selector tag）
 - **粘贴 JSON 解析**：表单粘贴 JSON → 后端解析校验 → 填充字段
 - **Config 页使用 CodeMirror 6 编辑器（JSONC）**：支持 `//` 与 `/* */` 注释、尾逗号（自建 Lezer grammar，语法树完整 → 折叠/缩进不丢）；实时 lint 用微软 jsonc-parser（VSCode 同款引擎）；一键格式化/Ctrl+Shift+F = VSCode 同款格式化（保留注释）；保存兼容 JSONC 原文（注释忽略、尾逗号容忍）
+- **DNS 管理页**：servers CRUD（local/udp/tcp/tls/https/quic/h3/fakeip/hosts/dhcp/mdns 多态 transport + detour/TLS 表单）、DNS 规则 CRUD（server 字段模型，常用匹配字段 + 附加 JSON）、基础选项（final/strategy/timeout/cache）；删除引用保护（409 + force 确认）
+- **配置诊断页**：静态分析（重复 tag、route/dns 悬空引用、组引用、监听冲突、未使用 outbound），补 sing-box 校验盲区（悬空引用 box.New 不拦）
 - **完整校验管线**：所有写操作 = 严格解码（未知字段/多态/重复 tag 检查）→ `box.New` 干跑预检 → 原子写盘（.bak 备份）；失败不落盘、内存回滚
 - **JSON Schema 自动生成**（`GET /api/schema`，与代码同步）
 

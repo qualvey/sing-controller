@@ -101,6 +101,19 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("PUT /api/routes/{id}", h.handleUpdateRoute)
 	mux.HandleFunc("DELETE /api/routes/{id}", h.handleDeleteRoute)
 
+	// DNS 管理
+	mux.HandleFunc("GET /api/dns", h.handleGetDNS)
+	mux.HandleFunc("POST /api/dns/servers", h.handleCreateDNSServer)
+	mux.HandleFunc("PUT /api/dns/servers/{tag}", h.handleUpdateDNSServer)
+	mux.HandleFunc("DELETE /api/dns/servers/{tag}", h.handleDeleteDNSServer)
+	mux.HandleFunc("POST /api/dns/rules", h.handleCreateDNSRule)
+	mux.HandleFunc("PUT /api/dns/rules/{id}", h.handleUpdateDNSRule)
+	mux.HandleFunc("DELETE /api/dns/rules/{id}", h.handleDeleteDNSRule)
+	mux.HandleFunc("PUT /api/dns/options", h.handlePutDNSOptions)
+
+	// 诊断
+	mux.HandleFunc("GET /api/diagnostics", h.handleDiagnostics)
+
 	return h.withMiddleware(mux)
 }
 

@@ -19,6 +19,8 @@ onMounted(() => {
         <el-menu-item index="/inbounds">Inbounds</el-menu-item>
         <el-menu-item index="/outbounds">Outbounds</el-menu-item>
         <el-menu-item index="/routes">Routes</el-menu-item>
+        <el-menu-item index="/dns">DNS</el-menu-item>
+        <el-menu-item index="/diagnostics">诊断</el-menu-item>
         <el-menu-item index="/config">Config</el-menu-item>
         <el-menu-item index="/settings">Settings</el-menu-item>
       </el-menu>
