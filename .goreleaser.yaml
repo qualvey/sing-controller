@@ -23,7 +23,7 @@ builds:
       - with_quic
       - with_utls
     ldflags:
-      - -s -w
+      - -s -w -X main.version={{ .Version }}
 
 archives:
   - formats: [tar.gz]

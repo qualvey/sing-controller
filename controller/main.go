@@ -15,6 +15,9 @@ import (
 	"github.com/qualvey/sing-controller/internal/store"
 )
 
+// version 由 goreleaser ldflags 注入（-X main.version={{ .Version }}），本地构建为 dev
+var version = "dev"
+
 func main() {
 	var (
 		listenAddr   string
@@ -61,6 +64,7 @@ func main() {
 		Store:    cfgStore,
 		Settings: cfg,
 		Secret:   secret,
+		Version:  version,
 	})
 	slog.Info("sing-box-controller started",
 		"listen", listenAddr,

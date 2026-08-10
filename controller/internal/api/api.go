@@ -27,12 +27,14 @@ type HandlerOptions struct {
 	Store    *store.Store
 	Settings *settings.Manager
 	Secret   string
+	Version  string
 }
 
 type Handler struct {
 	store    *store.Store
 	settings *settings.Manager
 	secret   string
+	version  string
 
 	schemaOnce sync.Once
 	schemaJSON []byte
@@ -47,8 +49,13 @@ func NewHandler(opts HandlerOptions) http.Handler {
 		store:    opts.Store,
 		settings: opts.Settings,
 		secret:   opts.Secret,
+		version:  opts.Version,
 	}
 	mux := http.NewServeMux()
+
+	// 根路径：服务信息（替代旧版前端托管，webui 独立部署）
+	mux.HandleFunc("GET /", h.handleRoot)
+	mux.HandleFunc("GET /healthz", h.handleHealthz)
 
 	// 状态 / 配置 / 设置
 	mux.HandleFunc("GET /api/status", h.handleStatus)
@@ -111,6 +118,34 @@ func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ---------- root / health ----------
+
+func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	values := h.settings.Values()
+	version := h.version
+	if version == "" {
+		version = "dev"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"service": "sing-controller",
+		"version": version,
+		"api":     "/api",
+		"status":  "/api/status",
+		"schema":  "/api/schema",
+		"listen":  values.Listen,
+		"config":  h.store.Path(),
+		"webui":   "独立部署（web/ 目录，npm run dev 或构建后静态托管）",
+	})
+}
+
+func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
 // ---------- helpers ----------
