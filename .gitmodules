@@ -1,0 +1,3 @@
+[submodule "zashboard"]
+	path = zashboard
+	url = https://github.com/Zephyruso/zashboard.git
