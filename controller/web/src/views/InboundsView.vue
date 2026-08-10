@@ -90,15 +90,26 @@ function fillForm(obj: Inbound) {
   }
 }
 
-const openCreate = () => {
+// 从后端 settings 拉取默认值填充 listen（不依赖 statusStore 异步时序）
+const fillDefaults = async () => {
+  try {
+    const s = await api.settings()
+    if (s.defaults?.listen) form.listen = s.defaults.listen
+  } catch {
+    // 拉取失败保持现状，用户可手动填
+  }
+}
+
+const openCreate = async () => {
   isEdit.value = false
   editingTag.value = ''
   sourceJson.value = '{}'
   const def = statusStore.status?.defaults
   const defType = def?.inbound_type
   resetForm(defType && inboundTypes.value.includes(defType) ? defType : inboundTypes.value[0] || 'mixed')
-  // listen 默认值来自后端（settings.defaults.listen）
-  if (def?.listen) form.listen = def.listen
+  // listen 默认值来自后端 settings.defaults.listen（实时拉取）
+  form.listen = ''
+  await fillDefaults()
   // listen_port 默认自动分配（可手动修改），分配失败则留空
   form.listen_port = undefined
   void allocatePort(false)
@@ -125,7 +136,10 @@ const openEdit = async (row: Inbound) => {
 watch(
   () => form.type,
   (t) => {
-    if (!suppressTypeWatch.value && dialogVisible.value && !isEdit.value) resetForm(t)
+    if (!suppressTypeWatch.value && dialogVisible.value && !isEdit.value) {
+      resetForm(t)
+      void fillDefaults() // 切换类型后重新填充 listen 默认值
+    }
   }
 )
 
