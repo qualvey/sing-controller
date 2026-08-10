@@ -19,8 +19,10 @@ Base URL: `http://127.0.0.1:8080`（由 controller 配置 `listen` 决定，页�
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/status` | `{config_path, controller_config, listen, log_level, min_port, defaults{...}, inbounds, outbounds, rules}` |
-| GET | `/api/config` | 当前 sing-box 主配置（格式化 JSON） |
+| GET | `/api/config` | 当前 sing-box 主配置（解析后重序列化，注释丢失） |
 | PUT | `/api/config` | 整体替换主配置。body = 完整配置 JSON；校验失败返回 400 且不落盘 |
+| GET | `/api/config/raw` | **主配置文件原始内容**（保留注释/格式/字段顺序，text/plain） |
+| PUT | `/api/config/raw` | **原样保存配置文本**（注释/尾逗号保留；sing-box 解析 + 干跑校验通过后原子写盘，同步内存 Options） |
 | GET | `/api/schema` | 完整 JSON Schema（自动生成，约 440KB，与代码同步） |
 | GET | `/api/types` | `{inbounds: [...], outbounds: [...], endpoints: [...], services: [...]}` 可用类型列表 |
 

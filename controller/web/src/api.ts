@@ -95,6 +95,9 @@ export const api = {
   status: () => http.get<StatusInfo>('/status').then((r) => r.data),
   config: () => http.get<unknown>('/config').then((r) => r.data),
   saveConfig: (config: unknown) => http.put('/config', config).then((r) => r.data),
+  configRaw: () => http.get<string>('/config/raw', { responseType: 'text' }).then((r) => r.data),
+  saveConfigRaw: (text: string) =>
+    http.put('/config/raw', text, { headers: { 'Content-Type': 'text/plain' } }).then((r) => r.data),
   types: () => http.get<TypesInfo>('/types').then((r) => r.data),
 
   // controller 设置

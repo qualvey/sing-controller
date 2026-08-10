@@ -4,6 +4,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -70,6 +71,8 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("GET /api/status", h.handleStatus)
 	mux.HandleFunc("GET /api/config", h.handleGetConfig)
 	mux.HandleFunc("PUT /api/config", h.handlePutConfig)
+	mux.HandleFunc("GET /api/config/raw", h.handleGetConfigRaw)
+	mux.HandleFunc("PUT /api/config/raw", h.handlePutConfigRaw)
 	mux.HandleFunc("GET /api/schema", h.handleSchema)
 	mux.HandleFunc("GET /api/types", h.handleTypes)
 	mux.HandleFunc("GET /api/settings", h.handleGetSettings)
@@ -358,6 +361,35 @@ func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
+}
+
+// handleGetConfigRaw 返回主配置文件原始内容（保留注释/格式/字段顺序）。
+func (h *Handler) handleGetConfigRaw(w http.ResponseWriter, r *http.Request) {
+	content := h.store.RawContent()
+	if len(content) == 0 {
+		content = []byte("{}\n")
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
+}
+
+// handlePutConfigRaw 原样保存配置文本（注释/格式保留）：sing-box 解析 + 干跑校验通过后写盘。
+func (h *Handler) handlePutConfigRaw(w http.ResponseWriter, r *http.Request) {
+	body, err := readRawBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		writeError(w, http.StatusBadRequest, errors.New("配置内容为空"))
+		return
+	}
+	if err := h.store.RawSave(h.ctx(r), body); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
 }
 
 func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {

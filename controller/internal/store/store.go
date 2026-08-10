@@ -154,6 +154,59 @@ func (s *Store) Save(ctx context.Context) error {
 	return s.saveLocked(ctx)
 }
 
+// RawContent 返回主配置文件的原始内容（未解析，保留注释/格式）；文件不存在返回 nil。
+func (s *Store) RawContent() []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	content, err := os.ReadFile(s.path)
+	if err != nil {
+		return nil
+	}
+	return content
+}
+
+// RawSave 原样保存配置文本（保留注释/格式）：解析+干跑校验通过后原子写盘原始内容，
+// 并同步内存 Options（后续 CRUD 基于新配置）。失败不落盘、内存回滚。
+func (s *Store) RawSave(ctx context.Context, content []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	snapshotOptions, snapshotMeta := s.snapshot(ctx)
+	options, err := Parse(ctx, content)
+	if err != nil {
+		return err
+	}
+	if err := Validate(ctx, content); err != nil {
+		s.restore(snapshotOptions, snapshotMeta)
+		return err
+	}
+	s.Options = options
+	return s.saveRawLocked(ctx, content)
+}
+
+func (s *Store) saveRawLocked(ctx context.Context, content []byte) error {
+	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	// 备份
+	if _, err := os.Stat(s.path); err == nil {
+		_ = os.WriteFile(s.path+".bak", content, 0o644)
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, content, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		return err
+	}
+	// 元数据
+	metaContent, err := json.Marshal(s.Meta)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.metaPath, metaContent, 0o644)
+}
+
 func (s *Store) saveLocked(ctx context.Context) error {
 	content, err := marshalOptions(ctx, s.Options)
 	if err != nil {
