@@ -68,7 +68,7 @@ npm run dev     # http://localhost:5173
 
 - **Outbound CRUD**：vless+reality（utls 指纹、Reality 密钥对生成）、tuic v5 专属表单；**selector/urltest 组表单**（成员多选、default/url/interval/tolerance）；其他类型原始 JSON 兜底
 - **Inbound CRUD**：mixed 专属表单（users 动态行）；预填默认 type/listen/端口，支持**自动分配最小可用端口**（min_port 起）
-- **Route CRUD（rule→action 模型）**：action 支持出站 route（默认，outbound 字段）/ direct / bypass / reject / hijack-dns / sniff / resolve / route-options；稳定 id 存旁车 meta；引用保护（删除被路由/组引用的对象会被拦截）
+- **Route CRUD（rule→action 模型）**：action 支持出站 route（默认，outbound 字段）/ direct / bypass / reject / hijack-dns / sniff / resolve / route-options；**匹配字段完整覆盖 sing-box RawDefaultRule**（inbound/ip_version/network/protocol/domain 系列/geosite/rule_set/geoip/ip_cidr/port 系列/process/package/user/网络环境/invert 等 38 字段，从 sing-box 源码自动整理，前端元数据驱动渲染；复杂 map 字段走 JSON 兜底）；稳定 id 存旁车 meta；引用保护（删除被路由/组引用的对象会被拦截）
 - **新建 outbound 自动并入 Proxy**（settings 默认开，可配目标 selector tag）
 - **粘贴 JSON 解析**：表单粘贴 JSON → 后端解析校验 → 填充字段
 - **Config 页使用 CodeMirror 6 编辑器（JSONC）**：支持 `//` 与 `/* */` 注释、尾逗号（自建 Lezer grammar，语法树完整 → 折叠/缩进不丢）；实时 lint 用微软 jsonc-parser（VSCode 同款引擎）；一键格式化/Ctrl+Shift+F = VSCode 同款格式化（保留注释）；保存兼容 JSONC 原文（注释忽略、尾逗号容忍）

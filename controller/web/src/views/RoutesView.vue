@@ -5,6 +5,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { api } from '../api'
 import type { RouteInfo, RouteRule } from '../api'
 import { useStatusStore } from '../stores/status'
+import { RULE_FIELDS, RULE_FIELD_KEYS, RULE_GROUPS, RULE_SUMMARY_ORDER } from './routeFields'
 
 const statusStore = useStatusStore()
 
@@ -35,15 +36,19 @@ const actionOptions = [
 
 const snifferOptions = ['tls', 'http', 'quic', 'dns', 'stun', 'bittorrent', 'dtls', 'ssh', 'rdp', 'ntp']
 
-const ruleForm = reactive({
-  action: 'route' as string,
-  inbound: [] as string[],
-  network: [] as string[],
+const ruleForm = reactive<Record<string, unknown>>({
+  action: 'route',
   outbound: '',
   sniffers: [] as string[],
   resolve_server: '',
   extraJson: ''
 })
+// 从 sing-box RawDefaultRule 整理的字段表初始化表单
+for (const f of RULE_FIELDS) {
+  if (f.type === 'bool') ruleForm[f.key] = false
+  else if (f.type === 'select' || f.type === 'string') ruleForm[f.key] = ''
+  else ruleForm[f.key] = []
+}
 
 const isRouteAction = computed(() => ruleForm.action === 'route')
 
@@ -60,6 +65,19 @@ const rows = computed(() => routes.value.map((r) => ({ id: r.id, ...r.rule })))
 function fmtList(v: unknown): string {
   if (Array.isArray(v)) return v.join(', ')
   return v == null ? '—' : String(v)
+}
+
+// 字段可选值：inbound 动态取自入站列表，其余用字段表枚举/空（allow-create 可输入）
+function fieldOptions(f: (typeof RULE_FIELDS)[number]): string[] {
+  if (f.key === 'inbound') return inboundTags.value
+  return f.options ?? []
+}
+
+// 列表摘要：按优先级取有值的字段 + 其余字段计数
+function ruleSummary(row: Record<string, unknown>): { items: Array<{ k: string; v: string }>; otherCount: number } {
+  const items = RULE_SUMMARY_ORDER.filter((k) => row[k] != null).map((k) => ({ k, v: fmtList(row[k]) }))
+  const otherCount = RULE_FIELDS.filter((f) => !RULE_SUMMARY_ORDER.includes(f.key) && row[f.key] != null).length
+  return { items, otherCount }
 }
 
 // 规则动作展示：route → 出站 tag；其他 → action 名
@@ -129,12 +147,15 @@ const saveFinal = async () => {
 
 const resetForm = () => {
   ruleForm.action = 'route'
-  ruleForm.inbound = []
-  ruleForm.network = []
   ruleForm.outbound = ''
   ruleForm.sniffers = []
   ruleForm.resolve_server = ''
   ruleForm.extraJson = ''
+  for (const f of RULE_FIELDS) {
+    if (f.type === 'bool') ruleForm[f.key] = false
+    else if (f.type === 'select' || f.type === 'string') ruleForm[f.key] = ''
+    else ruleForm[f.key] = []
+  }
 }
 
 const openCreate = () => {
@@ -148,22 +169,25 @@ const openCreate = () => {
 const openEdit = (row: RouteRule) => {
   isEdit.value = true
   editingId.value = typeof row.id === 'string' ? row.id : ''
-  // sing-box Listable 单值序列化为字符串，需兼容回填
-  ruleForm.inbound = row.inbound == null ? [] : Array.isArray(row.inbound) ? row.inbound.map(String) : [String(row.inbound)]
-  ruleForm.network = row.network == null ? [] : Array.isArray(row.network) ? row.network.map(String) : [String(row.network)]
-  const action = typeof row.action === 'string' && row.action ? row.action : 'route'
+  const rowRec = row as Record<string, unknown>
+  // 全字段回填（sing-box Listable 单值序列化为字符串，需兼容）
+  for (const f of RULE_FIELDS) {
+    const v = rowRec[f.key]
+    if (f.type === 'bool') ruleForm[f.key] = v === true
+    else if (f.type === 'select' || f.type === 'string') ruleForm[f.key] = v == null ? '' : String(v)
+    else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
+  }
+  const action = typeof rowRec.action === 'string' && rowRec.action ? rowRec.action : 'route'
   ruleForm.action = action
-  ruleForm.outbound = typeof row.outbound === 'string' ? row.outbound : ''
-  const sniffers = row.sniffer
+  ruleForm.outbound = typeof rowRec.outbound === 'string' ? rowRec.outbound : ''
+  const sniffers = rowRec.sniffer
   ruleForm.sniffers = Array.isArray(sniffers) ? sniffers.map(String) : typeof sniffers === 'string' ? [sniffers] : []
-  ruleForm.resolve_server = typeof row.server === 'string' ? row.server : ''
+  ruleForm.resolve_server = typeof rowRec.server === 'string' ? rowRec.server : ''
+  // 字段表之外的字段（action 参数、复杂 map 结构等）→ extraJson 兜底
   const extra: Record<string, unknown> = {}
-  for (const k of Object.keys(row)) {
-    if (
-      k !== 'id' && k !== 'inbound' && k !== 'network' && k !== 'outbound' &&
-      k !== 'action' && k !== 'sniffer' && k !== 'server'
-    ) {
-      extra[k] = row[k]
+  for (const k of Object.keys(rowRec)) {
+    if (k !== 'id' && !RULE_FIELD_KEYS.includes(k) && !['action', 'outbound', 'sniffer', 'server'].includes(k)) {
+      extra[k] = rowRec[k]
     }
   }
   ruleForm.extraJson = Object.keys(extra).length ? JSON.stringify(extra, null, 2) : ''
@@ -173,38 +197,52 @@ const openEdit = (row: RouteRule) => {
 
 function buildRule(): RouteRule {
   const rule: RouteRule = {}
-  if (ruleForm.inbound.length) rule.inbound = [...ruleForm.inbound]
-  if (ruleForm.network.length) rule.network = [...ruleForm.network]
+  // 匹配字段：字段表驱动，空值不写入
+  for (const f of RULE_FIELDS) {
+    const v = ruleForm[f.key]
+    if (f.type === 'bool') {
+      if (v === true) rule[f.key] = true
+      continue
+    }
+    if (f.type === 'select') {
+      if (v !== '' && v != null) rule[f.key] = f.key === 'ip_version' ? Number(v) : v
+      continue
+    }
+    if (f.type === 'string') {
+      if (typeof v === 'string' && v.trim()) rule[f.key] = v.trim()
+      continue
+    }
+    if (!Array.isArray(v) || !v.length) continue
+    rule[f.key] =
+      f.type === 'uint-list' || f.type === 'int-list'
+        ? (v as string[]).map((x) => Number(x))
+        : [...(v as string[])]
+  }
   // action 模型：route(默认) → outbound；其他 → action 字段
   if (isRouteAction.value) {
-    rule.outbound = ruleForm.outbound
+    rule.outbound = ruleForm.outbound as string
   } else {
-    rule.action = ruleForm.action
-    if (ruleForm.action === 'sniff' && ruleForm.sniffers.length) {
-      rule.sniffer = [...ruleForm.sniffers]
+    rule.action = ruleForm.action as string
+    if (ruleForm.action === 'sniff' && (ruleForm.sniffers as string[]).length) {
+      rule.sniffer = [...(ruleForm.sniffers as string[])]
     }
-    if (ruleForm.action === 'resolve' && ruleForm.resolve_server.trim()) {
-      rule.server = ruleForm.resolve_server.trim()
+    if (ruleForm.action === 'resolve' && String(ruleForm.resolve_server).trim()) {
+      rule.server = String(ruleForm.resolve_server).trim()
     }
   }
-  if (ruleForm.extraJson.trim()) {
+  // extraJson 兜底：字段表之外的字段（表单字段优先，不覆盖）
+  if (String(ruleForm.extraJson).trim()) {
     let extra: Record<string, unknown>
     try {
-      extra = JSON.parse(ruleForm.extraJson.trim())
+      extra = JSON.parse(String(ruleForm.extraJson).trim())
     } catch (e) {
       throw new Error(`附加字段 JSON 格式错误：${(e as Error).message}`)
     }
     if (typeof extra !== 'object' || extra === null || Array.isArray(extra)) {
       throw new Error('附加字段必须为 JSON 对象')
     }
-    Object.assign(rule, extra)
-    // 表单中的选择项优先
-    if (ruleForm.inbound.length) rule.inbound = [...ruleForm.inbound]
-    if (ruleForm.network.length) rule.network = [...ruleForm.network]
-    if (isRouteAction.value) {
-      rule.outbound = ruleForm.outbound
-    } else {
-      rule.action = ruleForm.action
+    for (const k of Object.keys(extra)) {
+      if (!(k in rule)) rule[k] = extra[k]
     }
   }
   return rule
@@ -274,27 +312,22 @@ onMounted(() => {
     </div>
 
     <el-table :data="rows" v-loading="loading" border stripe>
-      <el-table-column label="rule" min-width="220">
+      <el-table-column label="rule" min-width="300">
         <template #default="{ row }">
           <div class="rule-cell">
-            <span v-if="row.inbound" class="rule-item"><b>inbound</b> {{ fmtList(row.inbound) }}</span>
-            <span v-if="row.network" class="rule-item"><b>network</b> {{ fmtList(row.network) }}</span>
-            <span v-if="!row.inbound && !row.network" class="rule-item muted">全部</span>
+            <template v-if="ruleSummary(row).items.length">
+              <span v-for="it in ruleSummary(row).items" :key="it.k" class="rule-item">
+                <b>{{ it.k }}</b> {{ it.v }}
+              </span>
+              <span v-if="ruleSummary(row).otherCount" class="rule-item muted">+{{ ruleSummary(row).otherCount }} 项</span>
+            </template>
+            <span v-else class="rule-item muted">全部（无匹配条件）</span>
+            <span v-if="row.invert" class="rule-item tag-invert">[取反]</span>
           </div>
         </template>
       </el-table-column>
       <el-table-column label="action" min-width="150">
         <template #default="{ row }">{{ actionText(row) }}</template>
-      </el-table-column>
-      <el-table-column label="其他" min-width="160">
-        <template #default="{ row }">
-          <div class="rule-cell">
-            <span v-if="row.domain_suffix" class="rule-item"><b>domain_suffix</b> {{ fmtList(row.domain_suffix) }}</span>
-            <span v-if="row.ip_cidr" class="rule-item"><b>ip_cidr</b> {{ fmtList(row.ip_cidr) }}</span>
-            <span v-if="row.port" class="rule-item"><b>port</b> {{ fmtList(row.port) }}</span>
-            <span v-if="!row.domain_suffix && !row.ip_cidr && !row.port" class="rule-item muted">—</span>
-          </div>
-        </template>
       </el-table-column>
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
@@ -307,48 +340,84 @@ onMounted(() => {
     <el-dialog
       v-model="routeDialogVisible"
       :title="isEdit ? '编辑规则' : '新建规则'"
-      width="640px"
+      width="760px"
       :close-on-click-modal="false"
     >
       <el-form ref="ruleFormRef" :model="ruleForm" :rules="ruleRules" label-width="130px">
-        <el-form-item label="inbound" prop="inbound">
-          <el-select v-model="ruleForm.inbound" multiple style="width: 100%" placeholder="匹配的入站（可多选，留空匹配所有）">
-            <el-option v-for="t in inboundTags" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="network" prop="network">
-          <el-select v-model="ruleForm.network" multiple style="width: 100%" placeholder="tcp / udp（可多选）">
-            <el-option label="tcp" value="tcp" />
-            <el-option label="udp" value="udp" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="action" prop="action">
-          <el-select v-model="ruleForm.action" style="width: 100%">
-            <el-option v-for="a in actionOptions" :key="a.value" :label="a.label" :value="a.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="isRouteAction" label="outbound" prop="outbound">
-          <el-select v-model="ruleForm.outbound" style="width: 100%" placeholder="选择出站">
-            <el-option v-for="t in outboundTags" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-else-if="ruleForm.action === 'sniff'" label="sniffer">
-          <el-select v-model="ruleForm.sniffers" multiple style="width: 100%" placeholder="嗅探协议（可多选）">
-            <el-option v-for="s in snifferOptions" :key="s" :label="s" :value="s" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-else-if="ruleForm.action === 'resolve'" label="DNS server">
-          <el-input v-model="ruleForm.resolve_server" placeholder="DNS 服务器 tag（可选，留空用默认）" />
-        </el-form-item>
-        <el-form-item label="其他字段 (JSON)">
-          <el-input
-            v-model="ruleForm.extraJson"
-            type="textarea"
-            :rows="6"
-            class="mono"
-            placeholder='{"domain_suffix": [".com"], "ip_cidr": ["0.0.0.0/8"]}'
-          />
-        </el-form-item>
+        <el-tabs>
+          <el-tab-pane label="匹配条件">
+            <template v-for="g in RULE_GROUPS" :key="g">
+              <el-divider content-position="left">{{ g }}</el-divider>
+              <el-form-item
+                v-for="f in RULE_FIELDS.filter((x) => x.group === g)"
+                :key="f.key"
+                :label="f.label"
+                :prop="f.key"
+              >
+                <el-select
+                  v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
+                  v-model="ruleForm[f.key]"
+                  multiple
+                  filterable
+                  allow-create
+                  default-first-option
+                  style="width: 100%"
+                  :placeholder="f.placeholder || '输入后回车添加，可多值'"
+                >
+                  <el-option v-for="o in fieldOptions(f)" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-select
+                  v-else-if="f.type === 'select'"
+                  v-model="ruleForm[f.key]"
+                  style="width: 100%"
+                  :placeholder="f.placeholder || '请选择'"
+                >
+                  <el-option v-for="o in fieldOptions(f)" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-switch v-else-if="f.type === 'bool'" v-model="ruleForm[f.key]" />
+                <el-input v-else v-model="ruleForm[f.key]" :placeholder="f.placeholder || '请输入'" />
+              </el-form-item>
+            </template>
+          </el-tab-pane>
+          <el-tab-pane label="动作">
+            <el-form-item label="action" prop="action">
+              <el-select v-model="ruleForm.action" style="width: 100%">
+                <el-option v-for="a in actionOptions" :key="a.value" :label="a.label" :value="a.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="isRouteAction" label="outbound" prop="outbound">
+              <el-select v-model="ruleForm.outbound" style="width: 100%" placeholder="选择出站">
+                <el-option v-for="t in outboundTags" :key="t" :label="t" :value="t" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-else-if="ruleForm.action === 'sniff'" label="sniffer">
+              <el-select v-model="ruleForm.sniffers" multiple style="width: 100%" placeholder="嗅探协议（可多选）">
+                <el-option v-for="s in snifferOptions" :key="s" :label="s" :value="s" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-else-if="ruleForm.action === 'resolve'" label="DNS server">
+              <el-input v-model="ruleForm.resolve_server" placeholder="DNS 服务器 tag（可选，留空用默认）" />
+            </el-form-item>
+            <el-alert
+              type="info"
+              :closable="false"
+              title="动作说明"
+              description="route=默认出站（选 outbound）；direct=直连；bypass=绕过；reject=拒绝；hijack-dns=DNS 劫持；sniff=协议嗅探；resolve=DNS 解析；route-options=路由选项（参数写在附加字段）"
+            />
+          </el-tab-pane>
+          <el-tab-pane label="其他字段 (JSON)">
+            <el-form-item label="附加字段">
+              <el-input
+                v-model="ruleForm.extraJson"
+                type="textarea"
+                :rows="10"
+                class="mono"
+                placeholder='{"interface_address": {"eth0": ["10.0.0.0/8"]}}'
+              />
+            </el-form-item>
+            <span class="hint">字段表未覆盖的复杂字段（interface_address、network_interface_address 等）写在这里；表单字段优先</span>
+          </el-tab-pane>
+        </el-tabs>
       </el-form>
       <template #footer>
         <el-button @click="routeDialogVisible = false">取消</el-button>
@@ -398,5 +467,9 @@ onMounted(() => {
 }
 .rule-item.muted {
   color: #c0c4cc;
+}
+.rule-item.tag-invert {
+  color: #e6a23c;
+  font-weight: 600;
 }
 </style>

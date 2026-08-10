@@ -118,7 +118,9 @@ mixed 示例：
 ```json
 { "inbound": ["mixed-in"], "outbound": "vless-reality", "network": "tcp" }
 ```
-- 匹配字段均为字符串数组（`inbound`/`network`/`domain`/`domain_suffix`/`ip_cidr`/`port` 等），`outbound` 为单个字符串
+- 匹配字段完整覆盖 sing-box `RawDefaultRule`：inbound / ip_version / network / protocol / auth_user / client / domain 系列（domain、domain_suffix、domain_keyword、domain_regex）/ geosite / rule_set / geoip / source_geoip / ip_cidr / source_ip_cidr / ip_is_private / source_ip_is_private / port / port_range / source_port / source_port_range / process 系列 / package 系列 / user / user_id / network_type / wifi_ssid / wifi_bssid / source_mac_address / source_hostname / preferred_by / clash_mode / invert，以及 action 系列（outbound / action / sniffer / server 及 route-options 参数）
+  （字段元数据见 `controller/web/src/views/routeFields.ts`，与 sing-box fork 源码 option/rule.go 同步；interface_address 等复杂 map 字段用原始 JSON 兜底）
+- `outbound` 为单个字符串；其余匹配字段为字符串/数字数组（Listable）
 - **注意**：sing-box `Listable` 单值序列化为字符串（如 `"inbound": "mixed-in"` 而非数组），前端回填需兼容
 - 外部手工改配置后 meta 数量不匹配会自动重新生成 id（旧 id 失效）
 
