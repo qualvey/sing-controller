@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { VideoPlay, CaretRight, Lightning } from '@element-plus/icons-vue'
+import { VideoPlay, CaretRight } from '@element-plus/icons-vue'
 import { subscribeGroups, selectOutbound, uRLTest, setClashMode } from '../api/singbox'
 import { fetchProxyLatency } from '../api/clash'
 import type { Groups, Group } from '@/gen/daemon/started_service_pb'
@@ -87,13 +87,6 @@ const toggleGroup = (tag: string) => {
 }
 
 const isExpanded = (tag: string) => expanded.value.has(tag)
-
-const latencyColor = (d: number | undefined) => {
-  if (d === undefined || d < 0) return ''
-  if (d < 100) return 'text-green-600 dark:text-green-400'
-  if (d < 300) return 'text-yellow-600 dark:text-yellow-400'
-  return 'text-red-600 dark:text-red-400'
-}
 
 const latencyBg = (d: number | undefined) => {
   if (d === undefined || d < 0) return 'bg-gray-300 dark:bg-gray-600'
@@ -192,6 +185,20 @@ const saveTestUrl = () => {
   localStorage.setItem('proxy-test-url', testUrl.value)
 }
 
+const typeLabel = (t: string) => {
+  if (!t) return '—'
+  return t
+    .toLowerCase()
+    .replace('shadowsocks', 'ss')
+    .replace('hysteria', 'hy')
+    .replace('urltest', '自动')
+    .replace('selector', '选择')
+    .replace('fallback', '回退')
+    .replace('loadbalance', '负载')
+    .replace('direct', '直连')
+    .replace('block', '拒绝')
+}
+
 const formatSpeed = (n: number) => {
   if (!n) return ''
   const units = ['B', 'KB', 'MB', 'GB']
@@ -279,28 +286,36 @@ onBeforeUnmount(() => {
             </div>
             <!-- 展开：节点网格 -->
             <div v-else class="border-t border-[var(--el-border-color)] p-3">
-              <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <!-- zashboard 同款：auto-fill minmax(150px,1fr) 列数自适应，卡片不压缩 -->
+              <div class="grid gap-2" :style="{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(150px, 100%), 1fr))' }">
                 <div
                   v-for="item in g.items"
                   :key="item.tag"
-                  class="flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs transition-all duration-150"
+                  class="group/node flex cursor-pointer flex-col gap-1.5 rounded-md border p-2.5 transition-all duration-150"
                   :class="
                     item.tag === g.selected
-                      ? 'border-[var(--el-color-primary)] bg-[color-mix(in_srgb,var(--el-color-primary)_10%,transparent)] shadow-sm'
+                      ? 'border-transparent bg-[var(--el-color-primary)] text-white shadow-md'
                       : 'border-[var(--el-border-color)] hover:-translate-y-px hover:border-[var(--el-color-primary)] hover:shadow-sm'
                   "
                   @click="pick(g.tag, item.tag)"
+                  @contextmenu.prevent.stop="testOne(g.tag, item.tag)"
                 >
-                  <span class="flex-1 truncate" :title="item.tag">{{ item.tag }}</span>
-                  <span :class="latencyColor(latencyMap[item.tag])" class="tabular-nums">{{ formatLatency(latencyMap[item.tag]) }}</span>
-                  <button
-                    class="rounded p-0.5 opacity-0 transition-opacity hover:bg-[var(--el-fill-color)] group-hover:opacity-100"
-                    :class="{ 'opacity-100': isTesting(g.tag, item.tag) }"
-                    :disabled="isTesting(g.tag, item.tag)"
-                    @click.stop="testOne(g.tag, item.tag)"
-                  >
-                    <el-icon :size="12" class="text-[var(--el-text-color-secondary)]"><Lightning /></el-icon>
-                  </button>
+                  <span class="w-full truncate text-sm" :title="item.tag">{{ item.tag }}</span>
+                  <div class="flex w-full items-center justify-between gap-1">
+                    <span
+                      class="truncate text-xs tracking-tight"
+                      :class="item.tag === g.selected ? 'text-white/80' : 'text-[var(--el-text-color-secondary)]'"
+                    >{{ typeLabel(item.type) }}</span>
+                    <span
+                      class="shrink-0 rounded-full px-2 py-0.5 text-[11px] tabular-nums transition-all"
+                      :class="
+                        item.tag === g.selected
+                          ? 'bg-white/20 text-white'
+                          : latencyBg(latencyMap[item.tag]) + ' text-white'
+                      "
+                      @click.stop="testOne(g.tag, item.tag)"
+                    >{{ formatLatency(latencyMap[item.tag]) }}</span>
+                  </div>
                 </div>
               </div>
             </div>
