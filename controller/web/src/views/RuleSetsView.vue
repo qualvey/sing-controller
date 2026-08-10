@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
+import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import { useStatusStore } from '../stores/status'
 
 const statusStore = useStatusStore()
@@ -13,6 +14,8 @@ const saving = ref(false)
 const items = ref<Array<{ id: string; rule_set: Record<string, any> }>>([])
 
 const dialogVisible = ref(false)
+const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
+const sourceJson = ref('{}')
 const isEdit = ref(false)
 const editingId = ref('')
 
@@ -74,6 +77,7 @@ function buildRuleSet(): Record<string, any> {
 function openCreate() {
   isEdit.value = false
   editingId.value = ''
+  sourceJson.value = '{}'
   resetForm()
   dialogVisible.value = true
 }
@@ -81,6 +85,7 @@ function openCreate() {
 function openEdit(row: { id: string; rule_set: Record<string, any> }) {
   isEdit.value = true
   editingId.value = row.id
+  sourceJson.value = JSON.stringify(row.rule_set, null, 2)
   resetForm()
   const rs = row.rule_set
   const type = typeof rs.type === 'string' && rs.type ? rs.type : 'inline'
@@ -112,7 +117,7 @@ const save = async () => {
   }
   saving.value = true
   try {
-    const payload = buildRuleSet()
+    const payload = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildRuleSet()
     if (isEdit.value) {
       await api.updateRuleSet(editingId.value, payload)
     } else {
@@ -237,6 +242,8 @@ onMounted(load)
     </el-table>
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑规则集' : '新建规则集'" width="620px" :close-on-click-modal="false">
+      <el-tabs>
+        <el-tab-pane label="表单">
       <el-form label-width="130px">
         <el-form-item label="type" required>
           <el-select v-model="form.type" style="width: 100%">
@@ -281,6 +288,11 @@ onMounted(load)
           </el-form-item>
         </template>
       </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="源码">
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+      </el-tab-pane>
+    </el-tabs>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>

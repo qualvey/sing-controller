@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
+import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import type { RouteInfo, RouteRule } from '../api'
 import { useStatusStore } from '../stores/status'
 import { RULE_FIELDS, RULE_FIELD_KEYS, RULE_GROUPS, RULE_SUMMARY_ORDER } from './routeFields'
@@ -20,6 +21,8 @@ const outboundTags = ref<string[]>([])
 const inboundTags = ref<string[]>([])
 
 const routeDialogVisible = ref(false)
+const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
+const sourceJson = ref('{}')
 const isEdit = ref(false)
 const editingId = ref('')
 const ruleFormRef = ref<FormInstance>()
@@ -173,6 +176,7 @@ const resetForm = () => {
 const openCreate = () => {
   isEdit.value = false
   editingId.value = ''
+  sourceJson.value = '{}'
   resetForm()
   routeDialogVisible.value = true
   ruleFormRef.value?.clearValidate()
@@ -182,6 +186,8 @@ const openEdit = (row: RouteRule) => {
   isEdit.value = true
   editingId.value = typeof row.id === 'string' ? row.id : ''
   const rowRec = row as Record<string, unknown>
+  const { id: _omit, ...ruleBody } = rowRec
+  sourceJson.value = JSON.stringify(ruleBody, null, 2)
   // logical 类型（多态）：mode + 嵌套子规则 + 共用 action
   if (rowRec.type === 'logical') {
     ruleForm.ruleType = 'logical'
@@ -304,7 +310,7 @@ const save = async () => {
   if (!valid) return
   saving.value = true
   try {
-    const rule = buildRule()
+    const rule = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildRule()
     const res = isEdit.value ? await api.updateRoute(editingId.value, rule) : await api.createRoute(rule)
     handleResult(res)
     routeDialogVisible.value = false
@@ -397,6 +403,8 @@ onMounted(() => {
       width="760px"
       :close-on-click-modal="false"
     >
+      <el-tabs>
+        <el-tab-pane label="表单">
       <el-form ref="ruleFormRef" :model="ruleForm" :rules="ruleRules" label-width="130px">
         <el-form-item label="类型">
           <el-select v-model="ruleForm.ruleType" style="width: 100%">
@@ -494,6 +502,11 @@ onMounted(() => {
           </el-tab-pane>
         </el-tabs>
       </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="源码">
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+      </el-tab-pane>
+    </el-tabs>
       <template #footer>
         <el-button @click="routeDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>

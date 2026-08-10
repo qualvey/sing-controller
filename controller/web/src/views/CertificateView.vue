@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
+import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import { useStatusStore } from '../stores/status'
 
 const statusStore = useStatusStore()
@@ -13,6 +14,8 @@ const saving = ref(false)
 const providers = ref<Array<{ id: string; provider: Record<string, any> }>>([])
 
 const dialogVisible = ref(false)
+const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
+const sourceJson = ref('{}')
 const isEdit = ref(false)
 const editingId = ref('')
 
@@ -155,6 +158,7 @@ function buildProvider(): Record<string, any> {
 function openCreateProvider() {
   isEdit.value = false
   editingId.value = ''
+  sourceJson.value = '{}'
   resetProviderForm()
   dialogVisible.value = true
 }
@@ -162,6 +166,7 @@ function openCreateProvider() {
 function openEditProvider(row: { id: string; provider: Record<string, any> }) {
   isEdit.value = true
   editingId.value = row.id
+  sourceJson.value = JSON.stringify(row.provider, null, 2)
   resetProviderForm()
   const p = row.provider
   providerForm.type = String(p.type || 'acme')
@@ -202,7 +207,7 @@ function openEditProvider(row: { id: string; provider: Record<string, any> }) {
 const saveProvider = async () => {
   saving.value = true
   try {
-    const payload = buildProvider()
+    const payload = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildProvider()
     if (isEdit.value) {
       await api.updateCertProvider(editingId.value, payload)
     } else {
@@ -320,6 +325,8 @@ onMounted(load)
     </div>
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑 Certificate Provider' : '新建 Certificate Provider'" width="640px" :close-on-click-modal="false">
+      <el-tabs>
+        <el-tab-pane label="表单">
       <el-form label-width="170px">
         <el-form-item label="type">
           <el-select v-model="providerForm.type" style="width: 100%">
@@ -372,6 +379,11 @@ onMounted(load)
           <el-input v-model="providerForm.extraJson" type="textarea" :rows="4" class="mono" placeholder='{"dns01_challenge": {"provider": "cloudflare", "cloudflare": {"api_token": "..."}}}' />
         </el-form-item>
       </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="源码">
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+      </el-tab-pane>
+    </el-tabs>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveProvider">保存</el-button>

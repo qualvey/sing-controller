@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import { useStatusStore } from '../stores/status'
 import SourcePane from '../components/SourcePane.vue'
+import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import {
   DNS_RULE_ACTIONS,
   DNS_RULE_FIELDS,
@@ -26,6 +27,8 @@ const inboundTags = ref<string[]>([])
 const dnsTags = ref<string[]>([])
 
 const serverDialogVisible = ref(false)
+const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
+const sourceJson = ref('{}')
 const isEditServer = ref(false)
 const editingServerTag = ref('')
 const ruleDialogVisible = ref(false)
@@ -69,7 +72,23 @@ const serverForm = reactive<Record<string, any>>({
   inet4_range: '',
   inet6_range: '',
   interface: '',
-  rawJson: ''
+  predefined_json: '',
+  // DialerOptions 常用（option/outbound.go AbstractDialerOptions）
+  bind_interface: '',
+  connect_timeout: '',
+  routing_mark: 0,
+  reuse_addr: false,
+  udp_fragment: false,
+  network_strategy: '',
+  network_type: [] as string[],
+  // domain_resolver（域名字段：带域名的 server 需要；子字段全部控件化）
+  dr_server: '',
+  dr_timeout: '',
+  dr_strategy: '',
+  dr_disable_cache: false,
+  dr_disable_optimistic_cache: false,
+  dr_rewrite_ttl: 0,
+  dr_client_subnet: ''
 })
 
 const resetServerForm = () => {
@@ -83,12 +102,45 @@ const resetServerForm = () => {
   serverForm.inet4_range = ''
   serverForm.inet6_range = ''
   serverForm.interface = ''
-  serverForm.rawJson = ''
+  serverForm.predefined_json = ''
+  serverForm.bind_interface = ''
+  serverForm.connect_timeout = ''
+  serverForm.routing_mark = 0
+  serverForm.reuse_addr = false
+  serverForm.udp_fragment = false
+  serverForm.network_strategy = ''
+  serverForm.network_type = []
+  serverForm.dr_server = ''
+  serverForm.dr_timeout = ''
+  serverForm.dr_strategy = ''
+  serverForm.dr_disable_cache = false
+  serverForm.dr_disable_optimistic_cache = false
+  serverForm.dr_rewrite_ttl = 0
+  serverForm.dr_client_subnet = ''
 }
 
 function buildServer(): Record<string, any> {
   const s: Record<string, any> = { type: serverForm.type, tag: serverForm.tag.trim() }
   if (serverForm.detour) s.detour = serverForm.detour
+  // DialerOptions 常用字段
+  if (serverForm.bind_interface.trim()) s.bind_interface = serverForm.bind_interface.trim()
+  if (serverForm.connect_timeout.trim()) s.connect_timeout = serverForm.connect_timeout.trim()
+  if (serverForm.routing_mark) s.routing_mark = Number(serverForm.routing_mark)
+  if (serverForm.reuse_addr) s.reuse_addr = true
+  if (serverForm.udp_fragment) s.udp_fragment = true
+  if (serverForm.network_strategy) s.network_strategy = serverForm.network_strategy
+  if (serverForm.network_type.length) s.network_type = [...serverForm.network_type]
+  // domain_resolver：server 必填才创建对象（带域名的 server 必需）
+  if (serverForm.dr_server) {
+    const dr: Record<string, any> = { server: serverForm.dr_server }
+    if (serverForm.dr_timeout.trim()) dr.timeout = serverForm.dr_timeout.trim()
+    if (serverForm.dr_strategy) dr.strategy = serverForm.dr_strategy
+    if (serverForm.dr_disable_cache) dr.disable_cache = true
+    if (serverForm.dr_disable_optimistic_cache) dr.disable_optimistic_cache = true
+    if (serverForm.dr_rewrite_ttl) dr.rewrite_ttl = Number(serverForm.dr_rewrite_ttl)
+    if (serverForm.dr_client_subnet.trim()) dr.client_subnet = serverForm.dr_client_subnet.trim()
+    s.domain_resolver = dr
+  }
   const keys = serverFieldKeys(serverForm.type)
   if (keys.includes('server') && serverForm.server.trim()) s.server = serverForm.server.trim()
   if (keys.includes('server_port') && serverForm.server_port) s.server_port = Number(serverForm.server_port)
@@ -99,16 +151,15 @@ function buildServer(): Record<string, any> {
   if (keys.includes('inet4_range') && serverForm.inet4_range.trim()) s.inet4_range = serverForm.inet4_range.trim()
   if (keys.includes('inet6_range') && serverForm.inet6_range.trim()) s.inet6_range = serverForm.inet6_range.trim()
   if (keys.includes('interface') && serverForm.interface.trim()) s.interface = serverForm.interface.trim()
-  if (serverForm.rawJson.trim()) {
-    let extra: Record<string, any>
+  // hosts.predefined（复杂 map，字段级 JSON 输入）
+  if (serverForm.predefined_json.trim()) {
+    let predefined: unknown
     try {
-      extra = JSON.parse(serverForm.rawJson.trim())
+      predefined = JSON.parse(serverForm.predefined_json.trim())
     } catch (e) {
-      throw new Error(`附加字段 JSON 格式错误：${(e as Error).message}`)
+      throw new Error(`predefined JSON 格式错误：${(e as Error).message}`)
     }
-    for (const k of Object.keys(extra)) {
-      if (!(k in s) && k !== 'type' && k !== 'tag') s[k] = extra[k]
-    }
+    s.predefined = predefined
   }
   return s
 }
@@ -136,12 +187,27 @@ function openEditServer(row: Record<string, any>) {
   if (row.inet4_range != null) serverForm.inet4_range = String(row.inet4_range)
   if (row.inet6_range != null) serverForm.inet6_range = String(row.inet6_range)
   if (row.interface != null) serverForm.interface = String(row.interface)
-  const known = new Set(['type', 'tag', 'server', 'server_port', 'detour', 'path', 'inet4_range', 'inet6_range', 'interface', 'tls'])
-  const extra: Record<string, any> = {}
-  for (const k of Object.keys(row)) {
-    if (!known.has(k)) extra[k] = row[k]
+  if (row.predefined != null) serverForm.predefined_json = JSON.stringify(row.predefined, null, 2)
+  // DialerOptions
+  if (row.bind_interface != null) serverForm.bind_interface = String(row.bind_interface)
+  if (row.connect_timeout != null) serverForm.connect_timeout = String(row.connect_timeout)
+  if (row.routing_mark != null) serverForm.routing_mark = Number(row.routing_mark)
+  serverForm.reuse_addr = row.reuse_addr === true
+  serverForm.udp_fragment = row.udp_fragment === true
+  if (row.network_strategy != null) serverForm.network_strategy = String(row.network_strategy)
+  serverForm.network_type = Array.isArray(row.network_type) ? row.network_type.map(String) : row.network_type ? [String(row.network_type)] : []
+  // domain_resolver
+  const dr = row.domain_resolver
+  if (dr && typeof dr === 'object') {
+    serverForm.dr_server = typeof dr.server === 'string' ? dr.server : ''
+    if (dr.timeout != null) serverForm.dr_timeout = String(dr.timeout)
+    if (dr.strategy != null) serverForm.dr_strategy = String(dr.strategy)
+    serverForm.dr_disable_cache = dr.disable_cache === true
+    serverForm.dr_disable_optimistic_cache = dr.disable_optimistic_cache === true
+    if (dr.rewrite_ttl != null) serverForm.dr_rewrite_ttl = Number(dr.rewrite_ttl)
+    if (dr.client_subnet != null) serverForm.dr_client_subnet = String(dr.client_subnet)
   }
-  serverForm.rawJson = Object.keys(extra).length ? JSON.stringify(extra, null, 2) : ''
+  sourceJson.value = JSON.stringify(row, null, 2)
   serverDialogVisible.value = true
 }
 
@@ -340,6 +406,7 @@ function buildDnsAction(rule: Record<string, any>) {
 function openCreateRule() {
   isEditRule.value = false
   editingRuleId.value = ''
+  sourceJson.value = '{}'
   resetRuleForm()
   ruleDialogVisible.value = true
 }
@@ -347,6 +414,7 @@ function openCreateRule() {
 function openEditRule(row: { id: string; rule: Record<string, any> }) {
   isEditRule.value = true
   editingRuleId.value = row.id
+  sourceJson.value = JSON.stringify(row.rule, null, 2)
   resetRuleForm()
   const r = row.rule
   // logical 类型（多态）：mode + 嵌套子规则 + 共用 action
@@ -392,7 +460,7 @@ function fillDnsAction(r: Record<string, any>) {
 const saveRule = async () => {
   saving.value = true
   try {
-    const payload = buildDnsRule()
+    const payload = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildDnsRule()
     if (isEditRule.value) {
       await api.updateDnsRule(editingRuleId.value, payload)
     } else {
@@ -624,6 +692,8 @@ onMounted(() => {
 
     <!-- Server 编辑 -->
     <el-dialog v-model="serverDialogVisible" :title="isEditServer ? '编辑 DNS Server' : '新建 DNS Server'" width="560px" :close-on-click-modal="false">
+      <el-tabs>
+        <el-tab-pane label="表单">
       <el-form label-width="120px">
         <el-form-item label="type" required>
           <el-select v-model="serverForm.type" style="width: 100%">
@@ -661,10 +731,68 @@ onMounted(() => {
             <el-option v-for="t in outboundTags" :key="t" :label="t" :value="t" />
           </el-select>
         </el-form-item>
-        <el-form-item label="附加字段 (JSON)">
-          <el-input v-model="serverForm.rawJson" type="textarea" :rows="4" class="mono" placeholder='{"client_subnet": "1.2.3.4/24"}' />
+        <el-divider content-position="left">拨号选项（DialerOptions）</el-divider>
+        <el-form-item label="bind_interface">
+          <el-input v-model="serverForm.bind_interface" placeholder="绑定网卡名（可选）" />
+        </el-form-item>
+        <el-form-item label="connect_timeout">
+          <el-input v-model="serverForm.connect_timeout" placeholder="如 5s（可选）" />
+        </el-form-item>
+        <el-form-item label="routing_mark">
+          <el-input-number v-model="serverForm.routing_mark" :min="0" />
+        </el-form-item>
+        <el-form-item label="reuse_addr">
+          <el-switch v-model="serverForm.reuse_addr" />
+        </el-form-item>
+        <el-form-item label="udp_fragment">
+          <el-switch v-model="serverForm.udp_fragment" />
+        </el-form-item>
+        <el-form-item label="network_strategy">
+          <el-select v-model="serverForm.network_strategy" style="width: 100%" clearable placeholder="不指定">
+            <el-option v-for="s in STRATEGY_OPTIONS" :key="s" :label="s" :value="s" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="network_type">
+          <el-select v-model="serverForm.network_type" multiple filterable allow-create default-first-option style="width: 100%" placeholder="wifi/cellular/ethernet/other">
+            <el-option v-for="t in ['wifi', 'cellular', 'ethernet', 'other']" :key="t" :label="t" :value="t" />
+          </el-select>
+        </el-form-item>
+        <el-divider content-position="left">domain_resolver（server 为域名的必填）</el-divider>
+        <el-form-item label="resolver server">
+          <el-select v-model="serverForm.dr_server" style="width: 100%" clearable placeholder="选择 DNS server（如 local/ali）">
+            <el-option v-for="t in dnsTags" :key="t" :label="t" :value="t" />
+          </el-select>
+          <div class="field-hint">server/url 是域名时，用该 resolver 解析域名的 IP（避免自举）</div>
+        </el-form-item>
+        <el-form-item v-if="serverForm.dr_server" label="resolver timeout">
+          <el-input v-model="serverForm.dr_timeout" placeholder="如 5s" />
+        </el-form-item>
+        <el-form-item v-if="serverForm.dr_server" label="resolver strategy">
+          <el-select v-model="serverForm.dr_strategy" style="width: 100%" clearable>
+            <el-option v-for="s in STRATEGY_OPTIONS" :key="s" :label="s" :value="s" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="serverForm.dr_server" label="resolver disable_cache">
+          <el-switch v-model="serverForm.dr_disable_cache" />
+        </el-form-item>
+        <el-form-item v-if="serverForm.dr_server" label="disable_optimistic_cache">
+          <el-switch v-model="serverForm.dr_disable_optimistic_cache" />
+        </el-form-item>
+        <el-form-item v-if="serverForm.dr_server" label="rewrite_ttl">
+          <el-input-number v-model="serverForm.dr_rewrite_ttl" :min="0" />
+        </el-form-item>
+        <el-form-item v-if="serverForm.dr_server" label="client_subnet">
+          <el-input v-model="serverForm.dr_client_subnet" placeholder="如 1.2.3.4/24" />
+        </el-form-item>
+        <el-form-item v-if="serverForm.type === 'hosts'" label="predefined (JSON)">
+          <el-input v-model="serverForm.predefined_json" type="textarea" :rows="4" class="mono" placeholder='{"example.com": "1.2.3.4"}' />
         </el-form-item>
       </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="源码">
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+      </el-tab-pane>
+    </el-tabs>
       <template #footer>
         <el-button @click="serverDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveServer">保存</el-button>
@@ -673,6 +801,8 @@ onMounted(() => {
 
     <!-- 规则编辑 -->
     <el-dialog v-model="ruleDialogVisible" :title="isEditRule ? '编辑 DNS 规则' : '新建 DNS 规则'" width="760px" :close-on-click-modal="false">
+      <el-tabs>
+        <el-tab-pane label="表单">
       <el-form label-width="150px">
         <el-form-item label="类型">
           <el-select v-model="ruleForm.ruleType" style="width: 100%">
@@ -782,6 +912,11 @@ onMounted(() => {
           </el-tab-pane>
         </el-tabs>
       </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="源码">
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+      </el-tab-pane>
+    </el-tabs>
       <template #footer>
         <el-button @click="ruleDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveRule">保存</el-button>

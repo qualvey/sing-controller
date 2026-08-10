@@ -122,6 +122,19 @@ sudo systemctl status sing-controller
 # 浏览器访问 http://<host>:8080（listen 可改 /etc/sing-controller/config.json 后 restart）
 ```
 
+重载权限
+
+```shell
+sudo tee /etc/polkit-1/rules.d/50-sing-box.rules <<'EOF'
+polkit.addRule(function(action, subject) {
+  if (action.id == "org.freedesktop.systemd1.manage-units" &&
+      subject.user == "sing-controller" &&
+      action.lookup("unit") == "sing-box.service") {
+    return polkit.Result.YES;
+  }
+});
+EOF
+```
 安装后：
 - 用户/组 `sing-controller`（无特权、nologin），配置目录 `/etc/sing-controller`
 - systemd 服务 `sing-controller`（journald 日志：`journalctl -u sing-controller -f`），带 `CAP_NET_BIND_SERVICE`（可监听 80/443）

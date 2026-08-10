@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
+import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import type { Outbound } from '../api'
 import { useStatusStore } from '../stores/status'
 
@@ -15,6 +16,8 @@ const outbounds = ref<Outbound[]>([])
 const outboundTypes = ref<string[]>([])
 
 const dialogVisible = ref(false)
+const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
+const sourceJson = ref('{}')
 const isEdit = ref(false)
 const editingTag = ref('')
 const saving = ref(false)
@@ -214,6 +217,7 @@ function fillForm(obj: Outbound) {
 const openCreate = () => {
   isEdit.value = false
   editingTag.value = ''
+  sourceJson.value = '{}'
   const def = statusStore.status?.defaults?.outbound_type
   resetForm(def && outboundTypes.value.includes(def) ? def : outboundTypes.value[0] || 'vless')
   dialogVisible.value = true
@@ -226,7 +230,9 @@ const openEdit = async (row: Outbound) => {
   dialogVisible.value = true
   formRef.value?.clearValidate()
   try {
-    fillForm(await api.getOutbound(row.tag))
+    const data = await api.getOutbound(row.tag)
+    sourceJson.value = JSON.stringify(data, null, 2)
+    fillForm(data)
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
     dialogVisible.value = false
@@ -351,7 +357,7 @@ const save = async () => {
   if (!valid) return
   saving.value = true
   try {
-    const body = buildBody()
+    const body = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildBody()
     const res = isEdit.value ? await api.updateOutbound(editingTag.value, body) : await api.createOutbound(body)
     handleResult(res)
     dialogVisible.value = false
@@ -486,6 +492,8 @@ onMounted(async () => {
       width="720px"
       :close-on-click-modal="false"
     >
+      <el-tabs>
+        <el-tab-pane label="表单">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="170px">
         <el-form-item>
           <el-button size="small" @click="fillFromJson">从 JSON 填充（粘贴解析）</el-button>
@@ -638,6 +646,11 @@ onMounted(async () => {
           />
         </el-form-item>
       </el-form>
+      </el-tab-pane>
+      <el-tab-pane label="源码">
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+      </el-tab-pane>
+    </el-tabs>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
