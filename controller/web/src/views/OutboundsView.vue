@@ -99,9 +99,12 @@ const networkOptionsAll = computed(() =>
 
 const rules = computed<FormRules>(() => {
   const base: FormRules = {
-    tag: [{ required: true, message: 'tag 必填', trigger: 'blur' }],
-    server: [{ required: true, message: 'server 必填', trigger: 'blur' }],
-    server_port: [
+    tag: [{ required: true, message: 'tag 必填', trigger: 'blur' }]
+  }
+  // selector/urltest 无 server/server_port
+  if (!isSelector.value && !isUrlTest.value) {
+    base.server = [{ required: true, message: 'server 必填', trigger: 'blur' }]
+    base.server_port = [
       { required: true, message: 'server_port 必填', trigger: 'blur' },
       { type: 'number', min: 1, max: 65535, message: '端口范围 1-65535', trigger: 'blur' }
     ]
@@ -471,12 +474,14 @@ onMounted(async () => {
         <el-form-item label="tag" prop="tag">
           <el-input v-model="form.tag" placeholder="唯一标识，如 vless-out" />
         </el-form-item>
-        <el-form-item label="server" prop="server">
-          <el-input v-model="form.server" placeholder="服务器地址 / IP" />
-        </el-form-item>
-        <el-form-item label="server_port" prop="server_port">
-          <el-input-number v-model="form.server_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
-        </el-form-item>
+        <template v-if="!isSelector && !isUrlTest">
+          <el-form-item label="server" prop="server">
+            <el-input v-model="form.server" placeholder="服务器地址 / IP" />
+          </el-form-item>
+          <el-form-item label="server_port" prop="server_port">
+            <el-input-number v-model="form.server_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
+          </el-form-item>
+        </template>
 
         <!-- vless 专属字段 -->
         <template v-if="isVless">

@@ -72,7 +72,7 @@ func (h *Handler) handleCreateOutbound(w http.ResponseWriter, r *http.Request) {
 // attachToSelector 将新 outbound tag 追加到 settings 指定的 selector/urltest（去重）。
 func (h *Handler) attachToSelector(options *option.Options, tag string) bool {
 	values := h.settings.Values()
-	if !values.Defaults.AttachToSelector || values.Defaults.ProxySelector == "" {
+	if values.Defaults.AttachToSelector == nil || !*values.Defaults.AttachToSelector || values.Defaults.ProxySelector == "" {
 		return false
 	}
 	target := values.Defaults.ProxySelector

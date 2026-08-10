@@ -25,8 +25,8 @@ type Defaults struct {
 	OutboundType string `json:"outbound_type,omitempty"`
 	Listen       string `json:"listen,omitempty"`
 	ListenPort   uint16 `json:"listen_port,omitempty"`
-	// 新建 outbound 时自动并入指定 selector（默认开）
-	AttachToSelector bool   `json:"attach_to_selector,omitempty"`
+	// 新建 outbound 时自动并入指定 selector（默认开；指针区分"缺失"与"显式 false"）
+	AttachToSelector *bool  `json:"attach_to_selector,omitempty"`
 	ProxySelector    string `json:"proxy_selector,omitempty"`
 }
 
@@ -60,12 +60,11 @@ func defaultSettings() Settings {
 		Log:     &LogOptions{Level: "info"},
 		MinPort: 8000,
 		Defaults: Defaults{
-			InboundType:      "mixed",
-			OutboundType:     "vless",
-			Listen:           "127.0.0.1",
-			ListenPort:       2080,
-			AttachToSelector: true,
-			ProxySelector:    "Proxy",
+			InboundType:  "mixed",
+			OutboundType: "vless",
+			Listen:       "127.0.0.1",
+			ListenPort:   2080,
+			ProxySelector: "Proxy",
 		},
 	}
 }
@@ -94,6 +93,11 @@ func (m *Manager) Load() error {
 	}
 	if values.Log == nil {
 		values.Log = &LogOptions{Level: "info"}
+	}
+	// 旧配置迁移：attach_to_selector 字段缺失时默认开启
+	if values.Defaults.AttachToSelector == nil {
+		attached := true
+		values.Defaults.AttachToSelector = &attached
 	}
 	if values.MinPort == 0 {
 		values.MinPort = 8000

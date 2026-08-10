@@ -2,7 +2,9 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../api'
-import type { ControllerSettings } from '../api'
+import type { ControllerSettings, Outbound } from '../api'
+
+const selectorTags = ref<string[]>([])
 
 const form = ref<ControllerSettings>({
   config: './sing-box-config.json',
@@ -24,13 +26,33 @@ const saving = ref(false)
 const load = async () => {
   loading.value = true
   try {
-    form.value = await api.settings()
+    const s = await api.settings()
+    // 兼容旧配置：attach_to_selector 缺失时按默认开启
+    if (s.defaults.attach_to_selector === undefined) {
+      s.defaults.attach_to_selector = true
+    }
+    form.value = s
   } catch (e) {
     ElMessage.error((e as Error).message || '加载设置失败')
   } finally {
     loading.value = false
   }
 }
+
+// 目标组 tag 候选：现有 type=selector 的 outbound
+const loadSelectors = async () => {
+  try {
+    const obs: Outbound[] = await api.outbounds()
+    selectorTags.value = obs.filter((o) => o.type === 'selector').map((o) => String(o.tag)).filter(Boolean)
+  } catch {
+    // 忽略：候选为空时仍可手动输入
+  }
+}
+
+onMounted(() => {
+  load()
+  loadSelectors()
+})
 
 const save = async () => {
   saving.value = true
@@ -105,11 +127,20 @@ onMounted(load)
         <el-divider content-position="left">新建 outbound 自动并入组</el-divider>
         <el-form-item label="并入 Proxy(selector)">
           <el-switch v-model="form.defaults.attach_to_selector" />
-          <div class="field-hint">默认开启：新建 outbound 时自动追加到指定 selector/urltest 的成员列表。</div>
+          <div class="field-hint">默认开启：新建 outbound 时自动追加到指定 selector 的成员列表。</div>
         </el-form-item>
         <el-form-item label="目标组 tag">
-          <el-input v-model="form.defaults.proxy_selector" placeholder="Proxy" :disabled="!form.defaults.attach_to_selector" />
-          <div class="field-hint">须先存在同名 selector（或 urltest）outbound，否则不生效。</div>
+          <el-select
+            v-model="form.defaults.proxy_selector"
+            filterable
+            allow-create
+            :disabled="!form.defaults.attach_to_selector"
+            placeholder="选择或输入 selector tag"
+            style="width: 100%"
+          >
+            <el-option v-for="t in selectorTags" :key="t" :label="t" :value="t" />
+          </el-select>
+          <div class="field-hint">下拉自动列出现有 type=selector 的 outbound；须先存在同名 selector，否则不生效。</div>
         </el-form-item>
       </el-form>
     </el-card>

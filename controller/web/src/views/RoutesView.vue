@@ -274,21 +274,26 @@ onMounted(() => {
     </div>
 
     <el-table :data="rows" v-loading="loading" border stripe>
-      <el-table-column label="inbound" min-width="140">
-        <template #default="{ row }">{{ fmtList(row.inbound) }}</template>
-      </el-table-column>
-      <el-table-column label="network" width="100">
-        <template #default="{ row }">{{ fmtList(row.network) }}</template>
+      <el-table-column label="rule" min-width="220">
+        <template #default="{ row }">
+          <div class="rule-cell">
+            <span v-if="row.inbound" class="rule-item"><b>inbound</b> {{ fmtList(row.inbound) }}</span>
+            <span v-if="row.network" class="rule-item"><b>network</b> {{ fmtList(row.network) }}</span>
+            <span v-if="!row.inbound && !row.network" class="rule-item muted">全部</span>
+          </div>
+        </template>
       </el-table-column>
       <el-table-column label="action" min-width="150">
         <template #default="{ row }">{{ actionText(row) }}</template>
       </el-table-column>
-      <el-table-column label="其他匹配" min-width="160">
+      <el-table-column label="其他" min-width="160">
         <template #default="{ row }">
-          <template v-if="row.domain_suffix">{{ fmtList(row.domain_suffix) }}</template>
-          <template v-else-if="row.ip_cidr">{{ fmtList(row.ip_cidr) }}</template>
-          <template v-else-if="row.port">{{ fmtList(row.port) }}</template>
-          <template v-else>—</template>
+          <div class="rule-cell">
+            <span v-if="row.domain_suffix" class="rule-item"><b>domain_suffix</b> {{ fmtList(row.domain_suffix) }}</span>
+            <span v-if="row.ip_cidr" class="rule-item"><b>ip_cidr</b> {{ fmtList(row.ip_cidr) }}</span>
+            <span v-if="row.port" class="rule-item"><b>port</b> {{ fmtList(row.port) }}</span>
+            <span v-if="!row.domain_suffix && !row.ip_cidr && !row.port" class="rule-item muted">—</span>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="140" fixed="right">
@@ -377,5 +382,21 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+.rule-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rule-item {
+  font-size: 13px;
+}
+.rule-item b {
+  color: #909399;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.rule-item.muted {
+  color: #c0c4cc;
 }
 </style>
