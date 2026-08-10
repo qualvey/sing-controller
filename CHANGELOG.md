@@ -47,3 +47,11 @@
 - 前端移植 zashboard 的 clash API 客户端（`src/api/clash.ts`，MIT）：
   proxies/select/延迟/规则/configs/DNS 查询/fakeip flush + connections/logs/traffic WS 流
 - 修复 store.Load 真实 bug：无 route 段的配置空指针崩溃
+
+- **service API（gRPC-Web）反向代理**：`/api/grpc/*` → sing-box 顶层
+  `services[type=api]`（自动推断 listen/listen_port/secret；settings 可显式覆盖）
+  ——sing-box 1.14 原生支持 gRPC-Web + grpc-websockets 子协议（源码确认），
+  纯 HTTP 反代即可，无需协议转换；事件流式推送（连接/日志/状态/代理组/出站）
+- 前端 singbox 客户端（移植 zashboard）：@connectrpc/connect-web + protobuf 生成代码
+  （src/gen/）+ src/api/singbox.ts（订阅流 + selectOutbound/closeConnection 等操作）
+- clash/service 代理泛化为 proxyCache（前缀 + 签名重建）

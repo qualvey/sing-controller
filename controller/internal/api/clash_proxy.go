@@ -2,74 +2,56 @@ package api
 
 import (
 	"errors"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/sagernet/sing-box/option"
 )
 
-var errClashAPIUnavailable = errors.New("clash API 不可用：settings 未配置 clash_api 且 sing-box 配置未启用 experimental.clash_api")
+var (
+	errClashAPIUnavailable = errors.New("clash API 不可用：settings 未配置 clash_api 且 sing-box 配置未启用 experimental.clash_api")
+	errServiceAPIUnavailable = errors.New("service API 不可用：settings 未配置 service_api 且 sing-box 配置未启用 services[type=api]")
+)
 
-// clashProxy 把 /api/clash/* 反向代理到 sing-box 的 clash API
-// （experimental.clash_api.external_controller），自动注入 secret。
-// 前端同源访问：无跨域、secret 不落浏览器。
-type clashProxy struct {
-	mu      sync.RWMutex
+// reverseProxyEntry 一个反向代理目标（clash API / service API 共用）
+type reverseProxyEntry struct {
 	target  *url.URL
 	secret  string
 	proxy   *httputil.ReverseProxy
 	lastSig string // 目标签名（settings/配置变化时重建）
 }
 
-func (h *Handler) clashTarget() (*url.URL, string, string) {
-	// 1. controller settings 显式配置优先
-	if v := h.settings.Values(); v.ClashAPI != nil && v.ClashAPI.Address != "" {
-		addr := v.ClashAPI.Address
-		if !strings.Contains(addr, "://") {
-			addr = "http://" + addr
-		}
-		if u, err := url.Parse(addr); err == nil {
-			return u, v.ClashAPI.Secret, "settings:" + addr
-		}
-	}
-	// 2. 从 sing-box 配置 experimental.clash_api 推断
-	if ca := h.clashAPIConfig(); ca != nil && ca.ExternalController != "" {
-		addr := "http://" + ca.ExternalController
-		if u, err := url.Parse(addr); err == nil {
-			return u, ca.Secret, "config:" + addr
-		}
-	}
-	return nil, "", ""
+// proxyCache 按前缀缓存反向代理实例
+type proxyCache struct {
+	mu    sync.Mutex
+	items map[string]*reverseProxyEntry
 }
 
-// clashAPIConfig 读取当前 sing-box 配置中的 experimental.clash_api 段
-// （与 api 包其他 handler 一致：直接读 store.Options，配置更新时随 store 重建）
-func (h *Handler) clashAPIConfig() *option.ClashAPIOptions {
-	if h.store.Options.Experimental == nil {
-		return nil
-	}
-	return h.store.Options.Experimental.ClashAPI
-}
+func newProxyCache() *proxyCache { return &proxyCache{items: map[string]*reverseProxyEntry{}} }
 
-func (h *Handler) getClashProxy() *clashProxy {
-	target, secret, sig := h.clashTarget()
+// get 返回指定前缀的代理；resolve 返回 (target, secret, 签名)，nil target 表示未配置
+func (c *proxyCache) get(prefix string, resolve func() (*url.URL, string, string)) *reverseProxyEntry {
+	target, secret, sig := resolve()
 	if target == nil {
 		return nil
 	}
-	h.clashProxyMu.Lock()
-	defer h.clashProxyMu.Unlock()
-	if h.clashProxyCache != nil && h.clashProxyCache.lastSig == sig {
-		return h.clashProxyCache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.items[prefix]; ok && e.lastSig == sig {
+		return e
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	director := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		director(r)
-		// 去掉 /api/clash 前缀，转发到核心的对应路径
-		trimmed := strings.TrimPrefix(r.URL.Path, "/api/clash")
+		// 去掉前缀（如 /api/clash、/api/grpc），转发到核心对应路径
+		trimmed := strings.TrimPrefix(r.URL.Path, prefix)
 		if trimmed == "" {
 			trimmed = "/"
 		}
@@ -78,19 +60,107 @@ func (h *Handler) getClashProxy() *clashProxy {
 			r.Header.Set("Authorization", "Bearer "+secret)
 		}
 	}
-	// 后端不可达时返回明确的 502 而非空白
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusBadGateway, err)
 	}
-	h.clashProxyCache = &clashProxy{target: target, secret: secret, proxy: proxy, lastSig: sig}
-	return h.clashProxyCache
+	e := &reverseProxyEntry{target: target, secret: secret, proxy: proxy, lastSig: sig}
+	c.items[prefix] = e
+	return e
+}
+
+func normalizeAddr(addr string) string {
+	if !strings.Contains(addr, "://") {
+		return "http://" + addr
+	}
+	return addr
+}
+
+// ============ clash API（experimental.clash_api） ============
+
+func (h *Handler) clashTarget() (*url.URL, string, string) {
+	// 1. controller settings 显式配置优先
+	if v := h.settings.Values(); v.ClashAPI != nil && v.ClashAPI.Address != "" {
+		addr := normalizeAddr(v.ClashAPI.Address)
+		if u, err := url.Parse(addr); err == nil {
+			return u, v.ClashAPI.Secret, "settings:" + addr
+		}
+	}
+	// 2. 从 sing-box 配置 experimental.clash_api 推断
+	if ca := h.clashAPIConfig(); ca != nil && ca.ExternalController != "" {
+		addr := normalizeAddr(ca.ExternalController)
+		if u, err := url.Parse(addr); err == nil {
+			return u, ca.Secret, "config:" + addr
+		}
+	}
+	return nil, "", ""
+}
+
+func (h *Handler) clashAPIConfig() *option.ClashAPIOptions {
+	if h.store.Options.Experimental == nil {
+		return nil
+	}
+	return h.store.Options.Experimental.ClashAPI
 }
 
 func (h *Handler) handleClashProxy(w http.ResponseWriter, r *http.Request) {
-	p := h.getClashProxy()
-	if p == nil {
+	e := h.proxies.get("/api/clash", h.clashTarget)
+	if e == nil {
 		writeError(w, http.StatusNotFound, errClashAPIUnavailable)
 		return
 	}
-	p.proxy.ServeHTTP(w, r)
+	e.proxy.ServeHTTP(w, r)
+}
+
+// ============ service API（顶层 services[type=api]，gRPC-Web / WS） ============
+
+func (h *Handler) serviceAPITarget() (*url.URL, string, string) {
+	// 1. controller settings 显式配置优先
+	if v := h.settings.Values(); v.ServiceAPI != nil && v.ServiceAPI.Address != "" {
+		addr := normalizeAddr(v.ServiceAPI.Address)
+		if u, err := url.Parse(addr); err == nil {
+			return u, v.ServiceAPI.Secret, "settings:" + addr
+		}
+	}
+	// 2. 从 sing-box 配置顶层 services 段推断（type=api）
+	if opt := h.serviceAPIConfig(); opt != nil {
+		host := ""
+		if opt.Listen != nil {
+			host = opt.Listen.Build(netip.IPv4Unspecified()).String()
+		}
+		port := opt.ListenPort
+		if host == "" {
+			host = "127.0.0.1"
+		}
+		// "::" / "0.0.0.0" 等任意地址 → 用回环地址（controller 与 sing-box 同机）
+		switch host {
+		case "::", "0.0.0.0", "":
+			host = "127.0.0.1"
+		}
+		addr := "http://" + net.JoinHostPort(host, strconv.Itoa(int(port)))
+		if u, err := url.Parse(addr); err == nil {
+			return u, opt.Secret, "config:" + addr
+		}
+	}
+	return nil, "", ""
+}
+
+func (h *Handler) serviceAPIConfig() *option.APIServiceOptions {
+	for i := range h.store.Options.Services {
+		s := &h.store.Options.Services[i]
+		if s.Type == "api" {
+			if opt, ok := s.Options.(*option.APIServiceOptions); ok {
+				return opt
+			}
+		}
+	}
+	return nil
+}
+
+func (h *Handler) handleServiceProxy(w http.ResponseWriter, r *http.Request) {
+	e := h.proxies.get("/api/grpc", h.serviceAPITarget)
+	if e == nil {
+		writeError(w, http.StatusNotFound, errServiceAPIUnavailable)
+		return
+	}
+	e.proxy.ServeHTTP(w, r)
 }

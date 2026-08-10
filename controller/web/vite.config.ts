@@ -10,7 +10,8 @@ export default defineConfig({
     alias: {
       // 强制 @codemirror/state 单文件：rollup 可能因 ESM/CJS 双入口把它解析成
       // 两个模块（同 chunk 双实例 → Unrecognized extension value），这里统一到 ESM 入口
-      '@codemirror/state': resolve(__dirname, 'node_modules/@codemirror/state/dist/index.js')
+      '@codemirror/state': resolve(__dirname, 'node_modules/@codemirror/state/dist/index.js'),
+      '@': resolve(__dirname, 'src')
     }
   },
   server: {

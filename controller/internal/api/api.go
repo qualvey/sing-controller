@@ -45,8 +45,7 @@ type Handler struct {
 	schemaJSON []byte
 	schemaErr  error
 
-	clashProxyMu    sync.Mutex
-	clashProxyCache *clashProxy
+	proxies *proxyCache
 }
 
 // metaType 别名，简化 handler 签名书写
@@ -59,6 +58,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 		secret:   opts.Secret,
 		version:  opts.Version,
 		static:   opts.Static,
+		proxies:  newProxyCache(),
 	}
 	mux := http.NewServeMux()
 
@@ -84,6 +84,8 @@ func NewHandler(opts HandlerOptions) http.Handler {
 
 	// clash API ??（?? /api/clash/* ?? sing-box external_controller,?? secret）
 	mux.HandleFunc("/api/clash/", h.handleClashProxy)
+	// service API ??（?? /api/grpc/* ?? services[type=api],gRPC-Web / WS）
+	mux.HandleFunc("/api/grpc/", h.handleServiceProxy)
 
 	// 工具
 	mux.HandleFunc("POST /api/tools/uuid", h.handleToolUUID)

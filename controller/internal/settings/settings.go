@@ -83,14 +83,22 @@ type ClashAPIOptions struct {
 	Secret  string `json:"secret,omitempty"`
 }
 
+// ServiceAPIOptions controller ?? service API（gRPC-Web）????（可选）
+// ??:?? sing-box ? services[type=api] ??（listen/listen_port/secret）
+type ServiceAPIOptions struct {
+	Address string `json:"address,omitempty"` // ??: http://127.0.0.1:9900
+	Secret  string `json:"secret,omitempty"`
+}
+
 type Settings struct {
-	Config   string         `json:"config"`
-	Listen   string         `json:"listen,omitempty"`
-	Log      *LogOptions    `json:"log,omitempty"`
-	MinPort  uint16         `json:"min_port,omitempty"`
-	Defaults Defaults       `json:"defaults,omitempty"`
-	Reload   *ReloadOptions `json:"reload,omitempty"`
-	ClashAPI *ClashAPIOptions `json:"clash_api,omitempty"`
+	Config    string            `json:"config"`
+	Listen    string            `json:"listen,omitempty"`
+	Log       *LogOptions       `json:"log,omitempty"`
+	MinPort   uint16            `json:"min_port,omitempty"`
+	Defaults  Defaults          `json:"defaults,omitempty"`
+	Reload    *ReloadOptions    `json:"reload,omitempty"`
+	ClashAPI  *ClashAPIOptions  `json:"clash_api,omitempty"`
+	ServiceAPI *ServiceAPIOptions `json:"service_api,omitempty"`
 }
 
 type Manager struct {
