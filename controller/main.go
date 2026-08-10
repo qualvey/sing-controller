@@ -32,7 +32,8 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
 
-	if showVersion {
+	// 支持两种形式：-version flag 与 version 子命令（sing-box 风格）
+	if showVersion || (flag.NArg() > 0 && flag.Arg(0) == "version") {
 		fmt.Printf("sing-controller %s\n", version)
 		return
 	}
