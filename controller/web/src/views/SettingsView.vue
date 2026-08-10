@@ -13,7 +13,9 @@ const form = ref<ControllerSettings>({
     inbound_type: 'mixed',
     outbound_type: 'vless',
     listen: '127.0.0.1',
-    listen_port: 2080
+    listen_port: 2080,
+    attach_to_selector: true,
+    proxy_selector: 'Proxy'
   }
 })
 const loading = ref(false)
@@ -98,6 +100,16 @@ onMounted(load)
         <el-form-item label="默认 listen_port">
           <el-input-number v-model="form.defaults.listen_port" :min="1" :max="65535" />
           <div class="field-hint">新建 inbound 时预填；若该端口被占用可在表单里点"自动分配端口"。</div>
+        </el-form-item>
+
+        <el-divider content-position="left">新建 outbound 自动并入组</el-divider>
+        <el-form-item label="并入 Proxy(selector)">
+          <el-switch v-model="form.defaults.attach_to_selector" />
+          <div class="field-hint">默认开启：新建 outbound 时自动追加到指定 selector/urltest 的成员列表。</div>
+        </el-form-item>
+        <el-form-item label="目标组 tag">
+          <el-input v-model="form.defaults.proxy_selector" placeholder="Proxy" :disabled="!form.defaults.attach_to_selector" />
+          <div class="field-hint">须先存在同名 selector（或 urltest）outbound，否则不生效。</div>
         </el-form-item>
       </el-form>
     </el-card>

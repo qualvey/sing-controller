@@ -25,6 +25,9 @@ type Defaults struct {
 	OutboundType string `json:"outbound_type,omitempty"`
 	Listen       string `json:"listen,omitempty"`
 	ListenPort   uint16 `json:"listen_port,omitempty"`
+	// 新建 outbound 时自动并入指定 selector（默认开）
+	AttachToSelector bool   `json:"attach_to_selector,omitempty"`
+	ProxySelector    string `json:"proxy_selector,omitempty"`
 }
 
 // LogOptions 与 sing-box 配置的 log 段同构（level 枚举复用 sing-box 的）。
@@ -57,10 +60,12 @@ func defaultSettings() Settings {
 		Log:     &LogOptions{Level: "info"},
 		MinPort: 8000,
 		Defaults: Defaults{
-			InboundType:  "mixed",
-			OutboundType: "vless",
-			Listen:       "127.0.0.1",
-			ListenPort:   2080,
+			InboundType:      "mixed",
+			OutboundType:     "vless",
+			Listen:           "127.0.0.1",
+			ListenPort:       2080,
+			AttachToSelector: true,
+			ProxySelector:    "Proxy",
 		},
 	}
 }

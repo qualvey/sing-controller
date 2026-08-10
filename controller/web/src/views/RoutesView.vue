@@ -21,22 +21,55 @@ const isEdit = ref(false)
 const editingId = ref('')
 const ruleFormRef = ref<FormInstance>()
 
+// sing-box 1.14 RuleAction：route(默认出站)/direct/bypass/reject/hijack-dns/sniff/resolve/route-options
+const actionOptions = [
+  { value: 'route', label: '出站（route）' },
+  { value: 'direct', label: '直连（direct）' },
+  { value: 'bypass', label: '绕过（bypass）' },
+  { value: 'reject', label: '拒绝（reject）' },
+  { value: 'hijack-dns', label: 'DNS 劫持（hijack-dns）' },
+  { value: 'sniff', label: '协议嗅探（sniff）' },
+  { value: 'resolve', label: 'DNS 解析（resolve）' },
+  { value: 'route-options', label: '路由选项（route-options）' }
+] as const
+
+const snifferOptions = ['tls', 'http', 'quic', 'dns', 'stun', 'bittorrent', 'dtls', 'ssh', 'rdp', 'ntp']
+
 const ruleForm = reactive({
+  action: 'route' as string,
   inbound: [] as string[],
   network: [] as string[],
   outbound: '',
+  sniffers: [] as string[],
+  resolve_server: '',
   extraJson: ''
 })
 
-const ruleRules: FormRules = {
-  outbound: [{ required: true, message: 'outbound 必选', trigger: 'change' }]
-}
+const isRouteAction = computed(() => ruleForm.action === 'route')
+
+const ruleRules = computed<FormRules>(() => {
+  const rules: FormRules = {}
+  if (isRouteAction.value) {
+    rules.outbound = [{ required: true, message: '出站（outbound）必选', trigger: 'change' }]
+  }
+  return rules
+})
 
 const rows = computed(() => routes.value.map((r) => ({ id: r.id, ...r.rule })))
 
 function fmtList(v: unknown): string {
   if (Array.isArray(v)) return v.join(', ')
   return v == null ? '—' : String(v)
+}
+
+// 规则动作展示：route → 出站 tag；其他 → action 名
+function actionText(row: Record<string, unknown>): string {
+  const action = typeof row.action === 'string' && row.action ? row.action : 'route'
+  if (action === 'route') {
+    return typeof row.outbound === 'string' && row.outbound ? `出站 → ${row.outbound}` : '出站'
+  }
+  const label = actionOptions.find((a) => a.value === action)?.label
+  return label ? label.split('（')[0] : action
 }
 
 const loadRoutes = async () => {
@@ -94,13 +127,20 @@ const saveFinal = async () => {
   }
 }
 
-const openCreate = () => {
-  isEdit.value = false
-  editingId.value = ''
+const resetForm = () => {
+  ruleForm.action = 'route'
   ruleForm.inbound = []
   ruleForm.network = []
   ruleForm.outbound = ''
+  ruleForm.sniffers = []
+  ruleForm.resolve_server = ''
   ruleForm.extraJson = ''
+}
+
+const openCreate = () => {
+  isEdit.value = false
+  editingId.value = ''
+  resetForm()
   routeDialogVisible.value = true
   ruleFormRef.value?.clearValidate()
 }
@@ -111,10 +151,18 @@ const openEdit = (row: RouteRule) => {
   // sing-box Listable 单值序列化为字符串，需兼容回填
   ruleForm.inbound = row.inbound == null ? [] : Array.isArray(row.inbound) ? row.inbound.map(String) : [String(row.inbound)]
   ruleForm.network = row.network == null ? [] : Array.isArray(row.network) ? row.network.map(String) : [String(row.network)]
+  const action = typeof row.action === 'string' && row.action ? row.action : 'route'
+  ruleForm.action = action
   ruleForm.outbound = typeof row.outbound === 'string' ? row.outbound : ''
+  const sniffers = row.sniffer
+  ruleForm.sniffers = Array.isArray(sniffers) ? sniffers.map(String) : typeof sniffers === 'string' ? [sniffers] : []
+  ruleForm.resolve_server = typeof row.server === 'string' ? row.server : ''
   const extra: Record<string, unknown> = {}
   for (const k of Object.keys(row)) {
-    if (k !== 'id' && k !== 'inbound' && k !== 'network' && k !== 'outbound') {
+    if (
+      k !== 'id' && k !== 'inbound' && k !== 'network' && k !== 'outbound' &&
+      k !== 'action' && k !== 'sniffer' && k !== 'server'
+    ) {
       extra[k] = row[k]
     }
   }
@@ -124,9 +172,21 @@ const openEdit = (row: RouteRule) => {
 }
 
 function buildRule(): RouteRule {
-  const rule: RouteRule = { outbound: ruleForm.outbound }
+  const rule: RouteRule = {}
   if (ruleForm.inbound.length) rule.inbound = [...ruleForm.inbound]
   if (ruleForm.network.length) rule.network = [...ruleForm.network]
+  // action 模型：route(默认) → outbound；其他 → action 字段
+  if (isRouteAction.value) {
+    rule.outbound = ruleForm.outbound
+  } else {
+    rule.action = ruleForm.action
+    if (ruleForm.action === 'sniff' && ruleForm.sniffers.length) {
+      rule.sniffer = [...ruleForm.sniffers]
+    }
+    if (ruleForm.action === 'resolve' && ruleForm.resolve_server.trim()) {
+      rule.server = ruleForm.resolve_server.trim()
+    }
+  }
   if (ruleForm.extraJson.trim()) {
     let extra: Record<string, unknown>
     try {
@@ -139,9 +199,13 @@ function buildRule(): RouteRule {
     }
     Object.assign(rule, extra)
     // 表单中的选择项优先
-    rule.outbound = ruleForm.outbound
     if (ruleForm.inbound.length) rule.inbound = [...ruleForm.inbound]
     if (ruleForm.network.length) rule.network = [...ruleForm.network]
+    if (isRouteAction.value) {
+      rule.outbound = ruleForm.outbound
+    } else {
+      rule.action = ruleForm.action
+    }
   }
   return rule
 }
@@ -200,23 +264,32 @@ onMounted(() => {
       <el-button type="primary" :loading="savingFinal" :disabled="!outboundTags.length" @click="saveFinal">
         保存 final
       </el-button>
-      <span class="hint">说明：通过整体读取/回写配置（GET/PUT /api/config）修改 route.final</span>
+      <span class="hint">未匹配任何规则时的默认出站（整体读取/回写配置）</span>
     </div>
 
     <div class="toolbar">
       <el-button type="primary" @click="openCreate">新建规则</el-button>
       <el-button :loading="loading" @click="loadRoutes">刷新</el-button>
+      <span class="hint">规则模型：rule(匹配条件) → action。默认 action 为出站（route）；reject 拒绝、bypass 绕过、direct 直连</span>
     </div>
 
     <el-table :data="rows" v-loading="loading" border stripe>
-      <el-table-column label="inbound" min-width="150">
+      <el-table-column label="inbound" min-width="140">
         <template #default="{ row }">{{ fmtList(row.inbound) }}</template>
       </el-table-column>
-      <el-table-column label="network" width="120">
+      <el-table-column label="network" width="100">
         <template #default="{ row }">{{ fmtList(row.network) }}</template>
       </el-table-column>
-      <el-table-column label="outbound" min-width="150">
-        <template #default="{ row }">{{ row.outbound ?? '—' }}</template>
+      <el-table-column label="action" min-width="150">
+        <template #default="{ row }">{{ actionText(row) }}</template>
+      </el-table-column>
+      <el-table-column label="其他匹配" min-width="160">
+        <template #default="{ row }">
+          <template v-if="row.domain_suffix">{{ fmtList(row.domain_suffix) }}</template>
+          <template v-else-if="row.ip_cidr">{{ fmtList(row.ip_cidr) }}</template>
+          <template v-else-if="row.port">{{ fmtList(row.port) }}</template>
+          <template v-else>—</template>
+        </template>
       </el-table-column>
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
@@ -244,10 +317,23 @@ onMounted(() => {
             <el-option label="udp" value="udp" />
           </el-select>
         </el-form-item>
-        <el-form-item label="outbound" prop="outbound">
+        <el-form-item label="action" prop="action">
+          <el-select v-model="ruleForm.action" style="width: 100%">
+            <el-option v-for="a in actionOptions" :key="a.value" :label="a.label" :value="a.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="isRouteAction" label="outbound" prop="outbound">
           <el-select v-model="ruleForm.outbound" style="width: 100%" placeholder="选择出站">
             <el-option v-for="t in outboundTags" :key="t" :label="t" :value="t" />
           </el-select>
+        </el-form-item>
+        <el-form-item v-else-if="ruleForm.action === 'sniff'" label="sniffer">
+          <el-select v-model="ruleForm.sniffers" multiple style="width: 100%" placeholder="嗅探协议（可多选）">
+            <el-option v-for="s in snifferOptions" :key="s" :label="s" :value="s" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-else-if="ruleForm.action === 'resolve'" label="DNS server">
+          <el-input v-model="ruleForm.resolve_server" placeholder="DNS 服务器 tag（可选，留空用默认）" />
         </el-form-item>
         <el-form-item label="其他字段 (JSON)">
           <el-input
@@ -290,5 +376,6 @@ onMounted(() => {
   margin-bottom: 14px;
   display: flex;
   gap: 10px;
+  align-items: center;
 }
 </style>

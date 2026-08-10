@@ -26,7 +26,7 @@ npm install && npm run build
 
 # 2. 启动 controller（页面 + API 同端口，默认 127.0.0.1:8080）
 cd ..
-go run -tags "with_quic with_utls" . -config config.json
+go run -tags "with_quic with_utls with_gvisor with_dhcp with_wireguard with_acme with_clash_api with_tailscale with_ccm with_ocm with_cloudflared with_usbip" . -config config.json
 # 浏览器打开 http://127.0.0.1:8080 即 webui
 ```
 
@@ -37,8 +37,8 @@ cd controller/web
 npm run dev     # http://localhost:5173
 ```
 
-> **构建必须带 `-tags "with_quic with_utls"`**：vless+reality 依赖 uTLS、tuic 依赖 QUIC，
-> 否则校验管线直接报 `uTLS is not included in this build`。
+> **构建 tags 对齐生产 sing-box 二进制**（with_quic/with_utls/with_gvisor/with_dhcp/with_wireguard/with_acme/with_clash_api/with_tailscale/with_ccm/with_ocm/with_cloudflared/with_usbip），
+> 缺失时校验管线会报 `not included in this build`（如 DHCP）。naive outbound（cronet-go）需 cgo，交叉编译不支持，未启用。
 >
 > `web/dist` 未构建时 controller 自动退化为 **API-only 模式**（根路径返回提示），API 不受影响。
 
@@ -66,10 +66,12 @@ npm run dev     # http://localhost:5173
 
 ## 功能
 
-- **Outbound CRUD**：vless+reality（utls 指纹、Reality 密钥对生成）、tuic v5 专属表单；其他类型原始 JSON 兜底
+- **Outbound CRUD**：vless+reality（utls 指纹、Reality 密钥对生成）、tuic v5 专属表单；**selector/urltest 组表单**（成员多选、default/url/interval/tolerance）；其他类型原始 JSON 兜底
 - **Inbound CRUD**：mixed 专属表单（users 动态行）；预填默认 type/listen/端口，支持**自动分配最小可用端口**（min_port 起）
-- **Route CRUD**：简单规则 `{"inbound": [...], "outbound": "tag"}`；稳定 id 存旁车 meta（`config.json.meta`）；引用保护（删除被路由引用的对象会被拦截）
+- **Route CRUD（rule→action 模型）**：action 支持出站 route（默认，outbound 字段）/ direct / bypass / reject / hijack-dns / sniff / resolve / route-options；稳定 id 存旁车 meta；引用保护（删除被路由/组引用的对象会被拦截）
+- **新建 outbound 自动并入 Proxy**（settings 默认开，可配目标 selector tag）
 - **粘贴 JSON 解析**：表单粘贴 JSON → 后端解析校验 → 填充字段
+- **Config 页使用 CodeMirror 6 编辑器**：实时 JSON 校验/lint、折叠、Tab 缩进、一键格式化、暗色主题
 - **完整校验管线**：所有写操作 = 严格解码（未知字段/多态/重复 tag 检查）→ `box.New` 干跑预检 → 原子写盘（.bak 备份）；失败不落盘、内存回滚
 - **JSON Schema 自动生成**（`GET /api/schema`，与代码同步）
 
@@ -91,9 +93,9 @@ npm run dev     # http://localhost:5173
 ```bash
 # 本地交叉编译
 cd controller
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "with_quic with_utls" -o sing-controller .
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags "with_quic with_utls" -o sing-controller .
-CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -tags "with_quic with_utls" -o sing-controller .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "with_quic with_utls with_gvisor with_dhcp with_wireguard with_acme with_clash_api with_tailscale with_ccm with_ocm with_cloudflared with_usbip" -o sing-controller .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags "with_quic with_utls with_gvisor with_dhcp with_wireguard with_acme with_clash_api with_tailscale with_ccm with_ocm with_cloudflared with_usbip" -o sing-controller .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -tags "with_quic with_utls with_gvisor with_dhcp with_wireguard with_acme with_clash_api with_tailscale with_ccm with_ocm with_cloudflared with_usbip" -o sing-controller .
 
 # 发布（推送 tag 触发 .github/workflows/release.yml → GoReleaser → GitHub Release）
 git tag v0.1.5 && git push origin v0.1.5

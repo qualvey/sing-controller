@@ -5,12 +5,15 @@ export interface StatusInfo {
   config_path: string
   controller_config: string
   listen: string
+  log_level: string
   min_port: number
   defaults: {
     inbound_type: string
     outbound_type: string
     listen: string
     listen_port: number
+    attach_to_selector?: boolean
+    proxy_selector?: string
   }
   inbounds: number
   outbounds: number
@@ -29,6 +32,8 @@ export interface ControllerSettings {
     outbound_type: string
     listen: string
     listen_port: number
+    attach_to_selector?: boolean
+    proxy_selector?: string
   }
 }
 

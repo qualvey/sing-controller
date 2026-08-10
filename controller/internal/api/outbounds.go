@@ -46,13 +46,85 @@ func (h *Handler) handleCreateOutbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("outbound 必须包含 tag"))
 		return
 	}
-	h.commit(w, r, func(options *option.Options, _ *metaType) error {
+	attached := false
+	err = h.store.Update(h.ctx(r), func(options *option.Options, _ *metaType) error {
 		if h.findOutboundIndex(outbound.Tag) >= 0 {
 			return errors.New("outbound tag 已存在: " + outbound.Tag)
 		}
 		options.Outbounds = append(options.Outbounds, outbound)
+		// 自动并入 Proxy selector（settings 默认开）
+		if h.attachToSelector(options, outbound.Tag) {
+			attached = true
+		}
 		return nil
 	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	response := map[string]any{"saved": true}
+	if attached {
+		response["attached"] = true
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+// attachToSelector 将新 outbound tag 追加到 settings 指定的 selector/urltest（去重）。
+func (h *Handler) attachToSelector(options *option.Options, tag string) bool {
+	values := h.settings.Values()
+	if !values.Defaults.AttachToSelector || values.Defaults.ProxySelector == "" {
+		return false
+	}
+	target := values.Defaults.ProxySelector
+	// 排除自身（新建的 selector 不应把自己加进成员）
+	if tag == target {
+		return false
+	}
+	for i := range options.Outbounds {
+		outbound := &options.Outbounds[i]
+		if outbound.Tag != target {
+			continue
+		}
+		switch typed := outbound.Options.(type) {
+		case *option.SelectorOutboundOptions:
+			for _, existing := range typed.Outbounds {
+				if existing == tag {
+					return true
+				}
+			}
+			typed.Outbounds = append(typed.Outbounds, tag)
+			return true
+		case *option.URLTestOutboundOptions:
+			for _, existing := range typed.Outbounds {
+				if existing == tag {
+					return true
+				}
+			}
+			typed.Outbounds = append(typed.Outbounds, tag)
+			return true
+		}
+	}
+	return false
+}
+
+// groupReferencesTag 检查所有 selector/urltest 组是否引用指定 tag。
+func groupReferencesTag(options *option.Options, tag string) (string, bool) {
+	for i := range options.Outbounds {
+		outbound := &options.Outbounds[i]
+		var members []string
+		switch typed := outbound.Options.(type) {
+		case *option.SelectorOutboundOptions:
+			members = typed.Outbounds
+		case *option.URLTestOutboundOptions:
+			members = typed.Outbounds
+		}
+		for _, member := range members {
+			if member == tag {
+				return outbound.Tag, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (h *Handler) handleGetOutbound(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +188,10 @@ func (h *Handler) handleDeleteOutbound(w http.ResponseWriter, r *http.Request) {
 			if ruleReferencesOutbound(&rule, tag) {
 				return errors.New("route 规则 #" + itoa(i+1) + " 引用了该 outbound，请先修改路由")
 			}
+		}
+		// 引用检查：selector/urltest 组成员
+		if groupTag, referenced := groupReferencesTag(options, tag); referenced {
+			return errors.New("outbound 组 " + groupTag + " 引用了该 outbound，请先从组中移除")
 		}
 		options.Outbounds = append(options.Outbounds[:index], options.Outbounds[index+1:]...)
 		return nil

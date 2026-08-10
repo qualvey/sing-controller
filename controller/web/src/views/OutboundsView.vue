@@ -39,6 +39,13 @@ interface OutboundForm {
     reality: { enabled: boolean; public_key: string; short_id: string }
     alpn: string[]
   }
+  // selector / urltest 组
+  outbounds: string[]
+  default_out: string
+  url: string
+  interval: string
+  tolerance?: number
+  interrupt_exist_connections: boolean
   rawJson: string
 }
 
@@ -61,6 +68,12 @@ const form = reactive<OutboundForm>({
     reality: { enabled: false, public_key: '', short_id: '' },
     alpn: ['h3']
   },
+  outbounds: [],
+  default_out: '',
+  url: '',
+  interval: '',
+  tolerance: undefined,
+  interrupt_exist_connections: false,
   rawJson: ''
 })
 
@@ -72,6 +85,13 @@ const alpnOptions = ['h3', 'h2', 'http/1.1']
 
 const isVless = computed(() => form.type === 'vless')
 const isTuic = computed(() => form.type === 'tuic')
+const isSelector = computed(() => form.type === 'selector')
+const isUrlTest = computed(() => form.type === 'urltest')
+
+// 组（selector/urltest）候选成员：现有 outbound tags，排除自身
+const groupCandidates = computed(() =>
+  outbounds.value.map((o) => String(o.tag)).filter((t) => t && t !== form.tag)
+)
 
 const networkOptionsAll = computed(() =>
   form.network && !networkOptions.includes(form.network) ? [...networkOptions, form.network] : networkOptions
@@ -91,6 +111,9 @@ const rules = computed<FormRules>(() => {
     if (isTuic.value) {
       base.password = [{ required: true, message: 'password 必填', trigger: 'blur' }]
     }
+  }
+  if (isSelector.value || isUrlTest.value) {
+    base.outbounds = [{ required: true, type: 'array', min: 1, message: '至少选择一个成员 outbound', trigger: 'change' }]
   }
   if (form.tls.enabled) {
     base['tls.server_name'] = [{ required: true, message: '启用 TLS 时 server_name 必填', trigger: 'blur' }]
@@ -128,6 +151,12 @@ function resetForm(type: string) {
     reality: { enabled: false, public_key: '', short_id: '' },
     alpn: ['h3']
   }
+  form.outbounds = []
+  form.default_out = ''
+  form.url = ''
+  form.interval = ''
+  form.tolerance = undefined
+  form.interrupt_exist_connections = false
   form.rawJson = ''
 }
 
@@ -158,6 +187,14 @@ function fillForm(obj: Outbound) {
     alpn: Array.isArray(tls.alpn) ? tls.alpn.map(String) : ['h3']
   }
   if (form.type === 'vless' || form.type === 'tuic') {
+    form.rawJson = ''
+  } else if (form.type === 'selector' || form.type === 'urltest') {
+    form.outbounds = Array.isArray(obj.outbounds) ? obj.outbounds.map(String) : []
+    form.default_out = str(obj.default)
+    form.url = str(obj.url)
+    form.interval = str(obj.interval)
+    form.tolerance = num(obj.tolerance)
+    form.interrupt_exist_connections = !!obj.interrupt_exist_connections
     form.rawJson = ''
   } else {
     const rest: Record<string, unknown> = { ...obj }
@@ -261,6 +298,19 @@ function buildBody(): Outbound {
       server_name: form.tls.server_name.trim(),
       alpn: form.tls.alpn.length ? [...form.tls.alpn] : ['h3']
     }
+    return body
+  }
+
+  if (form.type === 'selector' || form.type === 'urltest') {
+    if (form.outbounds.length) body.outbounds = [...form.outbounds]
+    if (form.type === 'selector') {
+      if (form.default_out) body.default = form.default_out
+    } else {
+      if (form.url.trim()) body.url = form.url.trim()
+      if (form.interval.trim()) body.interval = form.interval.trim()
+      if (typeof form.tolerance === 'number') body.tolerance = form.tolerance
+    }
+    body.interrupt_exist_connections = form.interrupt_exist_connections
     return body
   }
 
@@ -517,6 +567,34 @@ onMounted(async () => {
               </el-select>
             </el-form-item>
           </template>
+        </template>
+
+        <!-- selector / urltest 组字段 -->
+        <template v-else-if="isSelector || isUrlTest">
+          <el-form-item label="成员 outbounds" prop="outbounds">
+            <el-select v-model="form.outbounds" multiple filterable style="width: 100%" placeholder="选择组成员（可多选）">
+              <el-option v-for="t in groupCandidates" :key="t" :label="t" :value="t" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="isSelector" label="default">
+            <el-select v-model="form.default_out" clearable filterable style="width: 100%" placeholder="可选，默认选中项">
+              <el-option v-for="t in form.outbounds" :key="t" :label="t" :value="t" />
+            </el-select>
+          </el-form-item>
+          <template v-if="isUrlTest">
+            <el-form-item label="url">
+              <el-input v-model="form.url" placeholder="测试地址，默认 https://www.gstatic.com/generate_204" />
+            </el-form-item>
+            <el-form-item label="interval">
+              <el-input v-model="form.interval" placeholder="测试间隔，如 3m / 300s" />
+            </el-form-item>
+            <el-form-item label="tolerance">
+              <el-input-number v-model="form.tolerance" :min="0" :max="65535" controls-position="right" style="width: 100%" />
+            </el-form-item>
+          </template>
+          <el-form-item label="interrupt_exist_connections">
+            <el-switch v-model="form.interrupt_exist_connections" />
+          </el-form-item>
         </template>
 
         <!-- 其他类型：原始 JSON 兜底 -->
