@@ -9,9 +9,9 @@ Set-Location $root
 $hostAlias = 'armbian'
 
 # 1. 构建 linux/arm64 deb（产物在 dist/）
-Write-Host '[*] 构建 arm64 deb ...'
-& "$root/build-arm64.ps1"
-if ($LASTEXITCODE -ne 0) { throw '构建失败' }
+# Write-Host '[*] 构建 arm64 deb ...'
+# & "$root/build-arm64.ps1"
+# if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 
 # 2. 取最新 deb
 $deb = Get-ChildItem dist -Filter '*linux_arm64.deb' | Sort-Object LastWriteTime -Descending | Select-Object -First 1

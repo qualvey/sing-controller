@@ -5,6 +5,16 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot  # 脚本位于项目根（build-arm64.ps1）
 Set-Location $root
 
+# 0. 重新打包前端（go:embed 嵌入的是 web/dist，不重建会打包旧前端）
+Write-Host '[*] 构建前端 (npm run build) ...'
+Push-Location "$root/controller/web"
+try {
+    npm run build
+    if ($LASTEXITCODE -ne 0) { throw '前端构建失败' }
+} finally {
+    Pop-Location
+}
+
 if (-not (Get-Command goreleaser -ErrorAction SilentlyContinue)) {
     Write-Host '[!] goreleaser 未安装，尝试 go install ...'
     go install github.com/goreleaser/goreleaser/v2@latest
