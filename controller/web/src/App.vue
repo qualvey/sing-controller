@@ -22,18 +22,21 @@ const route = useRoute()
 const statusStore = useStatusStore()
 const themeStore = useThemeStore()
 const reloading = ref(false)
-const drawerVisible = ref(false)
+// 移动端：侧边栏展开状态（折叠图标栏 ↔ 完整菜单）
+const mobileExpanded = ref(false)
 
 // 响应式：窄屏（<768px）自动折叠侧边栏为图标栏
 const isMobile = ref(window.matchMedia('(max-width: 768px)').matches)
 const mql = window.matchMedia('(max-width: 768px)')
 const onMqlChange = (e: MediaQueryListEvent) => {
   isMobile.value = e.matches
-  if (!e.matches) drawerVisible.value = false
+  if (!e.matches) mobileExpanded.value = false
 }
 mql.addEventListener('change', onMqlChange)
 
-const asideWidth = computed(() => (isMobile.value ? '64px' : '210px'))
+const asideWidth = computed(() => (isMobile.value ? (mobileExpanded.value ? '210px' : '64px') : '210px'))
+// 移动端折叠态：菜单 collapse（图标栏）；展开时恢复完整菜单
+const menuCollapse = computed(() => isMobile.value && !mobileExpanded.value)
 
 const menuItems = [
   { path: '/inbounds', label: 'Inbounds', icon: Connection },
@@ -67,18 +70,26 @@ const reloadSingBox = async () => {
   }
 }
 
-const onDrawerSelect = () => {
-  drawerVisible.value = false
+const onNavSelect = () => {
+  // 移动端：选中路由后自动折叠回图标栏
+  if (isMobile.value) mobileExpanded.value = false
 }
 </script>
 
 <template>
   <el-container class="app-root">
-    <!-- 桌面端：固定侧边栏（窄屏自动折叠为图标栏） -->
-    <el-aside :width="asideWidth" class="app-aside">
-      <div v-if="!isMobile" class="logo">sing-box <span class="logo-sub">WebUI</span></div>
+    <!-- 侧边栏：桌面固定 210px；移动端折叠为 64px 图标栏，点击汉堡按钮伸展为完整菜单 -->
+    <el-aside :width="asideWidth" class="app-aside" :class="{ 'aside-expanded': isMobile && mobileExpanded }">
+      <div v-if="!isMobile || mobileExpanded" class="logo">sing-box <span class="logo-sub">WebUI</span></div>
       <div v-else class="logo logo-mini">SB</div>
-      <el-menu :default-active="route.path" router class="app-menu" :collapse="isMobile" :collapse-transition="false">
+      <el-menu
+        :default-active="route.path"
+        router
+        class="app-menu"
+        :collapse="menuCollapse"
+        :collapse-transition="false"
+        @select="onNavSelect"
+      >
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
           <template #title>{{ item.label }}</template>
@@ -86,11 +97,14 @@ const onDrawerSelect = () => {
       </el-menu>
     </el-aside>
 
+    <!-- 移动端展开遮罩：点击收起侧边栏 -->
+    <div v-if="isMobile && mobileExpanded" class="aside-mask" @click="mobileExpanded = false" />
+
     <el-container class="app-body">
       <el-header class="app-header">
         <div class="header-left">
-          <!-- 移动端：展开抽屉菜单 -->
-          <button v-if="isMobile" class="icon-btn" @click="drawerVisible = true">
+          <!-- 移动端：展开侧边栏（自身伸展，非抽屉） -->
+          <button v-if="isMobile" class="icon-btn" @click="mobileExpanded = true">
             <el-icon :size="18"><Expand /></el-icon>
           </button>
           <span class="dot" />
@@ -121,16 +135,7 @@ const onDrawerSelect = () => {
       </el-main>
     </el-container>
 
-    <!-- 移动端：抽屉导航 -->
-    <el-drawer v-model="drawerVisible" direction="ltr" size="220px" :with-header="false" class="nav-drawer">
-      <div class="drawer-logo">sing-box <span class="logo-sub">WebUI</span></div>
-      <el-menu :default-active="route.path" router class="app-menu drawer-menu" @select="onDrawerSelect">
-        <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <template #title>{{ item.label }}</template>
-        </el-menu-item>
-      </el-menu>
-    </el-drawer>
+    <!-- 移动端：侧边栏伸展遮罩点击收起（已由 aside-mask 处理） -->
 
     <!-- 全局悬浮：重载 sing-box（左下角） -->
     <el-tooltip content="重载 sing-box 配置（SIGHUP）" placement="right">
@@ -288,32 +293,23 @@ html.dark .app-main {
   }
 }
 
-/* 抽屉导航 */
-.drawer-logo {
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  padding: 8px 4px 12px;
-  letter-spacing: 1px;
+/* 侧边栏伸展态：覆盖内容区，遮罩可点收 */
+.app-aside.aside-expanded {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 2100;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.25);
 }
-.nav-drawer :deep(.el-drawer__body) {
-  background: #001529;
-  padding: 8px;
+.aside-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 2090;
 }
-.drawer-menu {
-  --el-menu-bg-color: transparent;
-}
-.drawer-menu :deep(.el-menu-item) {
-  color: #a6b0bf;
-}
-.drawer-menu :deep(.el-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-.drawer-menu :deep(.el-menu-item.is-active) {
-  color: #fff;
-  background: #1890ff;
-}
+
+/* 抽屉导航（已移除，保留深色菜单通用样式） */
 
 /* 左下角悬浮重载按钮 */
 .reload-fab {
