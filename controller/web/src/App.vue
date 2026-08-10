@@ -1,14 +1,30 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { api } from './api'
 import { useStatusStore } from './stores/status'
 
 const route = useRoute()
 const statusStore = useStatusStore()
+const reloading = ref(false)
 
 onMounted(() => {
   statusStore.refresh()
 })
+
+// 重载 sing-box（左下角全局悬浮按钮，触发方式由 settings.reload 配置）
+const reloadSingBox = async () => {
+  reloading.value = true
+  try {
+    await api.reload()
+    ElMessage.success('已触发 sing-box 重载')
+  } catch (e) {
+    ElMessage.error((e as Error).message || '重载失败')
+  } finally {
+    reloading.value = false
+  }
+}
 </script>
 
 <template>
@@ -51,6 +67,13 @@ onMounted(() => {
         <router-view />
       </el-main>
     </el-container>
+
+    <!-- 全局悬浮：重载 sing-box（左下角） -->
+    <el-tooltip content="重载 sing-box 配置（SIGHUP）" placement="right">
+      <button class="reload-fab" :class="{ spinning: reloading }" :disabled="reloading" @click="reloadSingBox">
+        ↻
+      </button>
+    </el-tooltip>
   </el-container>
 </template>
 
