@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { Search, CopyDocument, VideoPause, VideoPlay } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { subscribeLogs } from '../api/singbox'
 import { LogLevel, type Log } from '@/gen/daemon/started_service_pb'
 
@@ -8,10 +10,12 @@ const logs = ref<{ level: LogLevel; message: string; time: string }[]>([])
 const connected = ref(false)
 const failed = ref(false)
 const closed = ref(false)
+const paused = ref(false)
 const abort = new AbortController()
 const autoScroll = ref(true)
 const listRef = ref<HTMLElement>()
 const filter = ref<LogLevel | 'all'>('all')
+const searchText = ref('')
 
 const LEVEL_META: Record<number, { label: string; cls: string }> = {
   [LogLevel.PANIC]: { label: 'PANIC', cls: 'text-red-500 font-bold' },
@@ -76,6 +80,15 @@ const onScroll = () => {
   autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40
 }
 
+const copyLog = async (msg: string) => {
+  try {
+    await navigator.clipboard.writeText(msg)
+    ElMessage.success('已复制')
+  } catch {
+    // 剪贴板不可用忽略
+  }
+}
+
 onMounted(() => {
   void run()
 })
@@ -96,9 +109,11 @@ onBeforeUnmount(() => {
         <el-radio-button value="error">ERROR</el-radio-button>
         <el-radio-button value="debug">DEBUG</el-radio-button>
       </el-radio-group>
+      <el-input v-model="searchText" size="small" placeholder="搜索日志内容" :prefix-icon="Search" clearable style="width: 220px" />
       <span class="ml-auto flex items-center gap-2 text-xs text-[var(--el-text-color-secondary)]">
         <span class="inline-block h-2 w-2 rounded-full" :class="connected ? 'bg-green-500' : (failed ? 'bg-red-500' : 'bg-yellow-500')"></span>
         {{ connected ? '实时日志' : (failed ? 'service API 不可用' : '连接中…') }}
+        <el-button size="small" :icon="paused ? VideoPlay : VideoPause" @click="paused = !paused">{{ paused ? '恢复' : '暂停' }}</el-button>
         <el-switch v-model="autoScroll" size="small" active-text="自动滚动" />
       </span>
     </div>
@@ -113,11 +128,18 @@ onBeforeUnmount(() => {
         <div
           v-for="(l, i) in filtered"
           :key="i"
-          class="flex gap-2 whitespace-pre-wrap break-all px-1 hover:bg-[var(--el-fill-color-light)]"
+          class="group/log flex gap-2 whitespace-pre-wrap break-all px-1 hover:bg-[var(--el-fill-color-light)]"
         >
           <span class="shrink-0 text-[var(--el-text-color-placeholder)]">{{ l.time }}</span>
           <span class="w-12 shrink-0 text-right" :class="levelCls(l.level)">{{ levelLabel(l.level) }}</span>
-          <span class="text-[var(--el-text-color-primary)]">{{ l.message }}</span>
+          <span class="min-w-0 flex-1 text-[var(--el-text-color-primary)]">{{ l.message }}</span>
+          <button
+            class="shrink-0 self-center rounded p-0.5 opacity-0 transition-opacity hover:bg-[var(--el-fill-color)] group-hover/log:opacity-100"
+            title="复制"
+            @click="copyLog(l.message)"
+          >
+            <el-icon :size="12" class="text-[var(--el-text-color-secondary)]"><CopyDocument /></el-icon>
+          </button>
         </div>
         <div v-if="!connected" class="py-8 text-center text-sm text-[var(--el-text-color-secondary)]">
           service API 未配置或不可用（sing-box 需启用 services[type=api]）
