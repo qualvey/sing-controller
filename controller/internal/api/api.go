@@ -7,10 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"reflect"
+	"strconv"
 	"sync"
 
 	"github.com/sagernet/sing-box/include"
@@ -210,14 +212,21 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	var privilegedPortWarning string
 	if newValues.Config == "" {
 		writeError(w, http.StatusBadRequest, errors.New("config 路径不能为空"))
 		return
 	}
 	if newValues.Listen != "" {
-		if _, _, err := net.SplitHostPort(newValues.Listen); err != nil {
+		_, portText, err := net.SplitHostPort(newValues.Listen)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, errors.New("listen 格式应为 host:port，如 127.0.0.1:8080"))
 			return
+		}
+		port, parseErr := strconv.Atoi(portText)
+		if parseErr == nil && port > 0 && port < 1024 {
+			// 特权端口：允许保存（systemd unit 已带 CAP_NET_BIND_SERVICE），但给出提示
+			privilegedPortWarning = fmt.Sprintf("端口 %d 是特权端口（<1024）。deb 部署已支持（AmbientCapabilities），本机开发直跑需 root 或加 capabilities。", port)
 		}
 	}
 	if newValues.Log != nil && newValues.Log.Level != "" {
@@ -247,12 +256,16 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			ListenPort:  newValues.Defaults.ListenPort,
 		}); err != nil {
 			writeJSON(w, http.StatusOK, map[string]any{
-				"saved":     true,
+				"saved":      true,
 				"load_error": err.Error(),
-				"message":   "controller 配置已保存，但新主配置路径加载失败",
+				"message":    "controller 配置已保存，但新主配置路径加载失败",
 			})
 			return
 		}
+	}
+	if privilegedPortWarning != "" {
+		writeJSON(w, http.StatusOK, map[string]any{"saved": true, "warning": privilegedPortWarning})
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
 }

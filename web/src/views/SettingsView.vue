@@ -33,9 +33,11 @@ const load = async () => {
 const save = async () => {
   saving.value = true
   try {
-    const res = (await api.updateSettings(form.value)) as { load_error?: string; message?: string }
+    const res = (await api.updateSettings(form.value)) as { load_error?: string; message?: string; warning?: string }
     if (res.load_error) {
       ElMessage.warning(res.message || `设置已保存，但新主配置路径加载失败：${res.load_error}`)
+    } else if (res.warning) {
+      ElMessage.warning(res.warning)
     } else {
       ElMessage.success('设置已保存')
     }
