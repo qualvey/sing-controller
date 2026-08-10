@@ -97,6 +97,14 @@ http.interceptors.response.use(
   }
 )
 
+export interface UserMeta {
+  name: string
+  uuid?: string
+  password?: string
+  flow?: string
+  bound_inbounds?: string[]
+}
+
 export const api = {
   // 状态与配置
   status: () => http.get<StatusInfo>('/status').then((r) => r.data),
@@ -158,6 +166,10 @@ export const api = {
 
   // 重载 sing-box
   reload: () => http.post('/reload').then((r) => r.data),
+  users: () => http.get<{ users: UserMeta[] }>('/users').then((r) => r.data.users),
+  createUser: (u: UserMeta) => http.post('/users', u).then((r) => r.data),
+  updateUser: (name: string, u: UserMeta) => http.put(`/users/${encodeURIComponent(name)}`, u).then((r) => r.data),
+  deleteUser: (name: string) => http.delete(`/users/${encodeURIComponent(name)}`).then((r) => r.data),
 
   // 诊断
   diagnostics: () => http.get<{ diagnostics: Array<{ level: string; message: string }> }>('/diagnostics').then((r) => r.data),

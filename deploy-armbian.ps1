@@ -31,5 +31,6 @@ ssh -t $hostAlias $remoteCmd
 if ($LASTEXITCODE -ne 0) { throw '远程部署过程出错' }
 
 ssh $hostAlias  "rm -rf /tmp/$($deb.Name)"  # 清理远程临时包
+Write-Host "已经删除远程临时包: /tmp/$($deb.Name)"
 Write-Host "[OK] 已成功部署: $($deb.Name)"
 Write-Host "     日志查看命令: ssh $hostAlias 'journalctl -u sing-controller -n 20'"

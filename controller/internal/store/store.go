@@ -24,10 +24,21 @@ import (
 // Meta 是配置的旁车元数据（sing-box 配置本身没有的字段，如规则 id）。
 // 存于 <config>.meta，与配置同目录，保证规则 CRUD 有稳定 id。
 type Meta struct {
-	RuleIDs               []string `json:"rules,omitempty"`
-	DNSRuleIDs            []string `json:"dns_rules,omitempty"`
-	RuleSetIDs            []string `json:"rule_sets,omitempty"`
-	CertificateProviderIDs []string `json:"certificate_providers,omitempty"`
+	RuleIDs               []string    `json:"rules,omitempty"`
+	DNSRuleIDs            []string    `json:"dns_rules,omitempty"`
+	RuleSetIDs            []string    `json:"rule_sets,omitempty"`
+	CertificateProviderIDs []string   `json:"certificate_providers,omitempty"`
+	Users                 []UserMeta  `json:"users,omitempty"`
+}
+
+// UserMeta 全局用户池：一个用户可绑定多个入站实例（多对多）
+// 绑定时按入站类型把用户注入对应 inbounds 的 users[]
+type UserMeta struct {
+	Name          string   `json:"name"`
+	UUID          string   `json:"uuid,omitempty"`
+	Password      string   `json:"password,omitempty"`
+	Flow          string   `json:"flow,omitempty"`
+	BoundInbounds []string `json:"bound_inbounds,omitempty"`
 }
 
 type Store struct {
@@ -163,6 +174,27 @@ func (s *Store) Save(ctx context.Context) error {
 }
 
 // RawContent 返回主配置文件的原始内容（未解析，保留注释/格式）；文件不存在返回 nil。
+// Users 返回用户池副本
+func (s *Store) Users() []UserMeta {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]UserMeta(nil), s.Meta.Users...)
+}
+
+// UpdateUsers 原子更新用户池并落盘 meta
+func (s *Store) UpdateUsers(mutate func([]UserMeta) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := mutate(s.Meta.Users); err != nil {
+		return err
+	}
+	content, err := json.Marshal(s.Meta)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.metaPath, content, 0o644)
+}
+
 func (s *Store) RawContent() []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()

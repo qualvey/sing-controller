@@ -82,7 +82,13 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("PUT /api/settings", h.handlePutSettings)
 	mux.HandleFunc("GET /api/ports/available", h.handlePortAvailable)
 
-	// clash API ??（?? /api/clash/* ?? sing-box external_controller,?? secret）
+	// 用户池（全局用户，多对多绑定入站）
+	mux.HandleFunc("GET /api/users", h.handleListUsers)
+	mux.HandleFunc("POST /api/users", h.handleCreateUser)
+	mux.HandleFunc("PUT /api/users/{name}", h.handleUpdateUser)
+	mux.HandleFunc("DELETE /api/users/{name}", h.handleDeleteUser)
+
+	// clash API ??(?? /api/clash/* ?? sing-box external_controller,?? secret)
 	mux.HandleFunc("/api/clash/", h.handleClashProxy)
 	// service API ??（?? /api/grpc/* ?? services[type=api],gRPC-Web / WS）
 	mux.HandleFunc("/api/grpc/", h.handleServiceProxy)
