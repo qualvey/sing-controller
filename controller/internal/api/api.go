@@ -1,6 +1,6 @@
 // Package api 提供 RESTful 配置管理 API。
-// 设计原则：所有写操作走 store.Update 校验管线（解码 → box.New 干跑 → 原子写），
-// 校验失败一律不落盘；reload 失败保留旧实例。
+// 设计原则：所有写操作走 store.Update 校验管线（解码 → box.New 干跑 → 原子写盘），
+// 校验失败一律不落盘、内存回滚。
 package api
 
 import (
@@ -10,58 +10,56 @@ import (
 	"io"
 	"net/http"
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/schema"
-	"github.com/sagernet/sing-box-webui/internal/runner"
-	"github.com/sagernet/sing-box-webui/internal/store"
+	"github.com/sagernet/sing-box-webui/controller/internal/settings"
+	"github.com/sagernet/sing-box-webui/controller/internal/store"
 )
 
-// metaType 别名，简化 handler 签名书写
-type metaType = store.Meta
-
 type HandlerOptions struct {
-	Store  *store.Store
-	Runner *runner.Runner
-	Secret string
-	Static http.Handler
-	NoRun  bool
+	Store    *store.Store
+	Settings *settings.Manager
+	Secret   string
 }
 
 type Handler struct {
-	store  *store.Store
-	runner *runner.Runner
-	secret string
-	static http.Handler
+	store    *store.Store
+	settings *settings.Manager
+	secret   string
 
 	schemaOnce sync.Once
 	schemaJSON []byte
 	schemaErr  error
 }
 
+// metaType 别名，简化 handler 签名书写
+type metaType = store.Meta
+
 func NewHandler(opts HandlerOptions) http.Handler {
 	h := &Handler{
-		store:  opts.Store,
-		runner: opts.Runner,
-		secret: opts.Secret,
-		static: opts.Static,
+		store:    opts.Store,
+		settings: opts.Settings,
+		secret:   opts.Secret,
 	}
 	mux := http.NewServeMux()
 
-	// 状态 / 配置 / 工具
+	// 状态 / 配置 / 设置
 	mux.HandleFunc("GET /api/status", h.handleStatus)
 	mux.HandleFunc("GET /api/config", h.handleGetConfig)
 	mux.HandleFunc("PUT /api/config", h.handlePutConfig)
 	mux.HandleFunc("GET /api/schema", h.handleSchema)
 	mux.HandleFunc("GET /api/types", h.handleTypes)
-	mux.HandleFunc("POST /api/reload", h.handleReload)
-	mux.HandleFunc("POST /api/instance/start", h.handleInstanceStart)
-	mux.HandleFunc("POST /api/instance/stop", h.handleInstanceStop)
+	mux.HandleFunc("GET /api/settings", h.handleGetSettings)
+	mux.HandleFunc("PUT /api/settings", h.handlePutSettings)
+	mux.HandleFunc("GET /api/ports/available", h.handlePortAvailable)
+
+	// 工具
 	mux.HandleFunc("POST /api/tools/uuid", h.handleToolUUID)
 	mux.HandleFunc("POST /api/tools/reality-keypair", h.handleToolRealityKeypair)
+	mux.HandleFunc("POST /api/tools/parse-json", h.handleToolParseJSON)
 
 	// outbound CRUD
 	mux.HandleFunc("GET /api/outbounds", h.handleListOutbounds)
@@ -83,15 +81,12 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("PUT /api/routes/{id}", h.handleUpdateRoute)
 	mux.HandleFunc("DELETE /api/routes/{id}", h.handleDeleteRoute)
 
-	// 静态资源（前端）
-	mux.HandleFunc("/", h.serveStatic)
-
 	return h.withMiddleware(mux)
 }
 
 func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORS（开发态前端 vite 跨端口）
+		// CORS（webui dev server 跨端口）
 		origin := r.Header.Get("Origin")
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -114,14 +109,6 @@ func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Handler) serveStatic(w http.ResponseWriter, r *http.Request) {
-	if h.static == nil {
-		http.NotFound(w, r)
-		return
-	}
-	h.static.ServeHTTP(w, r)
-}
-
 // ---------- helpers ----------
 
 func (h *Handler) ctx(r *http.Request) context.Context {
@@ -135,25 +122,13 @@ func (h *Handler) schema() ([]byte, error) {
 	return h.schemaJSON, h.schemaErr
 }
 
-// commit 执行"内存修改 → 全量校验 → 原子写盘 → 实例 reload"管线。
-func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*option.Options, *store.Meta) error) bool {
-	ctx := h.ctx(r)
-	if err := h.store.Update(ctx, mutate); err != nil {
+// commit 执行"内存修改 → 全量校验 → 原子写盘"管线。
+func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*option.Options, *store.Meta) error) {
+	if err := h.store.Update(h.ctx(r), mutate); err != nil {
 		writeError(w, http.StatusBadRequest, err)
-		return false
+		return
 	}
-	if h.runner != nil {
-		if err := h.runner.Reload(ctx, h.store.Options); err != nil {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"saved":        true,
-				"reload_error": err.Error(),
-				"message":      "配置已保存，但实例重载失败，旧实例仍在运行",
-			})
-			return false
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"saved": true, "reloaded": h.runner != nil})
-	return true
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -166,32 +141,29 @@ func writeError(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, map[string]any{"error": err.Error()})
 }
 
-func readBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+func readRawBody(r *http.Request) ([]byte, error) {
 	content, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return false
+		return nil, err
 	}
-	if err := json.Unmarshal(content, dst); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return false
+	if len(content) == 0 {
+		return nil, errors.New("empty body")
 	}
-	return true
+	return content, nil
 }
 
 // ---------- status ----------
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
-	running := false
-	if h.runner != nil {
-		running = h.runner.Running()
-	}
+	values := h.settings.Values()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"running":     running,
-		"config_path": h.store.Path(),
-		"inbounds":    len(h.store.Options.Inbounds),
-		"outbounds":   len(h.store.Options.Outbounds),
-		"rules":       len(h.store.Options.Route.Rules),
+		"config_path":        h.store.Path(),
+		"controller_config":  h.settings.Path(),
+		"min_port":           values.MinPort,
+		"defaults":           values.Defaults,
+		"inbounds":           len(h.store.Options.Inbounds),
+		"outbounds":          len(h.store.Options.Outbounds),
+		"rules":              len(h.store.Options.Route.Rules),
 	})
 }
 
@@ -217,6 +189,58 @@ func (h *Handler) handleSchema(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(content)
 }
 
+// ---------- settings ----------
+
+func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.settings.Values())
+}
+
+func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
+	body, err := readRawBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var newValues settings.Settings
+	if err := json.Unmarshal(body, &newValues); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if newValues.Config == "" {
+		writeError(w, http.StatusBadRequest, errors.New("config 路径不能为空"))
+		return
+	}
+	if newValues.MinPort < 1024 || newValues.MinPort > 65535 {
+		writeError(w, http.StatusBadRequest, errors.New("min_port 需在 1024-65535 之间"))
+		return
+	}
+	ctx := h.ctx(r)
+	if err := h.settings.Update(func(s *settings.Settings) error {
+		*s = newValues
+		return nil
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	// config 路径变更 → 切换主配置存储
+	if h.store.Path() != newValues.Config {
+		h.store.SetPath(newValues.Config)
+		if err := h.store.Load(ctx, store.DefaultConfig{
+			InboundType: newValues.Defaults.InboundType,
+			Listen:      newValues.Defaults.Listen,
+			ListenPort:  newValues.Defaults.ListenPort,
+		}); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"saved":     true,
+				"load_error": err.Error(),
+				"message":   "controller 配置已保存，但新主配置路径加载失败",
+			})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+}
+
 // ---------- config ----------
 
 func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +255,7 @@ func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	body, err := readRawBody(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -241,7 +265,7 @@ func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	ok := h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		optionsValue, err := store.Parse(h.ctx(r), body)
 		if err != nil {
 			return err
@@ -249,54 +273,8 @@ func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		*options = optionsValue
 		meta.RuleIDs = make([]string, len(optionsValue.Route.Rules))
 		for i := range meta.RuleIDs {
-			meta.RuleIDs[i] = newRuleID(meta, i)
+			meta.RuleIDs[i] = store.NewUUID()
 		}
 		return nil
 	})
-	_ = ok
 }
-
-// ---------- reload / instance ----------
-
-func (h *Handler) handleReload(w http.ResponseWriter, r *http.Request) {
-	ctx := h.ctx(r)
-	if err := h.store.Load(ctx); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	if h.runner == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"reloaded": false, "message": "no-run 模式，无实例"})
-		return
-	}
-	if err := h.runner.Reload(ctx, h.store.Options); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"reloaded": true})
-}
-
-func (h *Handler) handleInstanceStart(w http.ResponseWriter, r *http.Request) {
-	if h.runner == nil {
-		writeError(w, http.StatusBadRequest, errors.New("no-run 模式，无实例"))
-		return
-	}
-	if err := h.runner.Start(h.ctx(r), h.store.Options); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"running": true})
-}
-
-func (h *Handler) handleInstanceStop(w http.ResponseWriter, r *http.Request) {
-	if h.runner == nil {
-		writeError(w, http.StatusBadRequest, errors.New("no-run 模式，无实例"))
-		return
-	}
-	if err := h.runner.Stop(); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"running": false})
-}
-
-var _ = strings.TrimSpace

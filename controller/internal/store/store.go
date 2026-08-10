@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/sagernet/sing-box"
@@ -61,11 +62,11 @@ func Validate(ctx context.Context, content []byte) error {
 	return nil
 }
 
-func defaultConfig() option.Options {
+func defaultConfig(inboundType string, listen string, listenPort uint16) option.Options {
 	content := []byte(`{
   "log": { "level": "info", "timestamp": true },
   "inbounds": [
-    { "type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 2080 }
+    { "type": "` + inboundType + `", "tag": "in-main", "listen": "` + listen + `", "listen_port": ` + itoa(listenPort) + ` }
   ],
   "outbounds": [
     { "type": "direct", "tag": "direct" },
@@ -80,13 +81,15 @@ func defaultConfig() option.Options {
 	return options
 }
 
-// Load 读取配置文件；不存在时生成默认骨架。
-func (s *Store) Load(ctx context.Context) error {
+func itoa(value uint16) string { return strconv.FormatUint(uint64(value), 10) }
+
+// Load 读取主配置文件；不存在时按默认值生成骨架（由调用方传入 settings 默认值）。
+func (s *Store) Load(ctx context.Context, defaults DefaultConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	content, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		s.Options = defaultConfig()
+		s.Options = defaultConfig(defaults.InboundType, defaults.Listen, defaults.ListenPort)
 		if err := s.saveLocked(ctx); err != nil {
 			return err
 		}
@@ -102,6 +105,21 @@ func (s *Store) Load(ctx context.Context) error {
 	s.Options = options
 	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules))
 	return nil
+}
+
+// DefaultConfig 新建配置骨架时使用的默认值。
+type DefaultConfig struct {
+	InboundType string
+	Listen      string
+	ListenPort  uint16
+}
+
+// SetPath 切换主配置文件路径（settings.config 变更时使用）。
+func (s *Store) SetPath(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.path = path
+	s.metaPath = path + ".meta"
 }
 
 // Content 返回当前配置的格式化 JSON。

@@ -16,6 +16,8 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editingTag = ref('')
 const saving = ref(false)
+const suppressTypeWatch = ref(false)
+const allocating = ref(false)
 const formRef = ref<FormInstance>()
 
 interface InboundForm {
@@ -96,7 +98,11 @@ function fillForm(obj: Inbound) {
 const openCreate = () => {
   isEdit.value = false
   editingTag.value = ''
-  resetForm(inboundTypes.value[0] || 'mixed')
+  const def = statusStore.status?.defaults
+  const defType = def?.inbound_type
+  resetForm(defType && inboundTypes.value.includes(defType) ? defType : inboundTypes.value[0] || 'mixed')
+  if (def?.listen) form.listen = def.listen
+  if (typeof def?.listen_port === 'number') form.listen_port = def.listen_port
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }
@@ -114,13 +120,56 @@ const openEdit = async (row: Inbound) => {
   }
 }
 
-// 新建时切换类型 → 重置表单
+// 新建时切换类型 → 重置表单（从 JSON 填充时抑制）
 watch(
   () => form.type,
   (t) => {
-    if (dialogVisible.value && !isEdit.value) resetForm(t)
+    if (!suppressTypeWatch.value && dialogVisible.value && !isEdit.value) resetForm(t)
   }
 )
+
+// 粘贴 JSON → 后端解析 → 填充表单字段
+const fillFromJson = async () => {
+  let text: string
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '粘贴 inbound JSON，解析成功后填充表单字段（type 变化会重置表单，请最后检查）',
+      '从 JSON 填充',
+      {
+        confirmButtonText: '解析并填充',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '{"type":"mixed","tag":"mixed-in","listen":"127.0.0.1","listen_port":2080}'
+      }
+    )
+    text = value
+  } catch {
+    return
+  }
+  try {
+    const res = await api.parseJson(text)
+    suppressTypeWatch.value = true
+    fillForm(res.data as Inbound)
+    suppressTypeWatch.value = false
+    ElMessage.success('已从 JSON 填充，请检查表单')
+  } catch (e) {
+    ElMessage.error((e as Error).message || '解析失败')
+  }
+}
+
+// 自动分配最小可用端口（起点=controller 配置的 min_port）
+const allocatePort = async () => {
+  allocating.value = true
+  try {
+    const res = await api.availablePort()
+    form.listen_port = res.port
+    ElMessage.success(`已分配可用端口 ${res.port}`)
+  } catch (e) {
+    ElMessage.error((e as Error).message || '端口分配失败')
+  } finally {
+    allocating.value = false
+  }
+}
 
 function buildBody(): Inbound {
   const body: Inbound = { type: form.type, tag: form.tag.trim() }
@@ -250,6 +299,10 @@ onMounted(async () => {
       :close-on-click-modal="false"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="130px">
+        <el-form-item>
+          <el-button size="small" @click="fillFromJson">从 JSON 填充（粘贴解析）</el-button>
+          <span class="fill-hint">粘贴完整 inbound JSON，自动解析并填充下方字段</span>
+        </el-form-item>
         <el-form-item label="类型" prop="type">
           <el-select v-model="form.type" :disabled="isEdit" style="width: 100%">
             <el-option v-for="t in inboundTypes" :key="t" :label="t" :value="t" />
@@ -265,7 +318,10 @@ onMounted(async () => {
             <el-input v-model="form.listen" placeholder="监听地址，如 127.0.0.1" />
           </el-form-item>
           <el-form-item label="listen_port" prop="listen_port">
-            <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
+            <div class="row">
+              <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
+              <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
+            </div>
           </el-form-item>
           <el-divider content-position="left">用户（可选）</el-divider>
           <el-form-item v-for="(u, i) in form.users" :key="i" :label="`用户 ${i + 1}`">
@@ -286,7 +342,10 @@ onMounted(async () => {
             <el-input v-model="form.listen" placeholder="监听地址（可选）" />
           </el-form-item>
           <el-form-item label="listen_port" prop="listen_port">
-            <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
+            <div class="row">
+              <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
+              <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
+            </div>
           </el-form-item>
           <el-form-item label="其他字段 (JSON)">
             <el-input
@@ -320,5 +379,18 @@ onMounted(async () => {
 }
 .user-row .el-input {
   flex: 1;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.row .el-input-number {
+  flex: 1;
+}
+.fill-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 10px;
 }
 </style>

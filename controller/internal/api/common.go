@@ -1,27 +1,12 @@
 package api
 
 import (
-	"errors"
-	"io"
-	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
-
-// readRawBody 读取请求体原始 JSON。
-func readRawBody(r *http.Request) ([]byte, error) {
-	content, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
-	if err != nil {
-		return nil, err
-	}
-	if len(content) == 0 {
-		return nil, errors.New("empty body")
-	}
-	return content, nil
-}
 
 func itoa(value int) string { return strconv.Itoa(value) }
 

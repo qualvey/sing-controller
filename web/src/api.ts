@@ -2,11 +2,29 @@ import axios from 'axios'
 import type { AxiosError } from 'axios'
 
 export interface StatusInfo {
-  running: boolean
   config_path: string
+  controller_config: string
+  min_port: number
+  defaults: {
+    inbound_type: string
+    outbound_type: string
+    listen: string
+    listen_port: number
+  }
   inbounds: number
   outbounds: number
   rules: number
+}
+
+export interface ControllerSettings {
+  config: string
+  min_port: number
+  defaults: {
+    inbound_type: string
+    outbound_type: string
+    listen: string
+    listen_port: number
+  }
 }
 
 export interface Outbound {
@@ -64,10 +82,23 @@ export const api = {
   status: () => http.get<StatusInfo>('/status').then((r) => r.data),
   config: () => http.get<unknown>('/config').then((r) => r.data),
   saveConfig: (config: unknown) => http.put('/config', config).then((r) => r.data),
-  reload: () => http.post('/reload').then((r) => r.data),
-  instanceStart: () => http.post('/instance/start').then((r) => r.data),
-  instanceStop: () => http.post('/instance/stop').then((r) => r.data),
   types: () => http.get<TypesInfo>('/types').then((r) => r.data),
+
+  // controller 设置
+  settings: () => http.get<ControllerSettings>('/settings').then((r) => r.data),
+  updateSettings: (s: ControllerSettings) => http.put('/settings', s).then((r) => r.data),
+  availablePort: (start?: number) =>
+    http
+      .get<{ port: number; start: number }>('/ports/available', {
+        params: start != null ? { start } : {}
+      })
+      .then((r) => r.data),
+
+  // 工具
+  genUuid: () => http.post<{ uuid: string }>('/tools/uuid').then((r) => r.data.uuid),
+  genRealityKeypair: () =>
+    http.post<{ private_key: string; public_key: string }>('/tools/reality-keypair').then((r) => r.data),
+  parseJson: (json: string) => http.post<{ ok: boolean; data: unknown }>('/tools/parse-json', { json }).then((r) => r.data),
 
   // Outbound CRUD
   outbounds: () => http.get<{ outbounds: Outbound[] }>('/outbounds').then((r) => r.data.outbounds),
@@ -87,10 +118,5 @@ export const api = {
   routes: () => http.get<RouteInfo>('/routes').then((r) => r.data),
   createRoute: (rule: RouteRule) => http.post('/routes', rule).then((r) => r.data),
   updateRoute: (id: string, rule: RouteRule) => http.put(`/routes/${encodeURIComponent(id)}`, rule).then((r) => r.data),
-  deleteRoute: (id: string) => http.delete(`/routes/${encodeURIComponent(id)}`).then((r) => r.data),
-
-  // 工具
-  genUuid: () => http.post<{ uuid: string }>('/tools/uuid').then((r) => r.data.uuid),
-  genRealityKeypair: () =>
-    http.post<{ private_key: string; public_key: string }>('/tools/reality-keypair').then((r) => r.data)
+  deleteRoute: (id: string) => http.delete(`/routes/${encodeURIComponent(id)}`).then((r) => r.data)
 }

@@ -1,8 +1,11 @@
 sing-box-webui.exe
+controller/sing-box-controller.exe
 config.json
 config.json.meta
+config.json.bak
 web/node_modules
 web/dist
 testdata/
 *.log
-config.json.bak
+sing-box-config.json
+controller/sing-box-config.json

@@ -1,4 +1,4 @@
-module github.com/sagernet/sing-box-webui
+module github.com/sagernet/sing-box-webui/controller
 
 go 1.24.7
 

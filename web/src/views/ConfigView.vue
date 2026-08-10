@@ -9,7 +9,6 @@ const statusStore = useStatusStore()
 const cfgText = ref('')
 const loading = ref(false)
 const saving = ref(false)
-const opLoading = ref('')
 
 const loadConfig = async () => {
   loading.value = true
@@ -19,15 +18,6 @@ const loadConfig = async () => {
     ElMessage.error((e as Error).message || '加载配置失败')
   } finally {
     loading.value = false
-  }
-}
-
-const handleResult = (res: unknown) => {
-  const r = (res ?? {}) as { reload_error?: string; message?: string }
-  if (r.reload_error) {
-    ElMessage.warning(r.message || `操作已提交，但实例重载失败：${r.reload_error}`)
-  } else {
-    ElMessage.success('操作成功')
   }
 }
 
@@ -45,27 +35,18 @@ const save = async () => {
   }
   saving.value = true
   try {
-    handleResult(await api.saveConfig(parsed))
+    const res = (await api.saveConfig(parsed)) as { load_error?: string; message?: string }
+    if (res.load_error) {
+      ElMessage.warning(res.message || `配置已保存，但加载新配置失败：${res.load_error}`)
+    } else {
+      ElMessage.success('配置已保存（已通过 sing-box 校验）')
+    }
     await loadConfig()
     await statusStore.refresh()
   } catch (e) {
     ElMessage.error((e as Error).message || '保存失败')
   } finally {
     saving.value = false
-  }
-}
-
-const runOp = async (op: 'start' | 'stop' | 'reload') => {
-  opLoading.value = op
-  try {
-    const res =
-      op === 'start' ? await api.instanceStart() : op === 'stop' ? await api.instanceStop() : await api.reload()
-    handleResult(res)
-    await statusStore.refresh()
-  } catch (e) {
-    ElMessage.error((e as Error).message || '操作失败')
-  } finally {
-    opLoading.value = ''
   }
 }
 
@@ -78,16 +59,10 @@ onMounted(() => {
 <template>
   <div class="page">
     <div class="toolbar">
-      <el-button type="success" :loading="opLoading === 'start'" :disabled="!!statusStore.status?.running" @click="runOp('start')">
-        启动实例
-      </el-button>
-      <el-button type="danger" :loading="opLoading === 'stop'" :disabled="!statusStore.status?.running" @click="runOp('stop')">
-        停止实例
-      </el-button>
-      <el-button :loading="opLoading === 'reload'" @click="runOp('reload')">重载配置</el-button>
       <el-button :loading="loading" @click="loadConfig">刷新</el-button>
+      <span class="hint">直接编辑 sing-box 主配置 JSON，保存时后端会做完整校验（未知字段/非法类型/实例化预检）</span>
       <span class="spacer" />
-      <el-button type="primary" :loading="saving" @click="save">保存配置（PUT /api/config）</el-button>
+      <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
     </div>
     <el-input
       v-model="cfgText"
@@ -106,6 +81,10 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
+}
+.hint {
+  font-size: 12px;
+  color: #909399;
 }
 .spacer {
   flex: 1;

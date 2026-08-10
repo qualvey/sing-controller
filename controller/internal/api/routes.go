@@ -1,18 +1,18 @@
-package api
+﻿package api
 
 import (
 	"errors"
 	"net/http"
 
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box-webui/internal/store"
+	"github.com/sagernet/sing-box-webui/controller/internal/store"
 	"github.com/sagernet/sing/common/json"
 )
 
-// 路由规则本身没有 tag/id 字段（sing-box 严格解码不允许加自定义字段），
-// 因此用旁车 meta（config.json.meta）维护 id ↔ 数组下标 的映射。
+// è·¯ç”±è§„åˆ™æœ¬èº«æ²¡æœ‰ tag/id å­—æ®µï¼ˆsing-box ä¸¥æ ¼è§£ç ä¸å…è®¸åŠ è‡ªå®šä¹‰å­—æ®µï¼‰ï¼Œ
+// å› æ­¤ç”¨æ—è½¦ metaï¼ˆconfig.json.metaï¼‰ç»´æŠ¤ id â†” æ•°ç»„ä¸‹æ ‡ çš„æ˜ å°„ã€‚
 
-// newRuleID 返回下标 i 对应的稳定 id；缺失时生成新 uuid 并写入 meta。
+// newRuleID è¿”å›žä¸‹æ ‡ i å¯¹åº”çš„ç¨³å®š idï¼›ç¼ºå¤±æ—¶ç”Ÿæˆæ–° uuid å¹¶å†™å…¥ metaã€‚
 func newRuleID(meta *store.Meta, index int) string {
 	for len(meta.RuleIDs) <= index {
 		meta.RuleIDs = append(meta.RuleIDs, "")
@@ -33,7 +33,7 @@ func (h *Handler) findRuleIndexByID(id string) int {
 	return -1
 }
 
-// ruleResponse 组装 {id, rule} 返回结构（未使用，保留占位）。
+// ruleResponse ç»„è£… {id, rule} è¿”å›žç»“æž„ï¼ˆæœªä½¿ç”¨ï¼Œä¿ç•™å ä½ï¼‰ã€‚
 
 func (h *Handler) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
@@ -86,7 +86,7 @@ func (h *Handler) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findRuleIndexByID(id)
 		if index < 0 {
-			return errors.New("route 规则不存在: " + id)
+			return errors.New("route è§„åˆ™ä¸å­˜åœ¨: " + id)
 		}
 		options.Route.Rules[index] = rule
 		return nil
@@ -98,7 +98,7 @@ func (h *Handler) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findRuleIndexByID(id)
 		if index < 0 {
-			return errors.New("route 规则不存在: " + id)
+			return errors.New("route è§„åˆ™ä¸å­˜åœ¨: " + id)
 		}
 		options.Route.Rules = append(options.Route.Rules[:index], options.Route.Rules[index+1:]...)
 		meta.RuleIDs = append(meta.RuleIDs[:index], meta.RuleIDs[index+1:]...)

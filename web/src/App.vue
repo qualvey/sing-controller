@@ -20,23 +20,26 @@ onMounted(() => {
         <el-menu-item index="/outbounds">Outbounds</el-menu-item>
         <el-menu-item index="/routes">Routes</el-menu-item>
         <el-menu-item index="/config">Config</el-menu-item>
+        <el-menu-item index="/settings">Settings</el-menu-item>
       </el-menu>
     </el-aside>
 
     <el-container class="app-body">
       <el-header class="app-header">
         <div class="header-left">
-          <span class="dot" :class="{ running: !!statusStore.status?.running }" />
-          <span>{{ statusStore.status?.running ? '运行中' : '已停止' }}</span>
+          <span class="dot" />
+          <span>sing-box-controller</span>
           <el-divider direction="vertical" />
           <span>Inbounds: {{ statusStore.status?.inbounds ?? '—' }}</span>
           <el-divider direction="vertical" />
           <span>Outbounds: {{ statusStore.status?.outbounds ?? '—' }}</span>
           <el-divider direction="vertical" />
           <span>Rules: {{ statusStore.status?.rules ?? '—' }}</span>
+          <el-divider direction="vertical" />
+          <span>min_port: {{ statusStore.status?.min_port ?? '—' }}</span>
         </div>
         <div v-if="statusStore.status?.config_path" class="header-right" :title="statusStore.status.config_path">
-          {{ statusStore.status.config_path }}
+          主配置: {{ statusStore.status.config_path }}
         </div>
       </el-header>
 
@@ -111,12 +114,8 @@ onMounted(() => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #909399;
+  background: #1890ff;
   display: inline-block;
-}
-.dot.running {
-  background: #67c23a;
-  box-shadow: 0 0 6px rgba(103, 194, 58, 0.8);
 }
 .app-main {
   background: #f5f7fa;

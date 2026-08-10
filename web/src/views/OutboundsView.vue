@@ -17,6 +17,7 @@ const isEdit = ref(false)
 const editingTag = ref('')
 const saving = ref(false)
 const generating = ref(false)
+const suppressTypeWatch = ref(false)
 const formRef = ref<FormInstance>()
 
 interface OutboundForm {
@@ -171,7 +172,8 @@ function fillForm(obj: Outbound) {
 const openCreate = () => {
   isEdit.value = false
   editingTag.value = ''
-  resetForm(outboundTypes.value[0] || 'vless')
+  const def = statusStore.status?.defaults?.outbound_type
+  resetForm(def && outboundTypes.value.includes(def) ? def : outboundTypes.value[0] || 'vless')
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }
@@ -189,13 +191,42 @@ const openEdit = async (row: Outbound) => {
   }
 }
 
-// 新建时切换类型 → 重置表单
+// 新建时切换类型 → 重置表单（从 JSON 填充时抑制）
 watch(
   () => form.type,
   (t) => {
-    if (dialogVisible.value && !isEdit.value) resetForm(t)
+    if (!suppressTypeWatch.value && dialogVisible.value && !isEdit.value) resetForm(t)
   }
 )
+
+// 粘贴 JSON → 后端解析 → 填充表单字段
+const fillFromJson = async () => {
+  let text: string
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '粘贴 outbound JSON，解析成功后填充表单字段（type 变化会重置表单，请最后检查）',
+      '从 JSON 填充',
+      {
+        confirmButtonText: '解析并填充',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '{"type":"vless","tag":"...","server":"...","server_port":443,"uuid":"...","tls":{...}}'
+      }
+    )
+    text = value
+  } catch {
+    return
+  }
+  try {
+    const res = await api.parseJson(text)
+    suppressTypeWatch.value = true
+    fillForm(res.data as Outbound)
+    suppressTypeWatch.value = false
+    ElMessage.success('已从 JSON 填充，请检查表单')
+  } catch (e) {
+    ElMessage.error((e as Error).message || '解析失败')
+  }
+}
 
 function buildBody(): Outbound {
   const body: Outbound = { type: form.type, tag: form.tag.trim() }
@@ -378,6 +409,10 @@ onMounted(async () => {
       :close-on-click-modal="false"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="170px">
+        <el-form-item>
+          <el-button size="small" @click="fillFromJson">从 JSON 填充（粘贴解析）</el-button>
+          <span class="fill-hint">粘贴完整 outbound JSON，自动解析并填充下方字段</span>
+        </el-form-item>
         <el-form-item label="类型" prop="type">
           <el-select v-model="form.type" :disabled="isEdit" style="width: 100%">
             <el-option v-for="t in outboundTypes" :key="t" :label="t" :value="t" />
@@ -516,5 +551,10 @@ onMounted(async () => {
 }
 .row .el-input {
   flex: 1;
+}
+.fill-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 10px;
 }
 </style>
