@@ -166,7 +166,7 @@ export const api = {
 
   // 重载 sing-box
   reload: () => http.post('/reload').then((r) => r.data),
-  users: () => http.get<{ users: UserMeta[] }>('/users').then((r) => r.data.users),
+  users: () => http.get<{ users: UserMeta[] }>('/users').then((r) => r.data.users || []),
   createUser: (u: UserMeta) => http.post('/users', u).then((r) => r.data),
   updateUser: (name: string, u: UserMeta) => http.put(`/users/${encodeURIComponent(name)}`, u).then((r) => r.data),
   deleteUser: (name: string) => http.delete(`/users/${encodeURIComponent(name)}`).then((r) => r.data),

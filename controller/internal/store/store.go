@@ -174,10 +174,13 @@ func (s *Store) Save(ctx context.Context) error {
 }
 
 // RawContent 返回主配置文件的原始内容（未解析，保留注释/格式）；文件不存在返回 nil。
-// Users 返回用户池副本
+// Users 返回用户池副本（nil → 空切片，保证 JSON 输出 []）
 func (s *Store) Users() []UserMeta {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.Meta.Users) == 0 {
+		return []UserMeta{}
+	}
 	return append([]UserMeta(nil), s.Meta.Users...)
 }
 
