@@ -1,8 +1,19 @@
-# 本地开发用 go.work 覆盖 sing-box 源码（本机路径）。
-# CI 在 workflow 中 checkout qualvey/sing-box 后动态生成 go.work（见 .github/workflows/release.yml）。
-go 1.25.5
-
-use (
-	./controller
-	<本地 sing-box checkout 路径，例如 C:/Users/xxx/Documents/sing-box>
-)
+# 注意：本项目不再使用 go.work。
+#
+# sing-box fork 源码的复用统一走 controller/go.mod 的 replace 指令：
+#
+#   replace github.com/sagernet/sing-box => ../../sing-box
+#
+# 相对路径 ../../sing-box 解析为 <repo 上级目录>/sing-box（本地）与
+# <workspace>/../sing-box（CI，见 .github/workflows/release.yml），布局一致。
+#
+# 为什么不用 go.work：go.work 的 use 不屏蔽 require 版本的依赖图，MVS 会把
+# sing-quic/quic-go 等依赖抬升到与 fork 源码不兼容的版本（DialEarly 参数不匹配），
+# 而 replace 会完整屏蔽 require 版本的依赖图，行为正确。
+#
+# 如确需多模块工作区，可参考以下结构（go.work 不入库）：
+#   go 1.25.5
+#   use (
+#       ./controller
+#       <本地 sing-box checkout 路径>
+#   )
