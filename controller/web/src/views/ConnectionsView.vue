@@ -86,13 +86,20 @@ const handleBatch = (ev: ConnectionEvents) => {
 }
 
 const run = async () => {
-  try {
-    for await (const ev of subscribeConnections(abort.signal)) {
-      handleBatch(ev)
+  let delay = 1000
+  while (!closed.value) {
+    try {
+      for await (const ev of subscribeConnections(abort.signal)) {
+        handleBatch(ev)
+        delay = 1000
+      }
+    } catch {
+      connected.value = false
+      failed.value = true
     }
-  } catch {
-    connected.value = false
-    failed.value = true
+    if (closed.value) break
+    await new Promise((r) => setTimeout(r, delay))
+    delay = Math.min(delay * 2, 30000)
   }
 }
 

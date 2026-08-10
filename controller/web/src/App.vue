@@ -150,7 +150,7 @@ const onNavSelect = () => {
     <el-aside :width="asideWidth" class="app-aside" :class="{ 'aside-expanded': isMobile && mobileExpanded }">
       <div v-if="!isMobile || mobileExpanded" class="logo">sing-box <span class="logo-sub">WebUI</span></div>
       <div v-else class="logo logo-mini">SB</div>
-      <div ref="navRef" class="relative min-h-0 flex-1">
+      <div ref="navRef" class="relative min-h-0 flex-1 overflow-y-auto">
         <!-- 激活指示条（zashboard 风格滑动动效） -->
         <div
           aria-hidden="true"

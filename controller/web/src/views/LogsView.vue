@@ -53,13 +53,20 @@ const handleLogs = (log: Log) => {
 }
 
 const run = async () => {
-  try {
-    for await (const log of subscribeLogs(abort.signal)) {
-      handleLogs(log)
+  let delay = 1000
+  while (!closed.value) {
+    try {
+      for await (const log of subscribeLogs(abort.signal)) {
+        handleLogs(log)
+        delay = 1000
+      }
+    } catch {
+      connected.value = false
+      failed.value = true
     }
-  } catch {
-    connected.value = false
-    failed.value = true
+    if (closed.value) break
+    await new Promise((r) => setTimeout(r, delay))
+    delay = Math.min(delay * 2, 30000)
   }
 }
 
