@@ -1,153 +1,92 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Search, CopyDocument, VideoPause, VideoPlay } from '@element-plus/icons-vue'
+// Logs 页：虚拟滚动 + 搜索高亮 + ANSI 渲染（组件搬运自 zashboard）
+import { computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { subscribeLogs } from '../api/singbox'
-import { LogLevel, type Log } from '@/gen/daemon/started_service_pb'
+import { Search, VideoPause, VideoPlay, Delete, Download } from '@element-plus/icons-vue'
+import VirtualScroller from '@/components/common/VirtualScroller.vue'
+import LogsCard from '@/components/logs/LogsCard.vue'
+import { useLogsStore } from '@/stores/logs'
+import { LogLevel } from '@/gen/daemon/started_service_pb'
+import { onMounted, onBeforeUnmount } from 'vue'
 
-const MAX_LOGS = 500
-const logs = ref<{ level: LogLevel; message: string; time: string }[]>([])
-const connected = ref(false)
-const failed = ref(false)
-const closed = ref(false)
-const paused = ref(false)
-const abort = new AbortController()
-const autoScroll = ref(true)
-const listRef = ref<HTMLElement>()
-const filter = ref<LogLevel | 'all'>('all')
-const searchText = ref('')
+const logsStore = useLogsStore()
 
-const LEVEL_META: Record<number, { label: string; cls: string }> = {
-  [LogLevel.PANIC]: { label: 'PANIC', cls: 'text-red-500 font-bold' },
-  [LogLevel.FATAL]: { label: 'FATAL', cls: 'text-red-500 font-bold' },
-  [LogLevel.ERROR]: { label: 'ERROR', cls: 'text-red-500' },
-  [LogLevel.WARN]: { label: 'WARN', cls: 'text-yellow-500' },
-  [LogLevel.INFO]: { label: 'INFO', cls: 'text-blue-500' },
-  [LogLevel.DEBUG]: { label: 'DEBUG', cls: 'text-gray-500 dark:text-gray-400' },
-  [LogLevel.TRACE]: { label: 'TRACE', cls: 'text-gray-400 dark:text-gray-500' }
-}
+// 日志流全局启动（App 级更优，这里先按需启动；组件卸载不停止流——多页面切换保留历史）
+onMounted(() => logsStore.start())
+onBeforeUnmount(() => logsStore.stop())
 
-const levelLabel = (l: LogLevel) => LEVEL_META[l]?.label || String(l)
-const levelCls = (l: LogLevel) => LEVEL_META[l]?.cls || ''
+const LEVEL_OPTIONS = [
+  { label: '全部', value: 'all' },
+  { label: 'INFO', value: LogLevel.INFO },
+  { label: 'WARN', value: LogLevel.WARN },
+  { label: 'ERROR', value: LogLevel.ERROR },
+  { label: 'DEBUG', value: LogLevel.DEBUG }
+]
 
-const filtered = computed(() =>
-  filter.value === 'all' ? logs.value : logs.value.filter((l) => l.level === filter.value)
+// 注入搜索词到每条日志（HighlightText 高亮用）
+const renderLogs = computed(() =>
+  logsStore.filteredLogs.map((l) => ({ ...l, filter: logsStore.filter }))
 )
 
-const handleLogs = (log: Log) => {
-  if (closed.value) return
-  if (log.reset) logs.value = []
-  for (const m of log.messages) {
-    logs.value.push({
-      level: m.level,
-      message: m.message,
-      time: new Date().toLocaleTimeString()
-    })
-  }
-  if (logs.value.length > MAX_LOGS) {
-    logs.value = logs.value.slice(-MAX_LOGS)
-  }
-  connected.value = true
-  if (autoScroll.value) {
-    void nextTick(() => {
-      const el = listRef.value
-      if (el) el.scrollTop = el.scrollHeight
-    })
-  }
+const downloadAll = () => {
+  const text = logsStore.logs
+    .map((l) => `${l.seq}\t${l.time}\t${l.levelLabel}\t${l.message}`)
+    .join('\n')
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `sing-box-logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.log`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
-const run = async () => {
-  let delay = 1000
-  while (!closed.value) {
-    try {
-      for await (const log of subscribeLogs(abort.signal)) {
-        handleLogs(log)
-        delay = 1000
-      }
-    } catch {
-      connected.value = false
-      failed.value = true
-    }
-    if (closed.value) break
-    await new Promise((r) => setTimeout(r, delay))
-    delay = Math.min(delay * 2, 30000)
-  }
+const clearLogs = () => {
+  logsStore.clear()
+  ElMessage.success('已清空')
 }
 
-const onScroll = () => {
-  const el = listRef.value
-  if (!el) return
-  autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+const onConnectionClick = (id: string) => {
+  // 跳转到 Connections 页（预留）
+  void id
 }
-
-const copyLog = async (msg: string) => {
-  try {
-    await navigator.clipboard.writeText(msg)
-    ElMessage.success('已复制')
-  } catch {
-    // 剪贴板不可用忽略
-  }
-}
-
-onMounted(() => {
-  void run()
-})
-onBeforeUnmount(() => {
-  closed.value = true
-  abort.abort()
-})
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex h-full flex-col gap-4">
     <!-- 工具栏 -->
     <div class="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)] px-4 py-3">
-      <el-radio-group v-model="filter" size="small">
-        <el-radio-button value="all">全部</el-radio-button>
-        <el-radio-button value="info">INFO</el-radio-button>
-        <el-radio-button value="warn">WARN</el-radio-button>
-        <el-radio-button value="error">ERROR</el-radio-button>
-        <el-radio-button value="debug">DEBUG</el-radio-button>
+      <el-radio-group v-model="logsStore.levelFilter" size="small">
+        <el-radio-button v-for="opt in LEVEL_OPTIONS" :key="String(opt.value)" :value="opt.value">
+          {{ opt.label }}
+        </el-radio-button>
       </el-radio-group>
-      <el-input v-model="searchText" size="small" placeholder="搜索日志内容" :prefix-icon="Search" clearable style="width: 220px" />
+      <el-input
+        v-model="logsStore.filter"
+        size="small"
+        placeholder="搜索日志（支持正则）"
+        :prefix-icon="Search"
+        clearable
+        style="width: 240px"
+      />
       <span class="ml-auto flex items-center gap-2 text-xs text-[var(--el-text-color-secondary)]">
-        <span class="inline-block h-2 w-2 rounded-full" :class="connected ? 'bg-green-500' : (failed ? 'bg-red-500' : 'bg-yellow-500')"></span>
-        {{ connected ? '实时日志' : (failed ? 'service API 不可用' : '连接中…') }}
-        <el-button size="small" :icon="paused ? VideoPlay : VideoPause" @click="paused = !paused">{{ paused ? '恢复' : '暂停' }}</el-button>
-        <el-switch v-model="autoScroll" size="small" active-text="自动滚动" />
+        <span class="inline-block h-2 w-2 rounded-full" :class="logsStore.connected ? 'bg-green-500' : (logsStore.failed ? 'bg-red-500' : 'bg-yellow-500')"></span>
+        {{ logsStore.connected ? `${logsStore.logs.length} 条` : (logsStore.failed ? 'service API 不可用' : '连接中…') }}
+        <el-button size="small" :icon="logsStore.paused ? VideoPlay : VideoPause" @click="logsStore.togglePause()">
+          {{ logsStore.paused ? '恢复' : '暂停' }}
+        </el-button>
+        <el-button size="small" :icon="Delete" @click="clearLogs">清空</el-button>
+        <el-button size="small" :icon="Download" @click="downloadAll">下载</el-button>
       </span>
     </div>
 
-    <!-- 日志区 -->
-    <div class="overflow-hidden rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)]">
-      <div
-        ref="listRef"
-        class="h-[calc(100vh-220px)] overflow-y-auto p-3 font-mono text-[12.5px] leading-relaxed"
-        @scroll.passive="onScroll"
-      >
-        <div
-          v-for="(l, i) in filtered"
-          :key="i"
-          class="group/log flex gap-2 whitespace-pre-wrap break-all px-1 hover:bg-[var(--el-fill-color-light)]"
-        >
-          <span class="shrink-0 text-[var(--el-text-color-placeholder)]">{{ l.time }}</span>
-          <span class="w-12 shrink-0 text-right" :class="levelCls(l.level)">{{ levelLabel(l.level) }}</span>
-          <span class="min-w-0 flex-1 text-[var(--el-text-color-primary)]">{{ l.message }}</span>
-          <button
-            class="shrink-0 self-center rounded p-0.5 opacity-0 transition-opacity hover:bg-[var(--el-fill-color)] group-hover/log:opacity-100"
-            title="复制"
-            @click="copyLog(l.message)"
-          >
-            <el-icon :size="12" class="text-[var(--el-text-color-secondary)]"><CopyDocument /></el-icon>
-          </button>
-        </div>
-        <div v-if="!connected" class="py-8 text-center text-sm text-[var(--el-text-color-secondary)]">
-          service API 未配置或不可用（sing-box 需启用 services[type=api]）
-        </div>
-        <div v-else-if="!filtered.length" class="py-8 text-center text-sm text-[var(--el-text-color-secondary)]">
-          暂无日志
-        </div>
-      </div>
+    <!-- 虚拟滚动日志区（zashboard VirtualScroller） -->
+    <div class="min-h-0 flex-1 overflow-hidden rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)]">
+      <VirtualScroller :data="renderLogs" :size="44" content-class="p-2">
+        <template #default="{ item }: { item: any }">
+          <LogsCard :log="item" @connection-click="onConnectionClick" />
+        </template>
+      </VirtualScroller>
     </div>
   </div>
 </template>

@@ -23,6 +23,8 @@
     "@lezer/highlight": "^1.2.3",
     "@lezer/lr": "^1.4.10",
     "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/vue-virtual": "^3.13.35",
+    "@vueuse/core": "^14.4.0",
     "axios": "^1.6.0",
     "codemirror": "^6.0.2",
     "element-plus": "^2.8.0",
