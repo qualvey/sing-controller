@@ -222,18 +222,29 @@ const onNavSelect = () => {
   height: 100vh;
 }
 .app-aside {
-  background: #001529;
+  background: #ffffff;
+  border-right: 1px solid #e4e7ed;
   display: flex;
   flex-direction: column;
   transition: width 0.2s;
 }
+html.dark .app-aside {
+  background: #001529;
+  border-right: none;
+}
 .logo {
-  color: #fff;
+  color: #303133;
   font-size: 18px;
   font-weight: 700;
   padding: 20px 16px 14px;
   letter-spacing: 1px;
   white-space: nowrap;
+}
+html.dark .logo {
+  color: #fff;
+}
+.logo-sub {
+  color: #1890ff;
 }
 .logo-mini {
   font-size: 14px;
@@ -248,19 +259,29 @@ const onNavSelect = () => {
   z-index: 1;
 }
 .app-menu :deep(.el-menu-item) {
-  color: #a6b0bf;
+  color: #606266;
   position: relative;
   z-index: 1;
   margin: 2px 6px;
   border-radius: 8px;
 }
+html.dark .app-menu :deep(.el-menu-item) {
+  color: #a6b0bf;
+}
 .app-menu :deep(.el-menu-item:hover) {
+  background: rgba(0, 0, 0, 0.06);
+  color: #303133;
+}
+html.dark .app-menu :deep(.el-menu-item:hover) {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
 .app-menu :deep(.el-menu-item.is-active) {
-  color: #fff;
+  color: #1890ff;
   background: transparent;
+}
+html.dark .app-menu :deep(.el-menu-item.is-active) {
+  color: #fff;
 }
 /* 折叠态：去掉边距，图标垂直居中 */
 .app-menu.el-menu--collapse :deep(.el-menu-item) {
@@ -274,11 +295,15 @@ const onNavSelect = () => {
   left: 6px;
   top: 2px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  background: rgba(24, 144, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(24, 144, 255, 0.18);
   will-change: transform, width, height;
   pointer-events: none;
   z-index: 0;
+}
+html.dark .sidebar-tab-indicator {
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 .sidebar-tab-indicator-ready {
   transition:
@@ -414,7 +439,6 @@ html.dark .app-main {
   background: rgba(0, 0, 0, 0.45);
   z-index: 2090;
 }
-
 /* 抽屉导航（已移除，保留深色菜单通用样式） */
 
 /* 左下角悬浮重载按钮 */
