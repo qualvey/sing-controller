@@ -312,6 +312,7 @@ onMounted(() => {
     </div>
 
     <el-table :data="rows" v-loading="loading" border stripe>
+      <el-table-column type="index" label="#" width="56" />
       <el-table-column label="rule" min-width="300">
         <template #default="{ row }">
           <div class="rule-cell">

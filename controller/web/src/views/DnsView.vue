@@ -3,6 +3,11 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api'
 import { useStatusStore } from '../stores/status'
+import {
+  DNS_RULE_ACTIONS,
+  DNS_RULE_FIELDS,
+  DNS_RULE_GROUPS
+} from './dnsRuleFields'
 
 const statusStore = useStatusStore()
 
@@ -201,83 +206,98 @@ const removeServer = async (row: Record<string, any>) => {
 }
 
 // ---------- DNS 规则 ----------
-const QUERY_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'PTR', 'SOA', 'SRV', 'TXT']
-const DNS_RULE_ACTIONS = [
-  { value: 'route', label: '路由到 server（route，选 outbound）' },
-  { value: 'reject', label: '拒绝（reject）' },
-  { value: 'respond', label: '直接应答（respond）' }
-]
-const PROTOCOL_OPTIONS = ['tls', 'http', 'quic', 'dns', 'stun', 'bittorrent', 'dtls', 'ssh', 'rdp', 'ntp']
-const NETWORK_OPTIONS = ['tcp', 'udp']
-
-// DNS 规则字段（RawDefaultDNSRule 常用子集；其余走附加 JSON）
-const ruleFields: Array<{ key: string; label: string; type: 'string-list' | 'uint-list' | 'bool' | 'string'; options?: string[] }> = [
-  { key: 'inbound', label: '入站', type: 'string-list' },
-  { key: 'network', label: '网络', type: 'string-list', options: NETWORK_OPTIONS },
-  { key: 'query_type', label: '查询类型', type: 'string-list', options: QUERY_TYPES },
-  { key: 'protocol', label: '协议', type: 'string-list', options: PROTOCOL_OPTIONS },
-  { key: 'domain', label: '完整域名', type: 'string-list' },
-  { key: 'domain_suffix', label: '域名后缀', type: 'string-list' },
-  { key: 'domain_keyword', label: '域名关键词', type: 'string-list' },
-  { key: 'domain_regex', label: '域名正则', type: 'string-list' },
-  { key: 'source_ip_cidr', label: '源 IP/CIDR', type: 'string-list' },
-  { key: 'ip_cidr', label: '目标 IP/CIDR', type: 'string-list' },
-  { key: 'source_port', label: '源端口', type: 'uint-list' },
-  { key: 'port', label: '目标端口', type: 'uint-list' },
-  { key: 'port_range', label: '端口范围', type: 'string-list' },
-  { key: 'process_name', label: '进程名', type: 'string-list' },
-  { key: 'package_name', label: '包名', type: 'string-list' },
-  { key: 'invert', label: '取反', type: 'bool' }
-]
-
+// 规则表单：字段表驱动（含 json 类型字段的字段级 JSON 输入），无附加字段兜底
 const ruleForm = reactive<Record<string, any>>({
   action: 'route',
   server: '',
-  extraJson: ''
+  speculative: false,
+  evaluate_tag: '',
+  evaluate_speculative: false,
+  reject_method: '',
+  actionParamsJson: ''
 })
-for (const f of ruleFields) {
+for (const f of DNS_RULE_FIELDS) {
   if (f.type === 'bool') ruleForm[f.key] = false
+  else if (f.type === 'string' || f.type === 'select' || f.type === 'json') ruleForm[f.key] = ''
   else ruleForm[f.key] = []
 }
 
 const resetRuleForm = () => {
   ruleForm.action = 'route'
   ruleForm.server = ''
-  ruleForm.extraJson = ''
-  for (const f of ruleFields) {
+  ruleForm.speculative = false
+  ruleForm.evaluate_tag = ''
+  ruleForm.evaluate_speculative = false
+  ruleForm.reject_method = ''
+  ruleForm.actionParamsJson = ''
+  for (const f of DNS_RULE_FIELDS) {
     if (f.type === 'bool') ruleForm[f.key] = false
+    else if (f.type === 'string' || f.type === 'select' || f.type === 'json') ruleForm[f.key] = ''
     else ruleForm[f.key] = []
+  }
+}
+
+function parseJsonField(text: string, label: string): unknown {
+  if (!text.trim()) return undefined
+  try {
+    return JSON.parse(text.trim())
+  } catch (e) {
+    throw new Error(`${label} JSON 格式错误：${(e as Error).message}`)
   }
 }
 
 function buildDnsRule(): Record<string, any> {
   const rule: Record<string, any> = {}
-  for (const f of ruleFields) {
+  for (const f of DNS_RULE_FIELDS) {
     const v = ruleForm[f.key]
     if (f.type === 'bool') {
       if (v === true) rule[f.key] = true
       continue
     }
+    if (f.type === 'string') {
+      if (typeof v === 'string' && v.trim()) rule[f.key] = v.trim()
+      continue
+    }
+    if (f.type === 'select') {
+      if (v !== '' && v != null) rule[f.key] = f.key === 'ip_version' ? Number(v) : v
+      continue
+    }
+    if (f.type === 'json') {
+      const parsed = parseJsonField(String(v ?? ''), f.label)
+      if (parsed !== undefined) rule[f.key] = parsed
+      continue
+    }
     if (!Array.isArray(v) || !v.length) continue
-    rule[f.key] = f.type === 'uint-list' ? (v as string[]).map((x) => Number(x)) : [...(v as string[])]
+    rule[f.key] =
+      f.type === 'uint-list' || f.type === 'int-list'
+        ? (v as string[]).map((x) => Number(x))
+        : [...(v as string[])]
   }
-  if (ruleForm.action === 'reject') {
+  // action 与参数（route=server 字段模型；其余动作参数各有 JSON 本体）
+  const action = ruleForm.action
+  if (action === 'reject') {
     rule.action = 'reject'
-  } else if (ruleForm.action === 'respond') {
+    if (String(ruleForm.reject_method).trim()) rule.method = String(ruleForm.reject_method).trim()
+  } else if (action === 'respond') {
     rule.action = 'respond'
-  } else if (ruleForm.server) {
-    rule.server = String(ruleForm.server)
-  }
-  if (String(ruleForm.extraJson).trim()) {
-    let extra: Record<string, any>
-    try {
-      extra = JSON.parse(String(ruleForm.extraJson).trim())
-    } catch (e) {
-      throw new Error(`附加字段 JSON 格式错误：${(e as Error).message}`)
+  } else if (action === 'evaluate') {
+    rule.action = 'evaluate'
+    if (ruleForm.server) rule.server = String(ruleForm.server)
+    if (String(ruleForm.evaluate_tag).trim()) rule.tag = String(ruleForm.evaluate_tag).trim()
+    if (ruleForm.evaluate_speculative) rule.speculative = true
+  } else if (action === 'route-options' || action === 'predefined') {
+    rule.action = action
+    const parsed = parseJsonField(String(ruleForm.actionParamsJson), '动作参数')
+    if (parsed !== undefined) {
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('动作参数必须为 JSON 对象')
+      }
+      for (const k of Object.keys(parsed)) rule[k] = (parsed as Record<string, unknown>)[k]
     }
-    for (const k of Object.keys(extra)) {
-      if (!(k in rule)) rule[k] = extra[k]
-    }
+  } else {
+    // route（默认）
+    if (ruleForm.server) rule.server = String(ruleForm.server)
+    if (ruleForm.speculative) rule.speculative = true
   }
   return rule
 }
@@ -294,24 +314,29 @@ function openEditRule(row: { id: string; rule: Record<string, any> }) {
   editingRuleId.value = row.id
   resetRuleForm()
   const r = row.rule
-  for (const f of ruleFields) {
+  for (const f of DNS_RULE_FIELDS) {
     const v = r[f.key]
     if (f.type === 'bool') ruleForm[f.key] = v === true
+    else if (f.type === 'json') ruleForm[f.key] = v == null ? '' : JSON.stringify(v, null, 2)
+    else if (f.type === 'string' || f.type === 'select') ruleForm[f.key] = v == null ? '' : String(v)
     else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
   }
   const action = typeof r.action === 'string' && r.action ? r.action : 'route'
-  ruleForm.action = action === 'reject' || action === 'respond' ? action : 'route'
-  if (r.server != null) {
-    ruleForm.server = String(r.server)
-  } else if (r.outbound != null) {
-    ruleForm.server = Array.isArray(r.outbound) ? String(r.outbound[0] ?? '') : String(r.outbound)
+  ruleForm.action = action
+  ruleForm.server = typeof r.server === 'string' ? r.server : ''
+  ruleForm.speculative = r.speculative === true
+  ruleForm.evaluate_tag = typeof r.tag === 'string' ? r.tag : ''
+  ruleForm.evaluate_speculative = r.speculative === true
+  ruleForm.reject_method = typeof r.method === 'string' ? r.method : ''
+  // route-options / predefined 的动作参数（action 之外的顶层字段）
+  if (action === 'route-options' || action === 'predefined') {
+    const known = new Set(['action', 'server', 'speculative', ...DNS_RULE_FIELDS.map((f) => f.key)])
+    const extra: Record<string, any> = {}
+    for (const k of Object.keys(r)) {
+      if (!known.has(k)) extra[k] = r[k]
+    }
+    ruleForm.actionParamsJson = Object.keys(extra).length ? JSON.stringify(extra, null, 2) : ''
   }
-  const known = new Set(['action', 'server', 'outbound', ...ruleFields.map((f) => f.key)])
-  const extra: Record<string, any> = {}
-  for (const k of Object.keys(r)) {
-    if (!known.has(k)) extra[k] = r[k]
-  }
-  ruleForm.extraJson = Object.keys(extra).length ? JSON.stringify(extra, null, 2) : ''
   ruleDialogVisible.value = true
 }
 
@@ -355,6 +380,7 @@ const removeRule = async (row: { id: string; rule: Record<string, any> }) => {
   }
 }
 
+const PREDEFINED_PLACEHOLDER = '{"rcode": "NXDOMAIN", "answer": []}'
 // ---------- DNS 选项 ----------
 const optsForm = reactive({
   final: '',
@@ -483,6 +509,7 @@ onMounted(() => {
 
       <el-tab-pane label="规则" name="rules">
         <el-table :data="rules" v-loading="loading" border stripe>
+          <el-table-column type="index" label="#" width="56" />
           <el-table-column label="规则" min-width="280">
             <template #default="{ row }">
               <span class="rule-text">{{ ruleSummary(row.rule) }}</span>
@@ -584,37 +611,96 @@ onMounted(() => {
     </el-dialog>
 
     <!-- 规则编辑 -->
-    <el-dialog v-model="ruleDialogVisible" :title="isEditRule ? '编辑 DNS 规则' : '新建 DNS 规则'" width="680px" :close-on-click-modal="false">
-      <el-form label-width="130px">
-        <el-form-item v-for="f in ruleFields" :key="f.key" :label="f.label">
-          <el-select
-            v-if="f.type === 'string-list' || f.type === 'uint-list'"
-            v-model="ruleForm[f.key]"
-            multiple
-            filterable
-            allow-create
-            default-first-option
-            style="width: 100%"
-            placeholder="输入后回车添加，可多值"
-          >
-            <el-option v-for="o in f.options ?? (f.key === 'inbound' ? inboundTags : [])" :key="o" :label="o" :value="o" />
-          </el-select>
-          <el-switch v-else-if="f.type === 'bool'" v-model="ruleForm[f.key]" />
-        </el-form-item>
-        <el-divider content-position="left">动作</el-divider>
-        <el-form-item label="action">
-          <el-select v-model="ruleForm.action" style="width: 100%">
-            <el-option v-for="a in DNS_RULE_ACTIONS" :key="a.value" :label="a.label" :value="a.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="ruleForm.action === 'route'" label="server">
-          <el-select v-model="ruleForm.server" style="width: 100%" clearable placeholder="选择 DNS server">
-            <el-option v-for="t in dnsTags" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="附加字段 (JSON)">
-          <el-input v-model="ruleForm.extraJson" type="textarea" :rows="5" class="mono" placeholder='{"user": ["root"]}' />
-        </el-form-item>
+    <el-dialog v-model="ruleDialogVisible" :title="isEditRule ? '编辑 DNS 规则' : '新建 DNS 规则'" width="760px" :close-on-click-modal="false">
+      <el-form label-width="150px">
+        <el-tabs>
+          <el-tab-pane label="匹配条件">
+            <template v-for="g in DNS_RULE_GROUPS" :key="g">
+              <el-divider content-position="left">{{ g }}</el-divider>
+              <el-form-item v-for="f in DNS_RULE_FIELDS.filter((x) => x.group === g)" :key="f.key" :label="f.label">
+                <el-select
+                  v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
+                  v-model="ruleForm[f.key]"
+                  multiple
+                  filterable
+                  allow-create
+                  default-first-option
+                  style="width: 100%"
+                  :placeholder="f.placeholder || '输入后回车添加，可多值'"
+                >
+                  <el-option v-for="o in f.options ?? (f.key === 'inbound' ? inboundTags : [])" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-select
+                  v-else-if="f.type === 'select'"
+                  v-model="ruleForm[f.key]"
+                  style="width: 100%"
+                  :placeholder="f.placeholder || '请选择'"
+                >
+                  <el-option v-for="o in f.options ?? []" :key="o" :label="o" :value="o" />
+                </el-select>
+                <el-switch v-else-if="f.type === 'bool'" v-model="ruleForm[f.key]" />
+                <el-input v-else-if="f.type === 'string'" v-model="ruleForm[f.key]" :placeholder="f.placeholder || '请输入'" />
+                <el-input
+                  v-else
+                  v-model="ruleForm[f.key]"
+                  type="textarea"
+                  :rows="3"
+                  class="mono"
+                  :placeholder="f.placeholder || '字段 JSON 对象'"
+                />
+              </el-form-item>
+            </template>
+          </el-tab-pane>
+          <el-tab-pane label="动作">
+            <el-form-item label="action">
+              <el-select v-model="ruleForm.action" style="width: 100%">
+                <el-option v-for="a in DNS_RULE_ACTIONS" :key="a.value" :label="a.label" :value="a.value" />
+              </el-select>
+            </el-form-item>
+            <template v-if="ruleForm.action === 'route'">
+              <el-form-item label="server">
+                <el-select v-model="ruleForm.server" style="width: 100%" clearable placeholder="选择 DNS server">
+                  <el-option v-for="t in dnsTags" :key="t" :label="t" :value="t" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="speculative">
+                <el-switch v-model="ruleForm.speculative" />
+                <span class="hint" style="margin-left: 8px">先返回假结果再修正</span>
+              </el-form-item>
+            </template>
+            <template v-else-if="ruleForm.action === 'evaluate'">
+              <el-form-item label="server">
+                <el-select v-model="ruleForm.server" style="width: 100%" clearable placeholder="选择 DNS server">
+                  <el-option v-for="t in dnsTags" :key="t" :label="t" :value="t" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="tag">
+                <el-input v-model="ruleForm.evaluate_tag" placeholder="评估结果写入的 tag（可选）" />
+              </el-form-item>
+              <el-form-item label="speculative">
+                <el-switch v-model="ruleForm.evaluate_speculative" />
+              </el-form-item>
+            </template>
+            <el-form-item v-else-if="ruleForm.action === 'reject'" label="method">
+              <el-input v-model="ruleForm.reject_method" placeholder="拒绝方法（默认 drop，如 reject）" />
+            </el-form-item>
+            <el-alert
+              v-else-if="ruleForm.action === 'respond'"
+              type="info"
+              :closable="false"
+              title="respond 无参数；应答内容用匹配条件的 response_* 字段"
+            />
+            <el-form-item v-else label="动作参数 (JSON)">
+              <el-input
+                v-model="ruleForm.actionParamsJson"
+                type="textarea"
+                :rows="6"
+                class="mono"
+                :placeholder="ruleForm.action === 'route-options' ? 'route-options 参数对象' : PREDEFINED_PLACEHOLDER"
+              />
+            </el-form-item>
+          </el-tab-pane>
+        </el-tabs>
       </el-form>
       <template #footer>
         <el-button @click="ruleDialogVisible = false">取消</el-button>
