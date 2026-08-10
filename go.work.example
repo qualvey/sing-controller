@@ -1,0 +1,8 @@
+# 本地开发用 go.work 覆盖 sing-box 源码（本机路径）。
+# CI 在 workflow 中 checkout qualvey/sing-box 后动态生成 go.work（见 .github/workflows/release.yml）。
+go 1.25.5
+
+use (
+	./controller
+	<本地 sing-box checkout 路径，例如 C:/Users/xxx/Documents/sing-box>
+)

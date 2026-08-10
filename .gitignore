@@ -10,3 +10,8 @@ testdata/
 sing-box-config.json
 controller/sing-box-config.json
 *.json.bak
+go.work
+dist/
+*.deb
+*.tar.gz
+go.work.sum

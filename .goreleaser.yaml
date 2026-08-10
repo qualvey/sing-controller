@@ -1,0 +1,65 @@
+# GoReleaser 配置：tag 触发（.github/workflows/release.yml）
+# 产物：linux amd64 / arm64 / armv7 的 tar.gz + deb（含 systemd 单元）
+
+version: 2
+
+project_name: sing-controller
+
+builds:
+  - id: sing-controller
+    dir: controller
+    binary: sing-controller
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    tags:
+      - with_quic
+      - with_utls
+    ldflags:
+      - -s -w
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    files:
+      - none*
+
+nfpms:
+  - id: deb
+    package_name: sing-controller
+    vendor: qualvey
+    homepage: https://github.com/qualvey/sing-controller
+    maintainer: qualvey <wel@ryugo.org>
+    description: |-
+      sing-box controller - RESTful configuration management service for sing-box.
+      Generates and validates sing-box config.json; does not run the proxy itself.
+    license: GPL-3.0
+    formats:
+      - deb
+    bindir: /usr/bin
+    contents:
+      - src: ./packaging/sing-controller.service
+        dst: /etc/systemd/system/sing-controller.service
+      - src: ./packaging/config.json
+        dst: /etc/sing-controller/config.json
+        type: config|noreplace
+    scripts:
+      postinstall: ./packaging/postinstall.sh
+      postremove: ./packaging/postremove.sh
+    deb:
+      breaks:
+        - sing-box-webui
+
+release:
+  github:
+    owner: qualvey
+    name: sing-controller
+  draft: false
+  prerelease: auto

@@ -1,10 +1,10 @@
-module github.com/sagernet/sing-box-webui/controller
+module github.com/qualvey/sing-controller
 
-go 1.24.7
+go 1.25.5
 
 require (
 	github.com/sagernet/sing v0.8.12-0.20260731081310-cb3e09a281aa
-	github.com/sagernet/sing-box v1.14.0-alpha.43-v2ray-api
+	github.com/sagernet/sing-box v1.14.0-beta.13
 )
 
 require (
@@ -182,5 +182,9 @@ require (
 	zombiezen.com/go/capnproto2 v2.18.2+incompatible // indirect
 )
 
-// 本地复用 sing-box 源码（开发态）；发布时改为正式 tag 或 fork
-replace github.com/sagernet/sing-box => C:/Users/Ryu/Documents/sing-box
+// 复用 sing-box fork 源码（qualvey/sing-box）：
+// 本地路径 ../../sing-box（与 repo 平级的 sing-box checkout）；
+// CI 在 workflow 中把 fork clone 到 <workspace>/../sing-box，与本地布局一致。
+// 必须用 replace 而非 go.work use：replace 会屏蔽 require 版本的依赖图，
+// 避免 MVS 把 sing-quic/quic-go 等依赖抬升到与本地 dev 源码不兼容的版本。
+replace github.com/sagernet/sing-box => ../../sing-box

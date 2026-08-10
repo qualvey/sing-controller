@@ -1,0 +1,44 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sing-controller
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # sing-box fork（与 controller/go.mod 的 replace ../../sing-box 布局一致：
+      # clone 到 <workspace>/../sing-box）
+      # 私有仓库时 GITHUB_TOKEN 可访问同账号下的私有 repo
+      - name: Checkout sing-box fork
+        run: |
+          git clone --filter=blob:none \
+            https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/qualvey/sing-box.git \
+            ../sing-box
+          cd ../sing-box
+          git checkout d2438c28
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

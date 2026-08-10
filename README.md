@@ -63,6 +63,63 @@ go build -tags "with_quic with_utls" -o sing-box-controller.exe .
 - JSON Schema：`schema.Generate(include.Context(ctx), reflect.TypeFor[option.Options]())`
 - 重载语义：controller 不运行实例，无热重载概念；配置保存即生效（由 sing-box 进程自行 watch/重启）
 
+## 构建与发布（CI/CD）
+
+### 交叉编译（本地）
+
+```bash
+cd controller
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "with_quic with_utls" -o sing-controller .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags "with_quic with_utls" -o sing-controller .
+CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -tags "with_quic with_utls" -o sing-controller .
+```
+
+### deb 打包 + GitHub Release（tag 触发）
+
+打 tag 推送到 GitHub 即触发 [release workflow](.github/workflows/release.yml)：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+自动产物（GoReleaser + nfpm）：
+- linux amd64 / arm64 / armv7 的 `tar.gz`
+- 对应架构的 **deb** 包（含 systemd 单元 `sing-controller.service`，安装后自动建用户、启停服务）
+
+本地预览产物（不发布）：
+
+```bash
+goreleaser release --snapshot --clean
+```
+
+### sing-box fork 依赖
+
+`controller/go.mod` 通过 `replace github.com/sagernet/sing-box => ../../sing-box` 复用
+[qualvey/sing-box](https://github.com/qualvey/sing-box) fork 源码（开发中 API 与官方 release 不同步）。
+CI 会把 fork clone 到 `<workspace>/../sing-box`（与本地目录布局一致）。
+
+## Linux 部署（deb）
+
+```bash
+sudo dpkg -i sing-controller_<version>_amd64.deb
+# 安装后：
+# - 用户/组 sing-controller，配置目录 /etc/sing-controller
+# - systemd 服务 sing-controller（127.0.0.1:8080，journald 日志）
+# - 主配置默认 /etc/sing-controller/sing-box-config.json
+sudo systemctl status sing-controller
+```
+
+默认 controller 配置 `/etc/sing-controller/config.json`（升级不覆盖，`noreplace`）：
+
+```jsonc
+{
+  "config": "/etc/sing-controller/sing-box-config.json",
+  "min_port": 8000,
+  "defaults": { "inbound_type": "mixed", "outbound_type": "vless", "listen": "127.0.0.1", "listen_port": 2080 }
+}
+```
+
 ## API 摘要（详见 API.md）
 
 ```

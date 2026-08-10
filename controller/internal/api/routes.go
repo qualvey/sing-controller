@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box-webui/controller/internal/store"
+	"github.com/qualvey/sing-controller/internal/store"
 	"github.com/sagernet/sing/common/json"
 )
 

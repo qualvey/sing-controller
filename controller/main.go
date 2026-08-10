@@ -1,6 +1,6 @@
-// sing-box-controller：sing-box 配置管理服务（不运行 sing-box 实例）。
-// 职责：读取/校验/生成 sing-box 主配置文件，通过 RESTful API 提供给 webui。
-// 自身配置 config.json：{"config": "<主配置路径>", "min_port": 8000, "defaults": {...}}
+﻿// sing-box-controllerï¼šsing-box é…ç½®ç®¡ç†æœåŠ¡ï¼ˆä¸è¿è¡Œ sing-box å®žä¾‹ï¼‰ã€‚
+// èŒè´£ï¼šè¯»å–/æ ¡éªŒ/ç”Ÿæˆ sing-box ä¸»é…ç½®æ–‡ä»¶ï¼Œé€šè¿‡ RESTful API æä¾›ç»™ webuiã€‚
+// è‡ªèº«é…ç½® config.jsonï¼š{"config": "<ä¸»é…ç½®è·¯å¾„>", "min_port": 8000, "defaults": {...}}
 package main
 
 import (
@@ -9,9 +9,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/sagernet/sing-box-webui/controller/internal/api"
-	"github.com/sagernet/sing-box-webui/controller/internal/settings"
-	"github.com/sagernet/sing-box-webui/controller/internal/store"
+	"github.com/qualvey/sing-controller/internal/api"
+	"github.com/qualvey/sing-controller/internal/settings"
+	"github.com/qualvey/sing-controller/internal/store"
 )
 
 func main() {
@@ -27,13 +27,13 @@ func main() {
 
 	ctx := context.Background()
 
-	// controller 自身配置
+	// controller è‡ªèº«é…ç½®
 	cfg := settings.New(settingsPath)
 	if err := cfg.Load(); err != nil {
 		log.Fatalf("load controller config: %v", err)
 	}
 
-	// sing-box 主配置存储（路径来自 settings.config）
+	// sing-box ä¸»é…ç½®å­˜å‚¨ï¼ˆè·¯å¾„æ¥è‡ª settings.configï¼‰
 	values := cfg.Values()
 	cfgStore := store.New(values.Config)
 	defaults := store.DefaultConfig{
