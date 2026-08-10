@@ -9,3 +9,4 @@ testdata/
 *.log
 sing-box-config.json
 controller/sing-box-config.json
+*.json.bak
