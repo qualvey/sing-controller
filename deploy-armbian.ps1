@@ -24,22 +24,23 @@ scp "$($deb.FullName)" "${hostAlias}:/tmp/"
 if ($LASTEXITCODE -ne 0) { throw 'scp 失败' }
 
 # 4. sudo 免密检测
-Write-Host '[*] 检查 sudo ...'
-$sudoStatus = ssh $hostAlias 'sudo -n true && echo SUDO_OK || echo SUDO_NEED_PASSWORD'
-if ($sudoStatus -match 'SUDO_NEED_PASSWORD') {
-    Write-Host ''
-    Write-Host '[!] armbian 上 sudo 需要密码（非交互无法输入）。二选一：'
-    Write-Host '    a) 配置免密（一次性，手动执行一次）：'
-    Write-Host "       ssh $hostAlias 'echo \"`$USER ALL=(ALL) NOPASSWD: ALL\" | sudo tee /etc/sudoers.d/`$USER'"
-    Write-Host '    b) 手动安装（跳过本脚本后续）：'
-    Write-Host "       ssh $hostAlias 'sudo dpkg -i /tmp/$($deb.Name) && sudo systemctl restart sing-controller'"
-    throw 'sudo 需要密码，请按上面提示处理后再跑本脚本'
-}
+# Write-Host '[*] 检查 sudo ...'
+# $sudoStatus = ssh $hostAlias 'sudo -n true && echo SUDO_OK || echo SUDO_NEED_PASSWORD'
+# if ($sudoStatus -match 'SUDO_NEED_PASSWORD') {
+#     Write-Host ''
+#     Write-Host '[!] armbian 上 sudo 需要密码（非交互无法输入）。二选一：'
+#     Write-Host '    a) 配置免密（一次性，手动执行一次）：'
+#     Write-Host "       ssh $hostAlias 'echo \"`$USER ALL=(ALL) NOPASSWD: ALL\" | sudo tee /etc/sudoers.d/`$USER'"
+#     Write-Host '    b) 手动安装（跳过本脚本后续）：'
+#     Write-Host "       ssh $hostAlias 'sudo dpkg -i /tmp/$($deb.Name) && sudo systemctl restart sing-controller'"
+#     throw 'sudo 需要密码，请按上面提示处理后再跑本脚本'
+# }
 
 # 5. 安装 + 重启 + 状态
 Write-Host '[*] dpkg -i + restart sing-controller ...'
-ssh $hostAlias "sudo dpkg -i /tmp/$($deb.Name) && sudo systemctl restart sing-controller && sudo systemctl --no-pager status sing-controller --lines=0"
+ssh -t $hostAlias 'sudo apt install -y /tmp/sing-controller_0.7.0-beta.1-SNAPSHOT-b6c009a_linux_arm64.deb'
 if ($LASTEXITCODE -ne 0) { throw '安装/重启失败' }
+ssh -t $hostAlias 'sudo systemctl restart sing-controller && sudo systemctl status sing-controller --no-pager -n 20'
 
 # 6. 清理远端临时包
 ssh $hostAlias "rm -f /tmp/$($deb.Name)"
