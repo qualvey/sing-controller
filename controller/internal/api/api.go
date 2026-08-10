@@ -28,6 +28,8 @@ type HandlerOptions struct {
 	Settings *settings.Manager
 	Secret   string
 	Version  string
+	// Static 嵌入的 webui 静态资源（SPA）；nil 时根路径返回服务信息 JSON（API-only 模式）
+	Static http.Handler
 }
 
 type Handler struct {
@@ -35,6 +37,7 @@ type Handler struct {
 	settings *settings.Manager
 	secret   string
 	version  string
+	static   http.Handler
 
 	schemaOnce sync.Once
 	schemaJSON []byte
@@ -50,11 +53,16 @@ func NewHandler(opts HandlerOptions) http.Handler {
 		settings: opts.Settings,
 		secret:   opts.Secret,
 		version:  opts.Version,
+		static:   opts.Static,
 	}
 	mux := http.NewServeMux()
 
-	// 根路径：服务信息（替代旧版前端托管，webui 独立部署）
-	mux.HandleFunc("GET /", h.handleRoot)
+	// 根路径：嵌入的 webui（同端口）；未构建时返回服务信息
+	if opts.Static != nil {
+		mux.Handle("/", opts.Static)
+	} else {
+		mux.HandleFunc("GET /", h.handleRoot)
+	}
 	mux.HandleFunc("GET /healthz", h.handleHealthz)
 
 	// 状态 / 配置 / 设置

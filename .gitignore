@@ -4,8 +4,8 @@ config.json
 !packaging/config.json
 config.json.meta
 config.json.bak
-web/node_modules
-web/dist
+controller/web/node_modules
+controller/web/dist
 testdata/
 *.log
 sing-box-config.json
@@ -17,3 +17,5 @@ dist/
 *.deb
 *.tar.gz
 go.work.sum
+
+!controller/web/dist/.gitkeep

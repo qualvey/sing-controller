@@ -60,11 +60,19 @@ func main() {
 		return
 	}
 
+	// 嵌入 webui（web/dist 已构建时）；构建失败仅影响页面，API 照常
+	var staticHandler http.Handler
+	if builtHandler, err := webHandler(); err == nil {
+		staticHandler = builtHandler
+	} else {
+		slog.Warn("webui static handler init failed, API-only mode", "error", err)
+	}
 	handler := api.NewHandler(api.HandlerOptions{
 		Store:    cfgStore,
 		Settings: cfg,
 		Secret:   secret,
 		Version:  version,
+		Static:   staticHandler,
 	})
 	slog.Info("sing-box-controller started",
 		"listen", listenAddr,

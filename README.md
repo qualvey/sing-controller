@@ -1,31 +1,40 @@
 # sing-box-webui
 
-三模块架构，职责完全分离：
+三模块架构，职责完全分离（webui 嵌入 controller 单二进制交付，前后端同端口）：
 
 | 模块 | 职责 | 说明 |
 |---|---|---|
 | **sing-box** | 代理核心 | 官方项目，本仓库不包含、不修改，仅通过 `go.mod replace` 复用其 Go 包做配置校验 |
-| **sing-box-controller**（`controller/`） | 配置管理服务 | 只负责 sing-box 主配置 `config.json` 的**读取、校验、生成**，不运行代理实例 |
-| **webui**（`web/`） | 可视化前端 | Vue 3 + Element Plus，纯浏览器应用，通过 RESTful API 操作 controller |
+| **sing-box-controller**（`controller/`） | 配置管理服务 + webui 宿主 | 只负责 sing-box 主配置 `config.json` 的**读取、校验、生成**，不运行代理实例；`go:embed` 内嵌前端，同端口提供页面与 API |
+| **webui**（`controller/web/`） | 可视化前端 | Vue 3 + Element Plus，独立工程（独立 package.json/Vite）；构建产物 `web/dist` 被 controller embed |
 
 ## 快速开始
 
 ```bash
-# 1. 启动 controller（默认监听 127.0.0.1:8080）
-cd controller
-go run -tags "with_quic with_utls" . -listen 127.0.0.1:8080 -config config.json
+# 1. 构建前端（产物被 controller embed）
+cd controller/web
+npm install && npm run build
 
-# 2. 启动前端（开发模式，/api 代理到 8080）
-cd web
-npm install && npm run dev     # http://localhost:5173
+# 2. 启动 controller（默认监听 127.0.0.1:8080，页面+API 同端口）
+cd ..
+go run -tags "with_quic with_utls" . -config config.json
+# 浏览器打开 http://127.0.0.1:8080 即 webui
 
-# 构建后端二进制（无需前端，前端独立部署）
+# 单二进制交付
 cd controller
-go build -tags "with_quic with_utls" -o sing-box-controller.exe .
+go build -tags "with_quic with_utls" -o sing-controller.exe .
 ```
 
-> 构建必须带 `-tags "with_quic with_utls"`（vless+reality 依赖 uTLS、tuic 依赖 QUIC），
-> 否则校验管线会报 `uTLS is not included in this build`。
+前端开发模式（热更新，/api 代理到 8080）：
+
+```bash
+cd controller/web
+npm run dev     # http://localhost:5173，controller 需同时在 8080 运行
+```
+
+> - 构建必须带 `-tags "with_quic with_utls"`（vless+reality 依赖 uTLS、tuic 依赖 QUIC），
+>   否则校验管线会报 `uTLS is not included in this build`
+> - `web/dist` 未构建时 controller 自动退化为 API-only 模式（根路径提示），不影响 API
 
 ## Controller 配置（controller 自身的 config.json）
 
@@ -144,12 +153,14 @@ PUT/DELETE      /api/routes/{id}
 ## 项目结构
 
 ```
-controller/              # sing-box-controller（Go）
+controller/              # sing-box-controller（Go module，嵌入 webui）
 ├── main.go              # 入口：-listen / -config(controller配置) / -secret
+├── webui.go             # go:embed web/dist + SPA fallback + 缓存头（可选嵌入）
+├── web/                 # webui 前端（Vue3 + Vite + TS + Element Plus，独立工程）
+│   └── dist/            # 构建产物（被 embed；未构建时 API-only 模式）
 └── internal/
-    ├── settings/        # controller 自身配置（config 路径 / min_port / defaults）
+    ├── settings/        # controller 自身配置（config / listen / log.level / min_port / defaults）
     ├── store/           # sing-box 主配置：加载 / 校验管线 / 原子写 / 回滚 / meta
     └── api/             # REST handlers（outbound/inbound/route/config/settings/ports/tools）
-web/                     # webui（Vue3 + Vite + TS + Element Plus）
 API.md                   # API 契约
 ```
