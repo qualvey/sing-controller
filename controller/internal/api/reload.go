@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -47,27 +48,35 @@ func (h *Handler) reloadWithMode(reload *settings.ReloadOptions, parent context.
 			if detail == "" {
 				detail = err.Error()
 			}
+			slog.Warn("sing-box reload failed", "mode", "systemd", "service", service, "error", detail)
 			return fmt.Errorf("systemctl reload %s 失败: %s", service, detail)
 		}
+		slog.Info("sing-box reloaded", "mode", "systemd", "service", service)
 		return nil
 	case "pidfile":
 		if reload.PidFile == "" {
+			slog.Warn("sing-box reload failed", "mode", "pidfile", "error", "pid_file 未配置")
 			return errors.New("pidfile 模式未配置 pid_file")
 		}
 		content, err := os.ReadFile(reload.PidFile)
 		if err != nil {
+			slog.Warn("sing-box reload failed", "mode", "pidfile", "pid_file", reload.PidFile, "error", err)
 			return fmt.Errorf("读取 pid 文件失败: %w", err)
 		}
 		pid, err := strconv.Atoi(strings.TrimSpace(string(content)))
 		if err != nil {
+			slog.Warn("sing-box reload failed", "mode", "pidfile", "pid_file", reload.PidFile, "error", fmt.Sprintf("pid 内容无效 %q", strings.TrimSpace(string(content))))
 			return fmt.Errorf("pid 文件内容无效: %q", strings.TrimSpace(string(content)))
 		}
 		if err := killByPid(pid); err != nil {
+			slog.Warn("sing-box reload failed", "mode", "pidfile", "pid", pid, "error", err)
 			return fmt.Errorf("发送 SIGHUP 到 %d 失败: %w", pid, err)
 		}
+		slog.Info("sing-box reloaded", "mode", "pidfile", "pid", pid)
 		return nil
 	case "hook":
 		if reload.Hook == "" {
+			slog.Warn("sing-box reload failed", "mode", "hook", "error", "hook 命令未配置")
 			return errors.New("hook 模式未配置命令")
 		}
 		cmd := exec.CommandContext(ctx, "sh", "-c", reload.Hook)
@@ -77,10 +86,13 @@ func (h *Handler) reloadWithMode(reload *settings.ReloadOptions, parent context.
 			if detail == "" {
 				detail = err.Error()
 			}
+			slog.Warn("sing-box reload failed", "mode", "hook", "error", detail)
 			return fmt.Errorf("hook 执行失败: %s", detail)
 		}
+		slog.Info("sing-box reloaded", "mode", "hook", "output", strings.TrimSpace(string(out)))
 		return nil
 	default:
+		slog.Warn("sing-box reload failed", "mode", reload.Mode, "error", "未知模式")
 		return fmt.Errorf("未知 reload 模式: %s", reload.Mode)
 	}
 }
