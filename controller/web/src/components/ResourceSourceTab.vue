@@ -4,9 +4,11 @@ import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
 import { jsonc, jsoncLinter } from '../editor/jsonc'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
 import { foldGutter } from '@codemirror/language'
+import { useCmTheme } from '../composables/useCmTheme'
+
+const { ext: themeExt, watchTheme } = useCmTheme()
 
 // 编辑 dialog 内的「源码」tab：显示/编辑单个资源对象 JSON（JSONC）
 // 父组件保存时：isDirty() 为 true 则用 getText() 解析作为提交体，否则用表单构建结果
@@ -33,7 +35,7 @@ onMounted(() => {
     extensions: [
       basicSetup,
       jsonc(),
-      oneDark,
+      themeExt,
       foldGutter(),
       jsoncLinter(),
       keymap.of([indentWithTab, ...defaultKeymap]),
@@ -53,6 +55,7 @@ onMounted(() => {
     ]
   })
   editor.value = new EditorView({ state, parent: editorHost.value })
+  watchTheme(() => editor.value)
 })
 
 onBeforeUnmount(() => {

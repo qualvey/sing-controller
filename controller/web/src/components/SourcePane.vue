@@ -5,10 +5,12 @@ import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
 import { jsonc, jsoncLinter, formatJsoncDoc, parseJsonc } from '../editor/jsonc'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { foldGutter } from '@codemirror/language'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
 import { api } from '../api'
+import { useCmTheme } from '../composables/useCmTheme'
+
+const { ext: themeExt, watchTheme } = useCmTheme()
 
 const props = defineProps<{
   /** 配置段点路径，如 'dns' / 'route' / 'route.rule_set' / 'inbounds' / 'certificate' */
@@ -107,7 +109,7 @@ onMounted(() => {
     extensions: [
       basicSetup,
       jsonc(),
-      oneDark,
+      themeExt,
       foldGutter(),
       jsoncLinter(),
       keymap.of([indentWithTab, { key: 'Mod-Shift-f', run: formatJsoncDoc }, ...defaultKeymap]),
@@ -121,6 +123,7 @@ onMounted(() => {
     ]
   })
   editor.value = new EditorView({ state, parent: editorHost.value })
+  watchTheme(() => editor.value)
   load()
 })
 
