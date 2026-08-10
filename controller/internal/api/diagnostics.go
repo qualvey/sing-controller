@@ -25,9 +25,13 @@ func (h *Handler) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ---------- 重复 tag ----------
+	// endpoint 与 outbound 同命名空间（outbound manager 把 endpoints 并入出站列表，manager.go:79）
 	outboundTags := map[string]int{}
 	for _, ob := range options.Outbounds {
 		outboundTags[ob.Tag]++
+	}
+	for _, ep := range options.Endpoints {
+		outboundTags[ep.Tag]++
 	}
 	inboundTags := map[string]int{}
 	for _, ib := range options.Inbounds {
@@ -37,6 +41,15 @@ func (h *Handler) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 	if options.DNS != nil {
 		for _, s := range options.DNS.Servers {
 			dnsTags[s.Tag]++
+		}
+	}
+	// route.rule_set 段定义的 rule set tag（RuleSet.Tag 可多值）
+	ruleSetTags := map[string]bool{}
+	if options.Route != nil {
+		for _, rs := range options.Route.RuleSet {
+			for _, tag := range rs.Tag {
+				ruleSetTags[tag] = true
+			}
 		}
 	}
 	for tag, n := range outboundTags {
@@ -76,11 +89,9 @@ func (h *Handler) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 			if out, ok := decoded["outbound"].(string); ok && out != "" && outboundTags[out] == 0 {
 				add("error", "route 规则 #%d 引用的 outbound 不存在: %s", i+1, out)
 			}
-			if refs, ok := decoded["rule_set"].([]any); ok {
-				for _, ref := range refs {
-					if s, ok := ref.(string); ok {
-						add("warning", "route 规则 #%d 引用的 rule_set: %s（1.14 起 rule set 以独立类型定义，请确认已配置）", i+1, s)
-					}
+			for _, ref := range ruleSetRefs(decoded) {
+				if !ruleSetTags[ref] {
+					add("error", "route 规则 #%d 引用的 rule_set 未定义（需在 route.rule_set 段配置）: %s", i+1, ref)
 				}
 			}
 		}
@@ -127,6 +138,11 @@ func (h *Handler) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 			for _, ref := range refs {
 				if dnsTags[ref] == 0 {
 					add("error", "dns 规则 #%d 引用的 server 不存在: %s", i+1, ref)
+				}
+			}
+			for _, ref := range ruleSetRefs(decoded) {
+				if !ruleSetTags[ref] {
+					add("error", "dns 规则 #%d 引用的 rule_set 未定义（需在 route.rule_set 段配置）: %s", i+1, ref)
 				}
 			}
 		}
@@ -204,6 +220,10 @@ func (h *Handler) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 			used[ob.Tag] = true
 		}
 	}
+	// endpoint 常作为独立入口/被 detour 引用，不报未使用
+	for _, ep := range options.Endpoints {
+		used[ep.Tag] = true
+	}
 	if options.DNS != nil {
 		for i := range options.DNS.Servers {
 			content, _ := json.Marshal(&options.DNS.Servers[i])
@@ -247,6 +267,26 @@ func dnsRuleCount(options option.Options) int {
 		return 0
 	}
 	return len(options.DNS.Rules)
+}
+
+// ruleSetRefs 从解码后的规则对象中提取 rule_set 引用（Listable：字符串或数组）。
+func ruleSetRefs(decoded map[string]any) []string {
+	var refs []string
+	v, ok := decoded["rule_set"]
+	if !ok {
+		return refs
+	}
+	switch t := v.(type) {
+	case string:
+		refs = append(refs, t)
+	case []any:
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				refs = append(refs, s)
+			}
+		}
+	}
+	return refs
 }
 
 // dnsRuleOutboundRefs 从解码后的规则对象中提取 server/outbound 引用（新模型 server + 旧 outbound 兼容）。
