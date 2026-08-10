@@ -5,6 +5,7 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/outbounds' },
     { path: '/inbounds', name: 'inbounds', component: () => import('./views/InboundsView.vue') },
+    { path: '/proxies', name: 'proxies', component: () => import('./views/ProxiesView.vue') },
     { path: '/outbounds', name: 'outbounds', component: () => import('./views/OutboundsView.vue') },
     { path: '/routes', name: 'routes', component: () => import('./views/RoutesView.vue') },
     { path: '/rule-sets', name: 'rule-sets', component: () => import('./views/RuleSetsView.vue') },
