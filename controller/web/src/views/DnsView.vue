@@ -6,7 +6,8 @@ import { useStatusStore } from '../stores/status'
 import {
   DNS_RULE_ACTIONS,
   DNS_RULE_FIELDS,
-  DNS_RULE_GROUPS
+  DNS_RULE_GROUPS,
+  DNS_RULE_SUMMARY_ORDER
 } from './dnsRuleFields'
 
 const statusStore = useStatusStore()
@@ -450,13 +451,11 @@ function fmtList(v: unknown): string {
   return v == null ? '—' : String(v)
 }
 
-function ruleSummary(r: Record<string, any>): string {
-  const parts: string[] = []
-  for (const k of ['inbound', 'domain_suffix', 'domain', 'ip_cidr', 'query_type', 'port']) {
-    if (r[k] != null) parts.push(`${k}=${fmtList(r[k])}`)
-  }
-  if (!parts.length) return '全部'
-  return parts.join('，')
+// 列表摘要：按源码字段表（RawDefaultDNSRule）优先级取有值字段 + 其余字段计数
+function ruleSummary(r: Record<string, any>): { items: Array<{ k: string; v: string }>; otherCount: number } {
+  const items = DNS_RULE_SUMMARY_ORDER.filter((k) => r[k] != null).map((k) => ({ k, v: fmtList(r[k]) }))
+  const otherCount = DNS_RULE_FIELDS.filter((f) => !DNS_RULE_SUMMARY_ORDER.includes(f.key) && r[f.key] != null).length
+  return { items, otherCount }
 }
 
 function ruleActionText(r: Record<string, any>): string {
@@ -510,10 +509,18 @@ onMounted(() => {
       <el-tab-pane label="规则" name="rules">
         <el-table :data="rules" v-loading="loading" border stripe>
           <el-table-column type="index" label="#" width="56" />
-          <el-table-column label="规则" min-width="280">
+          <el-table-column label="规则" min-width="300">
             <template #default="{ row }">
-              <span class="rule-text">{{ ruleSummary(row.rule) }}</span>
-              <el-tag v-if="row.rule.invert" size="small" type="warning" style="margin-left: 6px">取反</el-tag>
+              <div class="rule-cell">
+                <template v-if="ruleSummary(row.rule).items.length">
+                  <span v-for="it in ruleSummary(row.rule).items" :key="it.k" class="rule-item">
+                    <b>{{ it.k }}</b> {{ it.v }}
+                  </span>
+                  <span v-if="ruleSummary(row.rule).otherCount" class="rule-item muted">+{{ ruleSummary(row.rule).otherCount }} 项</span>
+                </template>
+                <span v-else class="rule-item muted">全部（无匹配条件）</span>
+                <el-tag v-if="row.rule.invert" size="small" type="warning" style="margin-left: 6px">取反</el-tag>
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="动作" min-width="140">
@@ -726,5 +733,21 @@ onMounted(() => {
 }
 .rule-text {
   font-size: 13px;
+}
+.rule-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rule-item {
+  font-size: 13px;
+}
+.rule-item b {
+  color: #909399;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.rule-item.muted {
+  color: #c0c4cc;
 }
 </style>

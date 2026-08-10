@@ -84,6 +84,24 @@ export const DNS_RULE_FIELDS: DnsRuleField[] = [
 
 export const DNS_RULE_FIELD_KEYS = DNS_RULE_FIELDS.map((f) => f.key)
 
+/** 列表页 DNS 规则摘要的展示优先级 */
+export const DNS_RULE_SUMMARY_ORDER = [
+  'inbound',
+  'network',
+  'protocol',
+  'query_type',
+  'domain',
+  'domain_suffix',
+  'domain_keyword',
+  'domain_regex',
+  'rule_set',
+  'ip_cidr',
+  'source_ip_cidr',
+  'port',
+  'port_range',
+  'source_port'
+]
+
 /** DNS 规则动作（option/rule_action.go DNSRuleAction） */
 export const DNS_RULE_ACTIONS = [
   { value: 'route', label: '路由到 server（默认）' },
