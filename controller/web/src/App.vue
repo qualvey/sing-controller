@@ -125,4 +125,44 @@ onMounted(() => {
   background: #f5f7fa;
   padding: 16px;
 }
+
+/* 左下角悬浮重载按钮 */
+.reload-fab {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 2000;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: #409eff;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.4);
+  transition: background 0.2s, transform 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.reload-fab:hover {
+  background: #66b1ff;
+}
+.reload-fab:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.reload-fab.spinning {
+  animation: fab-spin 1s linear infinite;
+}
+@keyframes fab-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
 </style>

@@ -180,20 +180,6 @@ const openSearch = () => {
   editor.value && openSearchPanel(editor.value)
 }
 
-// 手动重载 sing-box（settings.reload 配置触发方式）
-const reloading = ref(false)
-const reloadSingBox = async () => {
-  reloading.value = true
-  try {
-    await api.reload()
-    ElMessage.success('已触发 sing-box 重载')
-  } catch (e) {
-    ElMessage.error((e as Error).message || '重载失败')
-  } finally {
-    reloading.value = false
-  }
-}
-
 onMounted(() => {
   if (!editorHost.value) return
   const state = EditorState.create({
@@ -242,7 +228,6 @@ onBeforeUnmount(() => {
         <el-button size="small" :loading="loading" @click="loadConfig">刷新</el-button>
         <el-button size="small" @click="format">格式化</el-button>
         <el-button size="small" @click="openSearch">搜索/替换</el-button>
-        <el-button size="small" :loading="reloading" @click="reloadSingBox">重载 sing-box</el-button>
         <span class="toolbar-spacer" />
         <span class="hint">原样编辑主配置（JSONC：注释/尾逗号保留；Ctrl+F 搜索、Ctrl+Shift+F 格式化）</span>
         <el-button size="small" type="primary" :loading="saving" @click="save">保存配置</el-button>
