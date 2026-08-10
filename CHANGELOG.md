@@ -32,3 +32,11 @@
 - GET/PUT /api/config/raw 原样读写
 - 诊断页：endpoint 并入 outbound 命名空间 + rule_set 真实检查
 - DNS 规则摘要全字段
+
+## dev（未发版）
+
+- 前端接入 Tailwind CSS v4（@tailwindcss/vite 插件）
+- 导航栏激活指示条动效（借鉴 zashboard）：绝对定位指示条随路由切换弹性滑动
+  （transform 0.55s cubic-bezier(0.22,1.5,0.36,1) + width/height 0.32s），激活项文字平滑变色；
+  prefers-reduced-motion 自动降级
+- 修复：router.isReady() 后再挂载应用（整页刷新 deep-link 时 el-menu 高亮丢失）

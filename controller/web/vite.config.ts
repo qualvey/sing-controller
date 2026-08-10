@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { lezer } from '@lezer/generator/rollup'
+import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'node:path'
 
 export default defineConfig({
-  plugins: [vue(), lezer()],
+  plugins: [vue(), lezer(), tailwindcss()],
   resolve: {
     alias: {
       // 强制 @codemirror/state 单文件：rollup 可能因 ESM/CJS 双入口把它解析成

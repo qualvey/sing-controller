@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -52,10 +52,72 @@ const menuItems = [
 
 onMounted(() => {
   statusStore.refresh()
+  syncTabIndicator()
+  navResizeObserver = new ResizeObserver(() => syncTabIndicator())
+  if (navRef.value) navResizeObserver.observe(navRef.value)
 })
 onBeforeUnmount(() => {
   mql.removeEventListener('change', onMqlChange)
+  navResizeObserver?.disconnect()
 })
+
+// 导航激活指示条（zashboard 风格：弹性滑动过渡）
+const navRef = ref<HTMLElement>()
+const indicatorReady = ref(false)
+const indicatorStyle = ref({
+  height: '0px',
+  opacity: '0',
+  transform: 'translate3d(0, 0, 0)',
+  width: '0px'
+})
+let navResizeObserver: ResizeObserver | undefined
+
+let indicatorRetried = false
+const syncTabIndicator = () => {
+  const nav = navRef.value
+  if (!nav) return
+  // 在原生容器内查找激活菜单项（el-menu 是组件实例，无 querySelector）
+  const activeTab = nav.querySelector<HTMLElement>('.el-menu-item.is-active')
+  if (!activeTab) {
+    // 时序边缘（deep-link 整页加载时 active 可能晚一拍）：延迟重试一次
+    if (!indicatorRetried) {
+      indicatorRetried = true
+      setTimeout(() => {
+        indicatorRetried = false
+        syncTabIndicator()
+      }, 80)
+    }
+    return
+  }
+  const navRect = nav.getBoundingClientRect()
+  const tabRect = activeTab.getBoundingClientRect()
+  indicatorStyle.value = {
+    height: `${tabRect.height}px`,
+    opacity: '1',
+    transform: `translate3d(${tabRect.left - navRect.left}px, ${tabRect.top - navRect.top}px, 0)`,
+    width: `${tabRect.width}px`
+  }
+}
+
+// 路由切换 / 折叠状态变化时重算指示条位置
+watch(
+  () => route.path,
+  async () => {
+    await nextTick()
+    syncTabIndicator()
+    requestAnimationFrame(() => {
+      indicatorReady.value = true
+    })
+  },
+  { immediate: true }
+)
+watch(
+  [menuCollapse, mobileExpanded],
+  async () => {
+    await nextTick()
+    syncTabIndicator()
+  }
+)
 
 // 重载 sing-box（左下角全局悬浮按钮，触发方式由 settings.reload 配置）
 const reloadSingBox = async () => {
@@ -82,19 +144,28 @@ const onNavSelect = () => {
     <el-aside :width="asideWidth" class="app-aside" :class="{ 'aside-expanded': isMobile && mobileExpanded }">
       <div v-if="!isMobile || mobileExpanded" class="logo">sing-box <span class="logo-sub">WebUI</span></div>
       <div v-else class="logo logo-mini">SB</div>
-      <el-menu
-        :default-active="route.path"
-        router
-        class="app-menu"
-        :collapse="menuCollapse"
-        :collapse-transition="false"
-        @select="onNavSelect"
-      >
-        <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <template #title>{{ item.label }}</template>
-        </el-menu-item>
-      </el-menu>
+      <div ref="navRef" class="relative min-h-0 flex-1">
+        <!-- 激活指示条（zashboard 风格滑动动效） -->
+        <div
+          aria-hidden="true"
+          class="sidebar-tab-indicator"
+          :class="{ 'sidebar-tab-indicator-ready': indicatorReady }"
+          :style="indicatorStyle"
+        />
+        <el-menu
+          :default-active="route.path"
+          router
+          class="app-menu"
+          :collapse="menuCollapse"
+          :collapse-transition="false"
+          @select="onNavSelect"
+        >
+          <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <template #title>{{ item.label }}</template>
+          </el-menu-item>
+        </el-menu>
+      </div>
     </el-aside>
 
     <!-- 移动端展开遮罩：点击收起侧边栏 -->
@@ -173,17 +244,53 @@ const onNavSelect = () => {
   border-right: none;
   background: transparent;
   flex: 1;
+  position: relative;
+  z-index: 1;
 }
 .app-menu :deep(.el-menu-item) {
   color: #a6b0bf;
+  position: relative;
+  z-index: 1;
+  margin: 2px 6px;
+  border-radius: 8px;
 }
 .app-menu :deep(.el-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
 .app-menu :deep(.el-menu-item.is-active) {
   color: #fff;
-  background: #1890ff;
+  background: transparent;
+}
+/* 折叠态：去掉边距，图标垂直居中 */
+.app-menu.el-menu--collapse :deep(.el-menu-item) {
+  margin: 2px 0;
+  border-radius: 8px;
+}
+
+/* zashboard 风格：导航激活指示条（弹性滑动过渡） */
+.sidebar-tab-indicator {
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  will-change: transform, width, height;
+  pointer-events: none;
+  z-index: 0;
+}
+.sidebar-tab-indicator-ready {
+  transition:
+    transform 0.55s cubic-bezier(0.22, 1.5, 0.36, 1),
+    width 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    height 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 0.15s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-tab-indicator-ready {
+    transition: none;
+  }
 }
 /* 折叠态菜单项居中 */
 .app-menu:not(.el-menu--collapse) {
@@ -191,8 +298,7 @@ const onNavSelect = () => {
 }
 .app-menu.el-menu--collapse {
   width: 64px;
-}
-.app-body {
+}.app-body {
   min-width: 0;
 }
 .app-header {

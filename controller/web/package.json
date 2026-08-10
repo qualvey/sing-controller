@@ -19,11 +19,13 @@
     "@element-plus/icons-vue": "^2.3.2",
     "@lezer/highlight": "^1.2.3",
     "@lezer/lr": "^1.4.10",
+    "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.6.0",
     "codemirror": "^6.0.2",
     "element-plus": "^2.8.0",
     "jsonc-parser": "^3.3.1",
     "pinia": "^2.1.0",
+    "tailwindcss": "^4.3.3",
     "vue": "^3.4.0",
     "vue-router": "^4.3.0"
   },

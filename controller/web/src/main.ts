@@ -15,4 +15,6 @@ app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 // 主题初始化（html.dark class + localStorage 恢复）
 useThemeStore().init()
-app.mount('#app')
+// 等 router 就绪再挂载：el-menu 的 default-active 需要拿到正确的初始路由
+// （否则整页刷新 deep-link 时高亮/指示条丢失）
+router.isReady().then(() => app.mount('#app'))
