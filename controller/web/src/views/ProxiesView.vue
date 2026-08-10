@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { VideoPlay, CaretRight, Lightning } from '@element-plus/icons-vue'
 import { subscribeGroups, selectOutbound, uRLTest, setClashMode } from '../api/singbox'
+import { fetchProxyLatency } from '../api/clash'
 import type { Groups, Group } from '@/gen/daemon/started_service_pb'
 import { useRuntimeStore } from '../stores/runtime'
 
@@ -128,10 +129,12 @@ const pick = async (group: string, node: string) => {
   }
 }
 
+// 单节点测速：gRPC URLTest 只接受组，单节点走 clash API（/proxies/{name}/delay）
 const testOne = async (tag: string, name: string) => {
   testing.value = new Set(testing.value).add(tag + ':' + name)
   try {
-    await uRLTest(name)
+    const { data } = await fetchProxyLatency(name, testUrl.value || DEFAULT_TEST_URL, 5000)
+    latencyMap.value[name] = data.delay
   } catch {
     latencyMap.value[name] = -1
   } finally {
@@ -141,40 +144,33 @@ const testOne = async (tag: string, name: string) => {
   }
 }
 
+// 组测速：URLTest RPC 一次传组名（服务端对组内节点批量测速，结果经 SubscribeGroups 流推送）
 const testGroup = async (g: Group) => {
-  const marks = new Set<string>()
-  const s = new Set(testing.value)
-  ;(g.items || []).forEach((item) => {
-    s.add(g.tag + ':' + item.tag)
-    marks.add(g.tag + ':' + item.tag)
-  })
-  testing.value = s
+  if (isTesting(g.tag)) return
+  testing.value = new Set(testing.value).add(g.tag)
   try {
-    await Promise.all([...marks].map((m) => uRLTest(m.split(':').slice(1).join(':'))))
+    await uRLTest(g.tag)
   } catch (e) {
     ElMessage.error((e as Error).message || '测速失败')
   } finally {
-    const s2 = new Set(testing.value)
-    marks.forEach((m) => s2.delete(m))
-    testing.value = s2
+    const s = new Set(testing.value)
+    s.delete(g.tag)
+    testing.value = s
   }
 }
 
+// 全部测速：对所有组逐个 URLTest
 const testAll = async () => {
-  const marks = new Set<string>()
   const s = new Set(testing.value)
-  allNodes.value.forEach((item) => {
-    s.add('__all__:' + item.tag)
-    marks.add(item.tag)
-  })
+  groups.value.forEach((g) => s.add('__all__:' + g.tag))
   testing.value = s
   try {
-    await Promise.all([...marks].map((name) => uRLTest(name)))
+    await Promise.all(groups.value.map((g) => uRLTest(g.tag)))
   } catch (e) {
     ElMessage.error((e as Error).message || '测速失败')
   } finally {
     const s2 = new Set(testing.value)
-    marks.forEach((m) => s2.delete('__all__:' + m))
+    groups.value.forEach((g) => s2.delete('__all__:' + g.tag))
     testing.value = s2
   }
 }
@@ -237,13 +233,13 @@ onBeforeUnmount(() => {
       </span>
     </div>
 
-    <!-- 代理组卡片 -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <!-- 代理组卡片：CSS 多列瀑布流（展开只影响本列，不拉扯水平卡片） -->
+    <div class="columns-1 gap-4 md:columns-2">
       <div
         v-for="g in groups"
         :key="g.tag"
         :ref="(el) => { if (el) cardRefs.push(el as HTMLElement) }"
-        class="group-card overflow-hidden rounded-xl border border-[var(--el-border-color)] bg-[var(--el-bg-color)] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+        class="group-card mb-4 break-inside-avoid overflow-hidden rounded-xl border border-[var(--el-border-color)] bg-[var(--el-bg-color)] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
       >
         <!-- 头部：点击折叠 -->
         <div class="flex cursor-pointer items-center gap-2.5 px-4 py-3" @click="toggleGroup(g.tag)">

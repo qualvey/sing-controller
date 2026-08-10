@@ -154,7 +154,7 @@ const onNavSelect = () => {
     <el-aside :width="asideWidth" class="app-aside" :class="{ 'aside-expanded': isMobile && mobileExpanded }">
       <div v-if="!isMobile || mobileExpanded" class="logo">sing-box <span class="logo-sub">WebUI</span></div>
       <div v-else class="logo logo-mini">SB</div>
-      <div ref="navRef" class="relative min-h-0 flex-1 overflow-y-auto">
+      <div ref="navRef" class="relative min-h-0 flex-1 overflow-y-auto" @scroll.passive="syncTabIndicator">
         <!-- 激活指示条（zashboard 风格滑动动效） -->
         <div
           aria-hidden="true"
@@ -282,9 +282,15 @@ html.dark .app-menu :deep(.el-menu-item) {
   background: rgba(0, 0, 0, 0.06);
   color: #303133;
 }
+.app-menu :deep(.el-menu-item.is-active:hover) {
+  background: transparent;
+}
 html.dark .app-menu :deep(.el-menu-item:hover) {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
+}
+html.dark .app-menu :deep(.el-menu-item.is-active:hover) {
+  background: transparent;
 }
 .app-menu :deep(.el-menu-item.is-active) {
   color: #1890ff;
