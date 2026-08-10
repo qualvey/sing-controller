@@ -6,6 +6,8 @@ const router = createRouter({
     { path: '/', redirect: '/outbounds' },
     { path: '/inbounds', name: 'inbounds', component: () => import('./views/InboundsView.vue') },
     { path: '/proxies', name: 'proxies', component: () => import('./views/ProxiesView.vue') },
+    { path: '/connections', name: 'connections', component: () => import('./views/ConnectionsView.vue') },
+    { path: '/logs', name: 'logs', component: () => import('./views/LogsView.vue') },
     { path: '/outbounds', name: 'outbounds', component: () => import('./views/OutboundsView.vue') },
     { path: '/routes', name: 'routes', component: () => import('./views/RoutesView.vue') },
     { path: '/rule-sets', name: 'rule-sets', component: () => import('./views/RuleSetsView.vue') },

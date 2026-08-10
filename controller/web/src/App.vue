@@ -5,6 +5,8 @@ import { ElMessage } from 'element-plus'
 import {
   Connection,
   Odometer,
+  Switch,
+  Tickets,
   Iphone,
   Guide,
   CollectionTag,
@@ -42,6 +44,8 @@ const menuCollapse = computed(() => isMobile.value && !mobileExpanded.value)
 const menuItems = [
   { path: '/inbounds', label: 'Inbounds', icon: Connection },
   { path: '/proxies', label: 'Proxies', icon: Odometer },
+  { path: '/connections', label: 'Connections', icon: Switch },
+  { path: '/logs', label: 'Logs', icon: Tickets },
   { path: '/outbounds', label: 'Outbounds', icon: Iphone },
   { path: '/routes', label: 'Routes', icon: Guide },
   { path: '/rule-sets', label: '规则集', icon: CollectionTag },

@@ -1,67 +1,60 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, VideoPlay, CaretRight, CaretBottom } from '@element-plus/icons-vue'
-import {
-  fetchProxies,
-  selectProxy,
-  fetchGroupLatency,
-  fetchProxyLatency,
-  patchConfigs,
-  type ProxyItem
-} from '../api/clash'
+import { VideoPlay, CaretRight, CaretBottom } from '@element-plus/icons-vue'
+import { subscribeGroups, selectOutbound, uRLTest, setClashMode } from '../api/singbox'
+import type { Groups, Group } from '@/gen/daemon/started_service_pb'
 
 const DEFAULT_TEST_URL = 'http://www.gstatic.com/generate_204'
-const GROUP_TYPES = ['Selector', 'URLTest', 'Fallback', 'LoadBalance']
 
-const loading = ref(false)
-const proxies = ref<Record<string, ProxyItem>>({})
-const expanded = ref<Set<string>>(new Set())
+const groups = ref<Group[]>([])
 const latencyMap = ref<Record<string, number>>({})
-const testingGroup = ref<string | null>(null)
-const testingNode = ref<string | null>(null)
+const expanded = ref<Set<string>>(new Set())
+const testing = ref<Set<string>>(new Set())
+const connected = ref(false)
+const closed = ref(false)
 const testUrl = ref(localStorage.getItem('proxy-test-url') || DEFAULT_TEST_URL)
 
-const groups = computed(() =>
-  Object.values(proxies.value).filter((p) => GROUP_TYPES.includes(p.type))
-)
-const standaloneNodes = computed(() =>
-  Object.values(proxies.value).filter((p) => !GROUP_TYPES.includes(p.type))
-)
+const allNodes = computed(() => groups.value.flatMap((g) => g.items))
+const totalNodes = computed(() => allNodes.value.length)
 
-const proxiesMode = ref('rule')
-const load = async () => {
-  loading.value = true
-  try {
-    const { data } = await fetchProxies()
-    proxies.value = data.proxies || {}
-    try {
-      const cfg = await fetchConfigsSafe()
-      if (cfg.mode) proxiesMode.value = cfg.mode
-    } catch {
-      // 模式读取失败忽略
+const syncLatencies = (gs: Group[]) => {
+  const next: Record<string, number> = {}
+  for (const g of gs) {
+    if (g.items) {
+      for (const item of g.items) {
+        if (item.urlTestDelay > 0) next[item.tag] = item.urlTestDelay
+      }
     }
-  } catch (e) {
-    ElMessage.error((e as Error).message || '加载代理失败')
-  } finally {
-    loading.value = false
+  }
+  latencyMap.value = next
+}
+
+const handleGroups = (gs: Groups) => {
+  if (closed.value) return
+  groups.value = gs.group || []
+  syncLatencies(groups.value)
+  connected.value = true
+}
+
+const run = async () => {
+  try {
+    for await (const g of subscribeGroups()) {
+      handleGroups(g)
+    }
+  } catch {
+    connected.value = false
   }
 }
 
-const fetchConfigsSafe = async () => {
-  const { fetchConfigs } = await import('../api/clash')
-  const { data } = await fetchConfigs()
-  return data
-}
-
-const toggleGroup = (name: string) => {
+const toggleGroup = (tag: string) => {
   const s = new Set(expanded.value)
-  if (s.has(name)) s.delete(name)
-  else s.add(name)
+  if (s.has(tag)) s.delete(tag)
+  else s.add(tag)
   expanded.value = s
 }
 
-const isExpanded = (name: string) => expanded.value.has(name)
+const isExpanded = (tag: string) => expanded.value.has(tag)
 
 const latencyColor = (d: number | undefined) => {
   if (d === undefined || d < 0) return ''
@@ -74,58 +67,73 @@ const formatLatency = (d: number | undefined) => (d === undefined || d < 0 ? '�
 
 const pick = async (group: string, node: string) => {
   try {
-    await selectProxy(group, node)
-    const g = proxies.value[group]
-    if (g) g.now = node
+    await selectOutbound(group, node)
   } catch (e) {
     ElMessage.error((e as Error).message || '切换失败')
   }
 }
 
-const testGroup = async (name: string) => {
-  if (testingGroup.value) return
-  testingGroup.value = name
+const testOne = async (tag: string, name: string) => {
+  testing.value = new Set(testing.value).add(tag + ':' + name)
   try {
-    const { data } = await fetchGroupLatency(name, testUrl.value || DEFAULT_TEST_URL, 5000)
-    Object.assign(latencyMap.value, data)
-  } catch (e) {
-    ElMessage.error((e as Error).message || '测速失败')
-  } finally {
-    testingGroup.value = null
-  }
-}
-
-const testAllGroups = async () => {
-  if (testingGroup.value) return
-  testingGroup.value = '__all__'
-  try {
-    const results = await Promise.all(
-      groups.value.map((g) => fetchGroupLatency(g.name, testUrl.value || DEFAULT_TEST_URL, 5000))
-    )
-    results.forEach((r) => Object.assign(latencyMap.value, r.data))
-  } catch (e) {
-    ElMessage.error((e as Error).message || '测速失败')
-  } finally {
-    testingGroup.value = null
-  }
-}
-
-const testNode = async (name: string) => {
-  testingNode.value = name
-  try {
-    const { data } = await fetchProxyLatency(name, testUrl.value || DEFAULT_TEST_URL, 5000)
-    latencyMap.value[name] = data.delay
+    await uRLTest(name)
   } catch {
     latencyMap.value[name] = -1
   } finally {
-    testingNode.value = null
+    const s = new Set(testing.value)
+    s.delete(tag + ':' + name)
+    testing.value = s
   }
+}
+
+const testGroup = async (g: Group) => {
+  const marks = new Set<string>()
+  const s = new Set(testing.value)
+  ;(g.items || []).forEach((item) => {
+    s.add(g.tag + ':' + item.tag)
+    marks.add(g.tag + ':' + item.tag)
+  })
+  testing.value = s
+  try {
+    await Promise.all(
+      [...marks].map((m) => uRLTest(m.split(':').slice(1).join(':')))
+    )
+  } catch (e) {
+    ElMessage.error((e as Error).message || '测速失败')
+  } finally {
+    const s2 = new Set(testing.value)
+    marks.forEach((m) => s2.delete(m))
+    testing.value = s2
+  }
+}
+
+const testAll = async () => {
+  const marks = new Set<string>()
+  const s = new Set(testing.value)
+  allNodes.value.forEach((item) => {
+    s.add('__all__:' + item.tag)
+    marks.add(item.tag)
+  })
+  testing.value = s
+  try {
+    await Promise.all([...marks].map((name) => uRLTest(name)))
+  } catch (e) {
+    ElMessage.error((e as Error).message || '测速失败')
+  } finally {
+    const s2 = new Set(testing.value)
+    marks.forEach((m) => s2.delete('__all__:' + m))
+    testing.value = s2
+  }
+}
+
+const isTesting = (tag: string, name?: string) => {
+  const key = name ? `${tag}:${name}` : tag
+  return testing.value.has(key)
 }
 
 const changeMode = async (m: string) => {
   try {
-    await patchConfigs({ mode: m })
-    proxiesMode.value = m
+    await setClashMode(m)
   } catch (e) {
     ElMessage.error((e as Error).message || '切换模式失败')
   }
@@ -136,9 +144,10 @@ const saveTestUrl = () => {
 }
 
 onMounted(() => {
-  void load()
+  void run()
 })
 onBeforeUnmount(() => {
+  closed.value = true
   saveTestUrl()
 })
 </script>
@@ -147,7 +156,7 @@ onBeforeUnmount(() => {
   <div class="flex flex-col gap-4">
     <!-- 工具栏 -->
     <div class="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)] px-4 py-3">
-      <el-select v-model="proxiesMode" size="small" style="width: 130px" @change="changeMode">
+      <el-select size="small" style="width: 130px" placeholder="模式" @change="changeMode">
         <el-option label="Rule" value="rule" />
         <el-option label="Global" value="global" />
         <el-option label="Direct" value="direct" />
@@ -159,17 +168,12 @@ onBeforeUnmount(() => {
         style="width: 260px"
         @change="saveTestUrl"
       />
-      <el-button
-        size="small"
-        :icon="VideoPlay"
-        :loading="testingGroup === '__all__'"
-        @click="testAllGroups"
-      >
+      <el-button size="small" :icon="VideoPlay" :loading="testing.size > 0" @click="testAll">
         全部测速
       </el-button>
-      <el-button size="small" :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
-      <span class="ml-auto text-xs text-[var(--el-text-color-secondary)]">
-        {{ groups.length }} 组 · {{ standaloneNodes.length }} 节点
+      <span class="ml-auto flex items-center gap-2 text-xs text-[var(--el-text-color-secondary)]">
+        <span class="inline-block h-2 w-2 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></span>
+        {{ connected ? `${groups.length} 组 · ${totalNodes} 节点` : 'service API 不可用' }}
       </span>
     </div>
 
@@ -177,51 +181,47 @@ onBeforeUnmount(() => {
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       <div
         v-for="g in groups"
-        :key="g.name"
+        :key="g.tag"
         class="rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)] shadow-sm transition-shadow hover:shadow-md"
       >
-        <div
-          class="flex cursor-pointer items-center gap-2 px-4 py-3"
-          @click="toggleGroup(g.name)"
-        >
-          <el-icon class="text-[var(--el-color-primary)]"><CaretRight v-if="!isExpanded(g.name)" /><CaretBottom v-else /></el-icon>
-          <span class="flex-1 truncate text-sm font-semibold" :title="g.name">{{ g.name }}</span>
+        <div class="flex cursor-pointer items-center gap-2 px-4 py-3" @click="toggleGroup(g.tag)">
+          <el-icon class="text-[var(--el-color-primary)]">
+            <CaretRight v-if="!isExpanded(g.tag)" /><CaretBottom v-else />
+          </el-icon>
+          <span class="flex-1 truncate text-sm font-semibold" :title="g.tag">{{ g.tag }}</span>
           <span
             class="rounded px-1.5 py-0.5 text-xs text-[var(--el-color-primary)]"
             style="background: color-mix(in srgb, var(--el-color-primary) 12%, transparent)"
           >{{ g.type }}</span>
-          <span class="w-16 text-right text-xs" :class="latencyColor(latencyMap[g.name])">
-            {{ formatLatency(latencyMap[g.name]) }}
+          <span class="w-16 text-right text-xs" :class="latencyColor(latencyMap[g.selected])">
+            {{ formatLatency(latencyMap[g.selected]) }}
           </span>
-          <el-button
-            size="small"
-            text
-            :loading="testingGroup === g.name"
-            @click.stop="testGroup(g.name)"
-          >测速</el-button>
+          <el-button size="small" text :loading="isTesting(g.tag)" @click.stop="testGroup(g)">
+            测速
+          </el-button>
         </div>
 
         <!-- 展开：节点列表 -->
-        <div v-if="isExpanded(g.name)" class="border-t border-[var(--el-border-color)] p-3">
+        <div v-if="isExpanded(g.tag)" class="border-t border-[var(--el-border-color)] p-3">
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <div
-              v-for="node in g.all || []"
-              :key="node"
+              v-for="item in g.items"
+              :key="item.tag"
               class="flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors"
               :class="
-                node === g.now
+                item.tag === g.selected
                   ? 'border-[var(--el-color-primary)] bg-[color-mix(in_srgb,var(--el-color-primary)_10%,transparent)]'
                   : 'border-[var(--el-border-color)] hover:border-[var(--el-color-primary)]'
               "
-              @click="pick(g.name, node)"
+              @click="pick(g.tag, item.tag)"
             >
-              <span class="flex-1 truncate" :title="node">{{ node }}</span>
-              <span :class="latencyColor(latencyMap[node])">{{ formatLatency(latencyMap[node]) }}</span>
+              <span class="flex-1 truncate" :title="item.tag">{{ item.tag }}</span>
+              <span :class="latencyColor(latencyMap[item.tag])">{{ formatLatency(latencyMap[item.tag]) }}</span>
               <el-button
                 size="small"
                 text
-                :loading="testingNode === node"
-                @click.stop="testNode(node)"
+                :loading="isTesting(g.tag, item.tag)"
+                @click.stop="testOne(g.tag, item.tag)"
               >↻</el-button>
             </div>
           </div>
@@ -229,21 +229,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- 未分组节点 -->
-    <div v-if="standaloneNodes.length" class="rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)] px-4 py-3">
-      <div class="mb-2 text-sm font-semibold">节点</div>
-      <div class="flex flex-wrap gap-2">
-        <span
-          v-for="n in standaloneNodes"
-          :key="n.name"
-          class="inline-flex items-center gap-1.5 rounded-md border border-[var(--el-border-color)] px-2.5 py-1 text-xs"
-        >
-          {{ n.name }}
-          <span :class="latencyColor(latencyMap[n.name])">{{ formatLatency(latencyMap[n.name]) }}</span>
-        </span>
-      </div>
-    </div>
-
-    <el-empty v-if="!loading && !groups.length && !standaloneNodes.length" description="暂无代理（clash API 未配置或核心未启动）" />
+    <el-empty v-if="connected && !groups.length" description="无代理组（配置里没有 selector/urltest 等组）" />
+    <el-empty v-else-if="!connected" description="service API 未配置或不可用（sing-box 需启用 services[type=api]）" />
   </div>
 </template>
