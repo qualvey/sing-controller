@@ -31,6 +31,24 @@ interface InboundForm {
   listen: string
   listen_port?: number
   users: { username: string; password: string }[]
+  // tuic
+  tuicUsers: { name: string; uuid: string; password: string }[]
+  congestionControl: string
+  authTimeout: string
+  heartbeat: string
+  zeroRTT: boolean
+  tlsEnabled: boolean
+  serverName: string
+  insecure: boolean
+  certificatePath: string
+  keyPath: string
+  alpn: string
+  minVersion: string
+  maxVersion: string
+  idleTimeout: string
+  keepAlivePeriod: string
+  initialPacketSize: number
+  disablePathMTU: boolean
 }
 
 const form = reactive<InboundForm>({
@@ -39,9 +57,32 @@ const form = reactive<InboundForm>({
   listen: '',
   listen_port: undefined,
   users: [{ username: '', password: '' }],
+  tuicUsers: [{ name: '', uuid: '', password: '' }],
+  congestionControl: 'cubic',
+  authTimeout: '',
+  heartbeat: '',
+  zeroRTT: false,
+  tlsEnabled: false,
+  serverName: '',
+  insecure: false,
+  certificatePath: '',
+  keyPath: '',
+  alpn: '',
+  minVersion: '',
+  maxVersion: '',
+  idleTimeout: '',
+  keepAlivePeriod: '',
+  initialPacketSize: 1452,
+  disablePathMTU: false,
 })
 
 const isMixed = computed(() => form.type === 'mixed')
+const isTuic = computed(() => form.type === 'tuic')
+
+const genUuid = () => {
+  const u = form.tuicUsers[form.tuicUsers.length - 1]
+  if (u) u.uuid = crypto.randomUUID()
+}
 
 const rules = computed<FormRules>(() => {
   const base: FormRules = {
@@ -87,6 +128,33 @@ function fillForm(obj: Inbound) {
       : [{ username: '', password: '' }]
   } else {
     form.users = []
+  }
+  if (form.type === 'tuic') {
+    const t = (obj ?? {}) as Record<string, unknown>
+    form.tuicUsers = Array.isArray(t.users)
+      ? (t.users as Record<string, unknown>[]).map((u) => ({
+          name: str(u.name),
+          uuid: str(u.uuid),
+          password: str(u.password)
+        }))
+      : [{ name: '', uuid: '', password: '' }]
+    form.congestionControl = str(t.congestion_control) || 'cubic'
+    form.authTimeout = str(t.auth_timeout)
+    form.heartbeat = str(t.heartbeat)
+    form.zeroRTT = Boolean(t.zero_rtt_handshake)
+    const tls = (t.tls ?? {}) as Record<string, unknown>
+    form.tlsEnabled = Boolean(tls.enabled)
+    form.serverName = str(tls.server_name)
+    form.insecure = Boolean(tls.insecure)
+    form.certificatePath = str(tls.certificate_path)
+    form.keyPath = str(tls.key_path)
+    form.alpn = Array.isArray(tls.alpn) ? (tls.alpn as string[]).join(',') : ''
+    form.minVersion = str(tls.min_version)
+    form.maxVersion = str(tls.max_version)
+    form.idleTimeout = str(t.idle_timeout)
+    form.keepAlivePeriod = str(t.keep_alive_period)
+    form.initialPacketSize = typeof t.initial_packet_size === 'number' ? t.initial_packet_size : 1452
+    form.disablePathMTU = Boolean(t.disable_path_mtu_discovery)
   }
 }
 
@@ -199,6 +267,33 @@ function buildBody(): Inbound {
       throw new Error('用户名和密码需同时填写')
     }
     if (users.length) body.users = users
+  }
+  if (form.type === 'tuic') {
+    const users = form.tuicUsers
+      .map((u) => ({ name: u.name.trim(), uuid: u.uuid.trim(), password: u.password.trim() }))
+      .filter((u) => u.uuid || u.password)
+    if (users.some((u) => !u.uuid || !u.password)) {
+      throw new Error('tuic 用户必须填写 uuid 和 password')
+    }
+    if (users.length) body.users = users
+    if (form.congestionControl) body.congestion_control = form.congestionControl
+    if (form.authTimeout.trim()) body.auth_timeout = form.authTimeout.trim()
+    if (form.heartbeat.trim()) body.heartbeat = form.heartbeat.trim()
+    if (form.zeroRTT) body.zero_rtt_handshake = true
+    const tls: Record<string, unknown> = {}
+    if (form.tlsEnabled) tls.enabled = true
+    if (form.serverName.trim()) tls.server_name = form.serverName.trim()
+    if (form.insecure) tls.insecure = true
+    if (form.certificatePath.trim()) tls.certificate_path = form.certificatePath.trim()
+    if (form.keyPath.trim()) tls.key_path = form.keyPath.trim()
+    if (form.alpn.trim()) tls.alpn = form.alpn.split(',').map((s) => s.trim()).filter(Boolean)
+    if (form.minVersion) tls.min_version = form.minVersion
+    if (form.maxVersion) tls.max_version = form.maxVersion
+    if (Object.keys(tls).length) body.tls = tls
+    if (form.idleTimeout.trim()) body.idle_timeout = form.idleTimeout.trim()
+    if (form.keepAlivePeriod.trim()) body.keep_alive_period = form.keepAlivePeriod.trim()
+    if (form.initialPacketSize > 0) body.initial_packet_size = form.initialPacketSize
+    if (form.disablePathMTU) body.disable_path_mtu_discovery = true
   }
   body.type = form.type
   if (!body.tag) body.tag = form.tag.trim()
@@ -342,6 +437,93 @@ onMounted(async () => {
           </el-form-item>
           <el-form-item>
             <el-button type="primary" plain @click="form.users.push({ username: '', password: '' })">添加用户</el-button>
+          </el-form-item>
+        </template>
+
+        <!-- tuic：完整字段表单 -->
+        <template v-else-if="isTuic">
+          <el-form-item label="listen" prop="listen">
+            <el-input v-model="form.listen" placeholder="监听地址，如 0.0.0.0" />
+          </el-form-item>
+          <el-form-item label="listen_port" prop="listen_port">
+            <div class="row">
+              <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
+              <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
+            </div>
+          </el-form-item>
+          <el-divider content-position="left">用户</el-divider>
+          <el-form-item v-for="(u, i) in form.tuicUsers" :key="i" :label="'用户 ' + (i + 1)">
+            <div class="user-row">
+              <el-input v-model="u.name" placeholder="名称(可选)" style="width: 100px" />
+              <el-input v-model="u.uuid" placeholder="UUID" />
+              <el-input v-model="u.password" type="password" show-password placeholder="密码" />
+              <el-button type="danger" link @click="form.tuicUsers.splice(i, 1)">删除</el-button>
+            </div>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" plain @click="form.tuicUsers.push({ name: '', uuid: '', password: '' })">添加用户</el-button>
+            <el-button text size="small" @click="genUuid()">生成 UUID</el-button>
+          </el-form-item>
+          <el-divider content-position="left">协议</el-divider>
+          <el-form-item label="拥塞控制">
+            <el-select v-model="form.congestionControl" style="width: 100%">
+              <el-option label="cubic" value="cubic" />
+              <el-option label="new_reno" value="new_reno" />
+              <el-option label="bbr" value="bbr" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="认证超时">
+            <el-input v-model="form.authTimeout" placeholder="如 3s" />
+          </el-form-item>
+          <el-form-item label="心跳间隔">
+            <el-input v-model="form.heartbeat" placeholder="如 10s" />
+          </el-form-item>
+          <el-form-item label="0-RTT 握手">
+            <el-switch v-model="form.zeroRTT" />
+          </el-form-item>
+          <el-divider content-position="left">TLS</el-divider>
+          <el-form-item label="启用 TLS">
+            <el-switch v-model="form.tlsEnabled" />
+          </el-form-item>
+          <template v-if="form.tlsEnabled">
+            <el-form-item label="server_name">
+              <el-input v-model="form.serverName" placeholder="证书域名" />
+            </el-form-item>
+            <el-form-item label="忽略校验">
+              <el-switch v-model="form.insecure" />
+            </el-form-item>
+            <el-form-item label="证书路径">
+              <el-input v-model="form.certificatePath" placeholder="/etc/sing-box/cert.pem" />
+            </el-form-item>
+            <el-form-item label="私钥路径">
+              <el-input v-model="form.keyPath" placeholder="/etc/sing-box/key.pem" />
+            </el-form-item>
+            <el-form-item label="ALPN">
+              <el-input v-model="form.alpn" placeholder="h3，逗号分隔多个" />
+            </el-form-item>
+            <el-form-item label="TLS 版本">
+              <div class="row">
+                <el-select v-model="form.minVersion" placeholder="最小" style="width: 50%">
+                  <el-option v-for="v in ['1.0', '1.1', '1.2', '1.3']" :key="v" :label="v" :value="v" />
+                </el-select>
+                <el-select v-model="form.maxVersion" placeholder="最大" style="width: 50%">
+                  <el-option v-for="v in ['1.0', '1.1', '1.2', '1.3']" :key="v" :label="v" :value="v" />
+                </el-select>
+              </div>
+            </el-form-item>
+          </template>
+          <el-divider content-position="left">QUIC</el-divider>
+          <el-form-item label="空闲超时">
+            <el-input v-model="form.idleTimeout" placeholder="如 30s" />
+          </el-form-item>
+          <el-form-item label="保活周期">
+            <el-input v-model="form.keepAlivePeriod" placeholder="如 15s" />
+          </el-form-item>
+          <el-form-item label="初始包大小">
+            <el-input-number v-model="form.initialPacketSize" :min="0" :max="10000" controls-position="right" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="禁用 MTU 发现">
+            <el-switch v-model="form.disablePathMTU" />
           </el-form-item>
         </template>
 
