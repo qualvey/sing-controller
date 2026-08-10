@@ -7,7 +7,9 @@ import {
   DNS_RULE_ACTIONS,
   DNS_RULE_FIELDS,
   DNS_RULE_GROUPS,
-  DNS_RULE_SUMMARY_ORDER
+  DNS_RULE_SUMMARY_ORDER,
+  DNS_RULE_TYPES,
+  LOGICAL_MODES
 } from './dnsRuleFields'
 
 const statusStore = useStatusStore()
@@ -207,8 +209,12 @@ const removeServer = async (row: Record<string, any>) => {
 }
 
 // ---------- DNS 规则 ----------
-// 规则表单：字段表驱动（含 json 类型字段的字段级 JSON 输入），无附加字段兜底
+// 规则表单：字段表驱动（含 json 类型字段的字段级 JSON 输入），无附加字段兜底；
+// 支持 default（匹配字段）与 logical（and/or 嵌套子规则）两种类型（option/rule_dns.go 多态）
 const ruleForm = reactive<Record<string, any>>({
+  ruleType: 'default',
+  mode: 'and',
+  rulesJson: '',
   action: 'route',
   server: '',
   speculative: false,
@@ -224,6 +230,9 @@ for (const f of DNS_RULE_FIELDS) {
 }
 
 const resetRuleForm = () => {
+  ruleForm.ruleType = 'default'
+  ruleForm.mode = 'and'
+  ruleForm.rulesJson = ''
   ruleForm.action = 'route'
   ruleForm.server = ''
   ruleForm.speculative = false
@@ -249,6 +258,22 @@ function parseJsonField(text: string, label: string): unknown {
 
 function buildDnsRule(): Record<string, any> {
   const rule: Record<string, any> = {}
+  // logical 类型：mode + 嵌套子规则（JSON）+ 共用 action
+  if (ruleForm.ruleType === 'logical') {
+    rule.type = 'logical'
+    rule.mode = ruleForm.mode || 'and'
+    let nested: unknown
+    try {
+      nested = JSON.parse(String(ruleForm.rulesJson).trim() || '[]')
+    } catch (e) {
+      throw new Error(`子规则 JSON 格式错误：${(e as Error).message}`)
+    }
+    if (!Array.isArray(nested)) throw new Error('子规则必须是数组')
+    rule.rules = nested
+    if (ruleForm.invert === true) rule.invert = true
+    buildDnsAction(rule)
+    return rule
+  }
   for (const f of DNS_RULE_FIELDS) {
     const v = ruleForm[f.key]
     if (f.type === 'bool') {
@@ -274,7 +299,12 @@ function buildDnsRule(): Record<string, any> {
         ? (v as string[]).map((x) => Number(x))
         : [...(v as string[])]
   }
-  // action 与参数（route=server 字段模型；其余动作参数各有 JSON 本体）
+  buildDnsAction(rule)
+  return rule
+}
+
+// action 与参数（route=server 字段模型；其余动作参数各有 JSON 本体）——default/logical 共用
+function buildDnsAction(rule: Record<string, any>) {
   const action = ruleForm.action
   if (action === 'reject') {
     rule.action = 'reject'
@@ -300,7 +330,6 @@ function buildDnsRule(): Record<string, any> {
     if (ruleForm.server) rule.server = String(ruleForm.server)
     if (ruleForm.speculative) rule.speculative = true
   }
-  return rule
 }
 
 function openCreateRule() {
@@ -315,6 +344,16 @@ function openEditRule(row: { id: string; rule: Record<string, any> }) {
   editingRuleId.value = row.id
   resetRuleForm()
   const r = row.rule
+  // logical 类型（多态）：mode + 嵌套子规则 + 共用 action
+  if (r.type === 'logical') {
+    ruleForm.ruleType = 'logical'
+    ruleForm.mode = r.mode === 'or' ? 'or' : 'and'
+    ruleForm.rulesJson = Array.isArray(r.rules) ? JSON.stringify(r.rules, null, 2) : ''
+    ruleForm.invert = r.invert === true
+    fillDnsAction(r)
+    ruleDialogVisible.value = true
+    return
+  }
   for (const f of DNS_RULE_FIELDS) {
     const v = r[f.key]
     if (f.type === 'bool') ruleForm[f.key] = v === true
@@ -322,6 +361,12 @@ function openEditRule(row: { id: string; rule: Record<string, any> }) {
     else if (f.type === 'string' || f.type === 'select') ruleForm[f.key] = v == null ? '' : String(v)
     else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
   }
+  fillDnsAction(r)
+  ruleDialogVisible.value = true
+}
+
+// action 回填（default/logical 共用）
+function fillDnsAction(r: Record<string, any>) {
   const action = typeof r.action === 'string' && r.action ? r.action : 'route'
   ruleForm.action = action
   ruleForm.server = typeof r.server === 'string' ? r.server : ''
@@ -329,16 +374,14 @@ function openEditRule(row: { id: string; rule: Record<string, any> }) {
   ruleForm.evaluate_tag = typeof r.tag === 'string' ? r.tag : ''
   ruleForm.evaluate_speculative = r.speculative === true
   ruleForm.reject_method = typeof r.method === 'string' ? r.method : ''
-  // route-options / predefined 的动作参数（action 之外的顶层字段）
   if (action === 'route-options' || action === 'predefined') {
-    const known = new Set(['action', 'server', 'speculative', ...DNS_RULE_FIELDS.map((f) => f.key)])
+    const known = new Set(['action', 'server', 'speculative', 'type', 'mode', 'rules', ...DNS_RULE_FIELDS.map((f) => f.key)])
     const extra: Record<string, any> = {}
     for (const k of Object.keys(r)) {
       if (!known.has(k)) extra[k] = r[k]
     }
     ruleForm.actionParamsJson = Object.keys(extra).length ? JSON.stringify(extra, null, 2) : ''
   }
-  ruleDialogVisible.value = true
 }
 
 const saveRule = async () => {
@@ -451,8 +494,12 @@ function fmtList(v: unknown): string {
   return v == null ? '—' : String(v)
 }
 
-// 列表摘要：按源码字段表（RawDefaultDNSRule）优先级取有值字段 + 其余字段计数
+// 列表摘要：logical 显示组合信息；default 按源码字段表优先级取有值字段 + 其余字段计数
 function ruleSummary(r: Record<string, any>): { items: Array<{ k: string; v: string }>; otherCount: number } {
+  if (r.type === 'logical') {
+    const count = Array.isArray(r.rules) ? r.rules.length : 0
+    return { items: [{ k: 'logical', v: `${r.mode || 'and'} · ${count} 条子规则` }], otherCount: 0 }
+  }
   const items = DNS_RULE_SUMMARY_ORDER.filter((k) => r[k] != null).map((k) => ({ k, v: fmtList(r[k]) }))
   const otherCount = DNS_RULE_FIELDS.filter((f) => !DNS_RULE_SUMMARY_ORDER.includes(f.key) && r[f.key] != null).length
   return { items, otherCount }
@@ -620,8 +667,27 @@ onMounted(() => {
     <!-- 规则编辑 -->
     <el-dialog v-model="ruleDialogVisible" :title="isEditRule ? '编辑 DNS 规则' : '新建 DNS 规则'" width="760px" :close-on-click-modal="false">
       <el-form label-width="150px">
+        <el-form-item label="类型">
+          <el-select v-model="ruleForm.ruleType" style="width: 100%">
+            <el-option v-for="t in DNS_RULE_TYPES" :key="t.value" :label="t.label" :value="t.value" />
+          </el-select>
+        </el-form-item>
+        <template v-if="ruleForm.ruleType === 'logical'">
+          <el-form-item label="mode" required>
+            <el-select v-model="ruleForm.mode" style="width: 100%">
+              <el-option v-for="m in LOGICAL_MODES" :key="m" :label="m" :value="m" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="invert">
+            <el-switch v-model="ruleForm.invert" />
+          </el-form-item>
+          <el-form-item label="子规则 (JSON)" required>
+            <el-input v-model="ruleForm.rulesJson" type="textarea" :rows="10" class="mono" placeholder='[{"rule_set": "gfw", "invert": true}, {"clash_mode": "direct"}]' />
+          </el-form-item>
+          <span class="hint">嵌套子规则为 DNSRule 数组（可再嵌套 logical）；每个子规则也可带 server 等动作</span>
+        </template>
         <el-tabs>
-          <el-tab-pane label="匹配条件">
+          <el-tab-pane v-if="ruleForm.ruleType === 'default'" label="匹配条件">
             <template v-for="g in DNS_RULE_GROUPS" :key="g">
               <el-divider content-position="left">{{ g }}</el-divider>
               <el-form-item v-for="f in DNS_RULE_FIELDS.filter((x) => x.group === g)" :key="f.key" :label="f.label">
