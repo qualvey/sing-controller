@@ -103,8 +103,11 @@ const openCreate = () => {
   const def = statusStore.status?.defaults
   const defType = def?.inbound_type
   resetForm(defType && inboundTypes.value.includes(defType) ? defType : inboundTypes.value[0] || 'mixed')
+  // listen 默认值来自后端（settings.defaults.listen）
   if (def?.listen) form.listen = def.listen
-  if (typeof def?.listen_port === 'number') form.listen_port = def.listen_port
+  // listen_port 默认自动分配（可手动修改），分配失败则留空
+  form.listen_port = undefined
+  void allocatePort(false)
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }
@@ -159,15 +162,15 @@ const fillFromJson = async () => {
   }
 }
 
-// 自动分配最小可用端口（起点=controller 配置的 min_port）
-const allocatePort = async () => {
+// 自动分配最小可用端口（起点=controller 配置的 min_port）；新建时默认触发，也可手动点击
+const allocatePort = async (notify = true) => {
   allocating.value = true
   try {
     const res = await api.availablePort()
     form.listen_port = res.port
-    ElMessage.success(`已分配可用端口 ${res.port}`)
+    if (notify) ElMessage.success(`已分配可用端口 ${res.port}`)
   } catch (e) {
-    ElMessage.error((e as Error).message || '端口分配失败')
+    if (notify) ElMessage.error((e as Error).message || '端口分配失败')
   } finally {
     allocating.value = false
   }
