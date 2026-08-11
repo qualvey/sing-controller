@@ -128,11 +128,26 @@ const rules = computed<FormRules>(() => {
       { required: true, message: 'listen_port 必填', trigger: 'blur' },
       { type: 'number', min: 1, max: 65535, message: '端口范围 1-65535', trigger: 'blur' }
     ]
-    base.method = [{ required: true, message: 'method 必选', trigger: 'change' }]
-    // method 为 none（无加密）时不需要密码
-    if (!isSsNoEncryption.value) {
-      base.ssPassword = [{ required: true, message: 'password 必填（method 为 none 时除外）', trigger: 'blur' }]
-    }
+    base.ssMethod = [{ required: true, message: 'method 必选', trigger: 'change' }]
+    // 密码校验始终挂载（不随 method 增删规则）：条件式增删会触发 validate-on-rule-change，
+    // 在异步密码生成/编辑回填的窗口期对空值误报一次后，错误状态不再更新（表现为"一直显示"）
+    base.ssPassword = [
+      {
+        validator: (_rule: unknown, value: unknown, callback: (error?: string | Error) => void) => {
+          // method 为 none（无加密）或已绑定用户（users[] 接管，非 2022 方法无需顶层密码）时不要求
+          if (isSsNoEncryption.value || selectedPoolUsers.value.length > 0) {
+            callback()
+            return
+          }
+          if (!value || !String(value).trim()) {
+            callback(new Error('password 必填（method 为 none 或绑定用户时除外）'))
+            return
+          }
+          callback()
+        },
+        trigger: ['blur', 'change']
+      }
+    ]
   }
   return base
 })
@@ -211,11 +226,14 @@ const generateSsPassword = async (notify = true) => {
   generating.value = true
   try {
     form.ssPassword = await api.genPassword()
+    // 异步回填后清除可能残留的「必填」错误（生成完成前被校验过的情况）
+    formRef.value?.clearValidate(['ssPassword'])
     if (notify) ElMessage.success('已生成随机密码')
   } catch {
     const bytes = new Uint8Array(16)
     crypto.getRandomValues(bytes)
     form.ssPassword = btoa(String.fromCharCode(...bytes))
+    formRef.value?.clearValidate(['ssPassword'])
     if (notify) ElMessage.warning('后端生成失败，已用浏览器随机数生成')
   } finally {
     generating.value = false
@@ -288,6 +306,8 @@ const openEdit = async (row: Inbound) => {
     const data = await api.getInbound(row.tag)
     sourceJson.value = JSON.stringify(data, null, 2)
     fillForm(data)
+    // 回填可能改变 method/密码等导致规则重算（validate-on-rule-change），回填后统一清除校验状态
+    formRef.value?.clearValidate()
     if (isTuic.value || isShadowsocks.value) {
       void loadPoolUsers().then(() => {
         selectedPoolUsers.value = poolUsers.value
@@ -317,6 +337,15 @@ watch(
         void fillDefaults() // 切换类型后重新填充 listen 默认值
       }
     }
+  }
+)
+
+// method 切换时清除 password 校验状态：none 不需要密码，
+// 否则之前触发的「password 必填」错误提示会残留显示（rules 已移除，但不影响保存）
+watch(
+  () => form.ssMethod,
+  () => {
+    formRef.value?.clearValidate(['ssPassword'])
   }
 )
 
@@ -409,8 +438,8 @@ function buildBody(): Inbound {
   }
   if (form.type === 'shadowsocks') {
     body.method = form.ssMethod || SS_DEFAULT_METHOD
-    // method 为 none（无加密）时忽略密码；其余 method 密码必填（表单校验已拦）
-    if (form.ssPassword.trim()) body.password = form.ssPassword.trim()
+    // method 为 none（无加密）时不发送密码；其余 method 密码必填（表单校验已拦）
+    if (form.ssMethod !== 'none' && form.ssPassword.trim()) body.password = form.ssPassword.trim()
     // 用户由用户池绑定投影（见 Users 页），此处不输出 users
   }
   body.type = form.type
@@ -599,7 +628,7 @@ onMounted(async () => {
                     </div>
                   </el-form-item>
                   <el-divider content-position="left">协议</el-divider>
-                  <el-form-item label="method" prop="method">
+                  <el-form-item label="method" prop="ssMethod">
                     <el-select v-model="form.ssMethod" style="width: 100%">
                       <el-option v-for="m in SS_METHODS" :key="m" :label="m" :value="m" />
                     </el-select>
@@ -607,15 +636,20 @@ onMounted(async () => {
                       默认 chacha20-ietf-poly1305；none 为无加密（仅调试用），2022-blake3-* 为 SIP022 系
                     </div>
                   </el-form-item>
-                  <el-form-item label="password" prop="ssPassword">
+                  <el-form-item v-if="!isSsNoEncryption" label="password" prop="ssPassword">
                     <div class="row">
                       <el-input v-model="form.ssPassword" type="password" show-password
-                        placeholder="新建时自动生成" :disabled="isSsNoEncryption" />
-                      <el-button :loading="generating" :disabled="isSsNoEncryption"
+                        placeholder="新建时自动生成" />
+                      <el-button :loading="generating"
                         @click="generateSsPassword()">重新生成</el-button>
                     </div>
                     <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
                       默认自动生成 16 字节随机密码（base64，如 8JCsPssfgS8tiRwiMlhARg==）
+                    </div>
+                  </el-form-item>
+                  <el-form-item v-else>
+                    <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
+                      method 为 none（无加密）时不需要密码
                     </div>
                   </el-form-item>
                   <el-divider content-position="left">用户（Users 页统一管理，可选）</el-divider>
