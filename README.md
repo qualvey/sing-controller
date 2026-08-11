@@ -201,3 +201,18 @@ API.md                   # API 契约
 packaging/               # 部署资源（systemd unit + postinstall/postremove；openrc/OpenWrt 参考 init 脚本）
 .goreleaser.yaml         # 交叉编译 + deb 打包配置
 ```
+
+## 未来展望
+
+集群系统，一主多从。
+主节点有面板，从节点只有后端。
+从节点自动向主节点注册。
+主节点通过api控制从节点。
+通信方式参考komari
+
+> 设计文档（评审稿，未实现）：
+> - [需求评审](docs/requirement-review.md)
+> - [技术栈与协议选型](docs/tech-stack-protocol.md)
+> - [集群架构设计](docs/cluster-architecture.md)
+
+
