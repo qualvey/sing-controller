@@ -38,6 +38,7 @@ interface InboundForm {
   heartbeat: string
   zeroRTT: boolean
   tlsEnabled: boolean
+  certificateProvider: string
   serverName: string
   insecure: boolean
   certificatePath: string
@@ -58,11 +59,12 @@ const form = reactive<InboundForm>({
   listen_port: undefined,
   users: [{ username: '', password: '' }],
   tuicUsers: [{ name: '', uuid: '', password: '' }],
-  congestionControl: 'cubic',
+  congestionControl: 'bbr',
   authTimeout: '',
   heartbeat: '',
   zeroRTT: false,
-  tlsEnabled: false,
+  tlsEnabled: true,
+  certificateProvider: '',
   serverName: '',
   insecure: false,
   certificatePath: '',
@@ -76,13 +78,14 @@ const form = reactive<InboundForm>({
   disablePathMTU: false,
 })
 
+// 用户池（tuic 用户区：只读 + 选择绑定，用户在 Users 页管理）
+const poolUsers = ref<import('../api').UserMeta[]>([])
+const selectedPoolUsers = ref<string[]>([])
+// certificate provider 列表（证书来源以 provider 为主）
+const certProviders = ref<string[]>([])
+
 const isMixed = computed(() => form.type === 'mixed')
 const isTuic = computed(() => form.type === 'tuic')
-
-const genUuid = () => {
-  const u = form.tuicUsers[form.tuicUsers.length - 1]
-  if (u) u.uuid = crypto.randomUUID()
-}
 
 const rules = computed<FormRules>(() => {
   const base: FormRules = {
@@ -138,12 +141,13 @@ function fillForm(obj: Inbound) {
           password: str(u.password)
         }))
       : [{ name: '', uuid: '', password: '' }]
-    form.congestionControl = str(t.congestion_control) || 'cubic'
+    form.congestionControl = str(t.congestion_control) || 'bbr'
     form.authTimeout = str(t.auth_timeout)
     form.heartbeat = str(t.heartbeat)
     form.zeroRTT = Boolean(t.zero_rtt_handshake)
     const tls = (t.tls ?? {}) as Record<string, unknown>
-    form.tlsEnabled = Boolean(tls.enabled)
+    form.tlsEnabled = true // tuic 强制 TLS
+    form.certificateProvider = str(tls.certificate_provider)
     form.serverName = str(tls.server_name)
     form.insecure = Boolean(tls.insecure)
     form.certificatePath = str(tls.certificate_path)
@@ -155,6 +159,24 @@ function fillForm(obj: Inbound) {
     form.keepAlivePeriod = str(t.keep_alive_period)
     form.initialPacketSize = typeof t.initial_packet_size === 'number' ? t.initial_packet_size : 1452
     form.disablePathMTU = Boolean(t.disable_path_mtu_discovery)
+  }
+}
+
+// 加载用户池与证书 provider（打开 tuic 表单时）
+const loadPoolUsers = async () => {
+  try {
+    poolUsers.value = await api.users()
+  } catch {
+    poolUsers.value = []
+  }
+}
+const loadCertProviders = async () => {
+  try {
+    const cert = await api.certificate()
+    const list = cert?.providers || []
+    certProviders.value = list.map((p: { id: string }) => p.id)
+  } catch {
+    certProviders.value = []
   }
 }
 
@@ -181,6 +203,9 @@ const openCreate = async () => {
   // listen_port 默认自动分配（可手动修改），分配失败则留空
   form.listen_port = undefined
   void allocatePort(false)
+  selectedPoolUsers.value = []
+  void loadPoolUsers()
+  void loadCertProviders()
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }
@@ -194,6 +219,14 @@ const openEdit = async (row: Inbound) => {
     const data = await api.getInbound(row.tag)
     sourceJson.value = JSON.stringify(data, null, 2)
     fillForm(data)
+    if (isTuic.value) {
+      void loadPoolUsers().then(() => {
+        selectedPoolUsers.value = poolUsers.value
+          .filter((u) => u.bound_inbounds?.includes(data.tag))
+          .map((u) => u.name)
+      })
+      void loadCertProviders()
+    }
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
     dialogVisible.value = false
@@ -269,6 +302,8 @@ function buildBody(): Inbound {
     if (users.length) body.users = users
   }
   if (form.type === 'tuic') {
+    // 用户由用户池绑定投影（见 Users 页），此处不输出 users
+    // 保留手动 users 兼容（编辑老配置时）
     const users = form.tuicUsers
       .map((u) => ({ name: u.name.trim(), uuid: u.uuid.trim(), password: u.password.trim() }))
       .filter((u) => u.uuid || u.password)
@@ -281,7 +316,9 @@ function buildBody(): Inbound {
     if (form.heartbeat.trim()) body.heartbeat = form.heartbeat.trim()
     if (form.zeroRTT) body.zero_rtt_handshake = true
     const tls: Record<string, unknown> = {}
-    if (form.tlsEnabled) tls.enabled = true
+    // tuic 强制 TLS
+    tls.enabled = true
+    if (form.certificateProvider.trim()) tls.certificate_provider = form.certificateProvider.trim()
     if (form.serverName.trim()) tls.server_name = form.serverName.trim()
     if (form.insecure) tls.insecure = true
     if (form.certificatePath.trim()) tls.certificate_path = form.certificatePath.trim()
@@ -315,6 +352,26 @@ const save = async () => {
   saving.value = true
   try {
     // 源码 tab 被修改时用源码内容作为提交体（覆盖表单）
+    // tuic：先把用户池绑定同步到当前入站（用户在 Users 页管理，这里只读选择）
+    if (isTuic.value) {
+      const tag = isEdit.value ? editingTag.value : form.tag.trim()
+      if (tag) {
+        const current = new Set(
+          poolUsers.value.filter((u) => u.bound_inbounds?.includes(tag)).map((u) => u.name)
+        )
+        const target = new Set(selectedPoolUsers.value)
+        for (const u of poolUsers.value) {
+          const has = current.has(u.name)
+          const want = target.has(u.name)
+          if (has !== want) {
+            const binds = new Set(u.bound_inbounds || [])
+            if (want) binds.add(tag)
+            else binds.delete(tag)
+            await api.updateUser(u.name, { ...u, bound_inbounds: [...binds] })
+          }
+        }
+      }
+    }
     const body = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildBody()
     const res = isEdit.value ? await api.updateInbound(editingTag.value, body) : await api.createInbound(body)
     handleResult(res)
@@ -451,18 +508,21 @@ onMounted(async () => {
               <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
             </div>
           </el-form-item>
-          <el-divider content-position="left">用户</el-divider>
-          <el-form-item v-for="(u, i) in form.tuicUsers" :key="i" :label="'用户 ' + (i + 1)">
-            <div class="user-row">
-              <el-input v-model="u.name" placeholder="名称(可选)" style="width: 100px" />
-              <el-input v-model="u.uuid" placeholder="UUID" />
-              <el-input v-model="u.password" type="password" show-password placeholder="密码" />
-              <el-button type="danger" link @click="form.tuicUsers.splice(i, 1)">删除</el-button>
+          <el-divider content-position="left">用户（Users 页统一管理）</el-divider>
+          <el-form-item label="绑定用户">
+            <el-select v-model="selectedPoolUsers" multiple filterable style="width: 100%" placeholder="从用户池选择（多选）">
+              <el-option v-for="u in poolUsers" :key="u.name" :label="u.name" :value="u.name" />
+            </el-select>
+            <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
+              用户统一在 Users 页创建/编辑；此处仅选择要绑定到本入站的用户，保存后自动注入 users[]（按类型取用字段）
             </div>
           </el-form-item>
-          <el-form-item>
-            <el-button type="primary" plain @click="form.tuicUsers.push({ name: '', uuid: '', password: '' })">添加用户</el-button>
-            <el-button text size="small" @click="genUuid()">生成 UUID</el-button>
+          <el-form-item label="当前绑定" v-if="selectedPoolUsers.length">
+            <div class="flex w-full flex-wrap gap-1">
+              <el-tag v-for="name in selectedPoolUsers" :key="name" size="small" type="primary" effect="plain">
+                {{ name }}
+              </el-tag>
+            </div>
           </el-form-item>
           <el-divider content-position="left">协议</el-divider>
           <el-form-item label="拥塞控制">
@@ -481,11 +541,15 @@ onMounted(async () => {
           <el-form-item label="0-RTT 握手">
             <el-switch v-model="form.zeroRTT" />
           </el-form-item>
-          <el-divider content-position="left">TLS</el-divider>
-          <el-form-item label="启用 TLS">
-            <el-switch v-model="form.tlsEnabled" />
-          </el-form-item>
-          <template v-if="form.tlsEnabled">
+          <el-divider content-position="left">TLS（tuic 强制启用）</el-divider>
+            <el-form-item label="证书来源">
+              <el-select v-model="form.certificateProvider" clearable style="width: 100%" placeholder="选择 Certificate Provider（推荐）">
+                <el-option v-for="id in certProviders" :key="id" :label="id" :value="id" />
+              </el-select>
+              <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
+                证书 Provider 在「证书」页管理；也可改用下方证书路径（文件方式）
+              </div>
+            </el-form-item>
             <el-form-item label="server_name">
               <el-input v-model="form.serverName" placeholder="证书域名" />
             </el-form-item>
@@ -493,7 +557,7 @@ onMounted(async () => {
               <el-switch v-model="form.insecure" />
             </el-form-item>
             <el-form-item label="证书路径">
-              <el-input v-model="form.certificatePath" placeholder="/etc/sing-box/cert.pem" />
+              <el-input v-model="form.certificatePath" placeholder="/etc/sing-box/cert.pem（可选，替代 Provider）" />
             </el-form-item>
             <el-form-item label="私钥路径">
               <el-input v-model="form.keyPath" placeholder="/etc/sing-box/key.pem" />
@@ -511,7 +575,6 @@ onMounted(async () => {
                 </el-select>
               </div>
             </el-form-item>
-          </template>
           <el-divider content-position="left">QUIC</el-divider>
           <el-form-item label="空闲超时">
             <el-input v-model="form.idleTimeout" placeholder="如 30s" />

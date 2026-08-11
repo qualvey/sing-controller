@@ -46,12 +46,13 @@ func (h *Handler) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("inbound 必须包含 tag"))
 		return
 	}
-	h.commit(w, r, func(options *option.Options, _ *metaType) error {
+	h.commit(w, r, func(options *option.Options, meta *metaType) error {
 		if h.findInboundIndex(inbound.Tag) >= 0 {
 			return errors.New("inbound tag 已存在: " + inbound.Tag)
 		}
 		options.Inbounds = append(options.Inbounds, inbound)
-		return nil
+		// 用户池绑定投影：把绑定到该入站的池用户注入 users[]
+		return syncUsersToInbounds(h.ctx(r), options, meta.Users)
 	})
 }
 
@@ -91,13 +92,14 @@ func (h *Handler) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("路径 tag 与 body tag 不一致"))
 		return
 	}
-	h.commit(w, r, func(options *option.Options, _ *metaType) error {
+	h.commit(w, r, func(options *option.Options, meta *metaType) error {
 		index := h.findInboundIndex(tag)
 		if index < 0 {
 			return errors.New("inbound 不存在: " + tag)
 		}
 		options.Inbounds[index] = inbound
-		return nil
+		// 用户池绑定投影
+		return syncUsersToInbounds(h.ctx(r), options, meta.Users)
 	})
 }
 
