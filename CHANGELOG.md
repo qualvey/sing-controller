@@ -12,6 +12,7 @@
 - 后端新增 `POST /api/tools/password` 工具接口
 
 ### 修复
+- **编辑弹窗「源码」tab 永远指向第一个项目的源码**：ResourceSourceTab 的 initial watch 在首次程序化替换时被自己的 updateListener 标记 dirty（docChanged），后续切换编辑对象时因 dirty=true 跳过刷新；且保存时 `isDirty()` 为真，会拿上一项的源码覆盖当前项（静默数据损坏）。修复：initial 变更时强制重置 dirty 并刷新内容，程序化 dispatch 期间抑制 dirty 标记（同时修复 inbound/outbound/dns/certificate 四个使用方）
 - **handleDeleteInbound 无 route 段空指针崩溃**（配置缺少 route 段时删除入站 panic；handleDeleteOutbound 已有同样防护，补齐）
 - handleStatus 无 route 段空指针（`rules` 计数防护）
 

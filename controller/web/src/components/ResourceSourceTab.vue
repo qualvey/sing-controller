@@ -18,13 +18,20 @@ const emit = defineEmits<{ update: [] }>()
 const editorHost = ref<HTMLElement>()
 const editor = shallowRef<EditorView>()
 const dirty = ref(false)
+// 程序化替换（initial 变更）期间禁止标记 dirty：否则 watch 自身 dispatch 会触发
+// updateListener → docChanged → dirty=true 永久卡住，后续切换编辑对象时源码不刷新
+// （表现为"源码永远指向第一个项目"，且保存时误用上一项的源码覆盖当前项）
+let applyingInitial = false
 
 watch(
   () => props.initial,
   (v) => {
-    if (!dirty.value) {
-      editor.value?.dispatch({ changes: { from: 0, to: editor.value.state.doc.length, insert: v } })
-    }
+    // 切换编辑对象：丢弃上一项的编辑状态，强制刷新为当前项源码
+    dirty.value = false
+    if (!editor.value) return
+    applyingInitial = true
+    editor.value.dispatch({ changes: { from: 0, to: editor.value.state.doc.length, insert: v } })
+    applyingInitial = false
   }
 )
 
@@ -40,7 +47,7 @@ onMounted(() => {
       jsoncLinter(),
       keymap.of([indentWithTab, ...defaultKeymap]),
       EditorView.updateListener.of((u) => {
-        if (u.docChanged && !dirty.value) {
+        if (u.docChanged && !applyingInitial && !dirty.value) {
           dirty.value = true
           emit('update')
         }
