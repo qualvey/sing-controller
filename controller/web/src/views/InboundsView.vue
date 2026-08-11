@@ -174,7 +174,10 @@ const loadCertProviders = async () => {
   try {
     const cert = await api.certificate()
     const list = cert?.providers || []
-    certProviders.value = list.map((p: { id: string }) => p.id)
+    // 引用的是 provider 的 tag（如 letsencrypt），不是 meta id
+    certProviders.value = list
+      .map((p: { id: string; provider: Record<string, any> }) => p.provider?.tag)
+      .filter((t: unknown): t is string => typeof t === 'string' && t.length > 0)
   } catch {
     certProviders.value = []
   }
@@ -200,9 +203,8 @@ const openCreate = async () => {
   // listen 默认值来自后端 settings.defaults.listen（实时拉取）
   form.listen = ''
   await fillDefaults()
-  // listen_port 默认自动分配（可手动修改），分配失败则留空
-  form.listen_port = undefined
-  void allocatePort(false)
+  // listen_port 默认 443（常见入站端口），可手动修改或自动分配
+  form.listen_port = 443
   selectedPoolUsers.value = []
   void loadPoolUsers()
   void loadCertProviders()
@@ -320,7 +322,6 @@ function buildBody(): Inbound {
     tls.enabled = true
     if (form.certificateProvider.trim()) tls.certificate_provider = form.certificateProvider.trim()
     if (form.serverName.trim()) tls.server_name = form.serverName.trim()
-    if (form.insecure) tls.insecure = true
     if (form.certificatePath.trim()) tls.certificate_path = form.certificatePath.trim()
     if (form.keyPath.trim()) tls.key_path = form.keyPath.trim()
     if (form.alpn.trim()) tls.alpn = form.alpn.split(',').map((s) => s.trim()).filter(Boolean)
@@ -417,7 +418,10 @@ const loadInbounds = async () => {
 onMounted(async () => {
   try {
     const t = await api.types()
-    inboundTypes.value = t.inbounds || []
+    // 只保留已实现表单的类型（mixed/tuic）；编辑旧配置时其他类型附加显示
+    const implemented = ['mixed', 'tuic']
+    const all = t.inbounds || []
+    inboundTypes.value = implemented.filter((x) => all.includes(x))
   } catch (e) {
     ElMessage.error((e as Error).message || '加载类型列表失败')
   }
@@ -543,24 +547,21 @@ onMounted(async () => {
           </el-form-item>
           <el-divider content-position="left">TLS（tuic 强制启用）</el-divider>
             <el-form-item label="证书来源">
-              <el-select v-model="form.certificateProvider" clearable style="width: 100%" placeholder="选择 Certificate Provider（推荐）">
+              <el-select v-model="form.certificateProvider" clearable style="width: 100%" placeholder="选择 Certificate Provider（推荐）" :disabled="!!form.certificatePath.trim() || !!form.keyPath.trim()">
                 <el-option v-for="id in certProviders" :key="id" :label="id" :value="id" />
               </el-select>
               <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
-                证书 Provider 在「证书」页管理；也可改用下方证书路径（文件方式）
+                证书 Provider 在「证书」页管理（引用其 tag）；与下方手动证书路径二选一
               </div>
             </el-form-item>
             <el-form-item label="server_name">
               <el-input v-model="form.serverName" placeholder="证书域名" />
             </el-form-item>
-            <el-form-item label="忽略校验">
-              <el-switch v-model="form.insecure" />
-            </el-form-item>
             <el-form-item label="证书路径">
-              <el-input v-model="form.certificatePath" placeholder="/etc/sing-box/cert.pem（可选，替代 Provider）" />
+              <el-input v-model="form.certificatePath" placeholder="/etc/sing-box/cert.pem" :disabled="!!form.certificateProvider" />
             </el-form-item>
             <el-form-item label="私钥路径">
-              <el-input v-model="form.keyPath" placeholder="/etc/sing-box/key.pem" />
+              <el-input v-model="form.keyPath" placeholder="/etc/sing-box/key.pem" :disabled="!!form.certificateProvider" />
             </el-form-item>
             <el-form-item label="ALPN">
               <el-input v-model="form.alpn" placeholder="h3，逗号分隔多个" />

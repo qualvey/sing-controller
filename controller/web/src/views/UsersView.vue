@@ -64,9 +64,19 @@ const openEdit = (u: UserMeta) => {
   dialogVisible.value = true
 }
 
+// crypto.randomUUID 需要安全上下文（https/localhost）——局域网 http 下不可用，
+// 用 getRandomValues（无此限制）实现 UUID v4
 const genUuid = () => {
-  form.uuid = crypto.randomUUID()
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+  form.uuid = hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20)
 }
+
+// UUID v4 格式校验
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const isValidUuid = (v: string) => UUID_RE.test(v)
 
 const save = async () => {
   if (!form.name.trim()) {
@@ -75,6 +85,10 @@ const save = async () => {
   }
   if (!form.uuid.trim() && !form.password.trim()) {
     ElMessage.warning('uuid 和 password 至少填一个')
+    return
+  }
+  if (form.uuid.trim() && !isValidUuid(form.uuid.trim())) {
+    ElMessage.warning('uuid 格式无效（应为标准 UUID v4）')
     return
   }
   saving.value = true
