@@ -116,6 +116,32 @@ shadowsocks 示例（webui 表单默认值：method `chacha20-ietf-poly1305`、l
 - method 枚举：`none / aes-128-gcm / aes-192-gcm / aes-256-gcm / chacha20-ietf-poly1305 / xchacha20-ietf-poly1305 / 2022-blake3-aes-128-gcm / 2022-blake3-aes-256-gcm / 2022-blake3-chacha20-poly1305`（`none` 无需密码）
 - 密码建议 16 字节随机 base64（`POST /api/tools/password` 生成）；多用户走用户池绑定（`users[]` 注入 name+password，用户池为唯一真相，内联 users[] 会被投影覆盖）
 
+tuic 示例（webui 表单：TLS 强制 + 证书 Provider，用户走用户池绑定）：
+```json
+{
+  "type": "tuic", "tag": "tuic-in", "listen": "0.0.0.0", "listen_port": 443,
+  "congestion_control": "bbr",
+  "tls": { "enabled": true, "certificate_provider": "letsencrypt", "server_name": "example.com", "alpn": ["h3"] }
+}
+```
+
+## 用户池（全局用户，多对多绑定入站）
+
+用户池是「用户」的唯一真相（存于旁车 meta `config.json.meta` 的 `users` 段）：用户不直接写进 inbounds，
+而是绑定到若干入站 tag，保存时由后端按入站类型投影注入对应 inbounds 的 `users[]`（覆盖式同步，
+内联 users 会被投影覆盖）。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/users` | `{users: [{name, uuid?, password?, flow?, bound_inbounds: [tag,...]}]}` |
+| POST | `/api/users` | 新建。`name` 必填且唯一；`uuid`/`password` 至少填一个；`bound_inbounds` 为绑定入站 tag 列表 |
+| PUT | `/api/users/{name}` | 整体替换（不允许重命名；body.name 需与路径一致或省略） |
+| DELETE | `/api/users/{name}` | 删除并从所有绑定入站的 users[] 移除 |
+
+- 支持 users[] 的入站类型 → 投影字段：vless(name,uuid,flow) / vmess(name,uuid) / trojan(name,password) / tuic(name,uuid,password) / hysteria2(name,password) / hysteria(name,password) / shadowsocks(name,password) / anytls(name,password) / shadowtls(name,password)
+- 新建/编辑/删除用户会自动同步所有关联入站的 users[]（走统一校验管线；绑定时对应入站需已存在）
+- 新建用户前端默认自动生成密码（`POST /api/tools/password`，16 字节 base64）
+
 ## Route 规则 CRUD
 
 规则无 tag/id 字段（sing-box 严格解码禁止自定义字段），id 由旁车 meta（`config.json.meta`）维护，映射规则数组下标。

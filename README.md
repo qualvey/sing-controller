@@ -67,7 +67,8 @@ pnpm run dev     # http://localhost:5173
 ## 功能
 
 - **Outbound CRUD**：vless+reality（utls 指纹、Reality 密钥对生成）、tuic v5 专属表单；**selector/urltest 组表单**（成员多选、default/url/interval/tolerance）；其他类型原始 JSON 兜底
-- **Inbound CRUD**：mixed 专属表单（users 动态行）；预填默认 type/listen/端口，支持**自动分配最小可用端口**（min_port 起）
+- **Inbound CRUD**：mixed / tuic / shadowsocks 专属表单——mixed（users 动态行）、tuic（TLS 强制 + 证书 Provider + 用户池绑定）、shadowsocks（默认 method chacha20-ietf-poly1305 / listen :: / 端口 23010，密码自动生成 + 一键重新生成，用户池绑定）；预填默认 type/listen/端口，支持**自动分配最小可用端口**（min_port 起）
+- **用户池（Users 页）**：全局用户多对多绑定入站（vless/vmess/trojan/tuic/hysteria2/hysteria/shadowsocks/anytls/shadowtls 共 9 类），保存时按入站类型自动投影注入各入站 users[]（用户池为唯一真相）；新建默认自动生成密码，uuid/密码均支持一键生成；解绑/删除自动同步所有关联入站
 - **Route CRUD（rule→action 模型）**：action 支持出站 route（默认，outbound 字段）/ direct / bypass / reject / hijack-dns / sniff / resolve / route-options；**匹配字段完整覆盖 sing-box RawDefaultRule**（inbound/ip_version/network/protocol/domain 系列/geosite/rule_set/geoip/ip_cidr/port 系列/process/package/user/网络环境/invert 等 38 字段，从 sing-box 源码自动整理，前端元数据驱动渲染；复杂 map 字段走 JSON 兜底）；稳定 id 存旁车 meta；引用保护（删除被路由/组引用的对象会被拦截）
 - **新建 outbound 自动并入 Proxy**（settings 默认开，可配目标 selector tag）
 - **粘贴 JSON 解析**：表单粘贴 JSON → 后端解析校验 → 填充字段
@@ -81,7 +82,7 @@ pnpm run dev     # http://localhost:5173
 - **sing-box 重载（SIGHUP）**:`POST /api/reload` 三模式（systemd / pidfile / hook，由 settings.reload 配置）;保存配置后自动重载;全页面左下角悬浮重载按钮
 - **日/夜主题切换**:右上角 ☀️/🌙 切换,localStorage 持久化（默认暗色）;Element Plus dark css-vars 全组件适配;CodeMirror 用 Compartment 动态切换 oneDark/亮色（含编辑器 UI 外壳）
 - **移动端响应式**:<768px 侧边栏自动折叠为 64px 图标栏,汉堡按钮自身伸展为完整菜单（遮罩点击收起）,选中路由自动收起
-- **后端单元测试**:`go test ./...`（internal/api 24.3% 覆盖,40+ 用例:配置往返/引用保护/删除回写/端口分配/诊断计数;httptest 全链路 config/raw JSONC 注释保留）
+- **后端单元测试**:`go test ./...`（internal/api 36.0% 覆盖,36 个测试函数/111 个用例:配置往返/引用保护/删除回写/端口分配/诊断计数/shadowsocks 入站 CRUD/密码工具;httptest 全链路 config/raw JSONC 注释保留）
 - **JSON Schema 自动生成**（`GET /api/schema`，与代码同步）
 
 ## 复用 sing-box 的关键点
@@ -162,14 +163,16 @@ EOF
 ```
 GET  /                      webui 页面（嵌入；未构建时返回服务信息）
 GET  /healthz               健康检查 {"status":"ok"}
-GET  /api/status | /api/config | /api/schema | /api/types | /api/settings
-PUT  /api/config | /api/settings
+*   /api/clash/* /api/grpc/*   clash API / service API（gRPC-Web）反向代理
+GET  /api/status | /api/config | /api/config/raw | /api/schema | /api/types | /api/settings | /api/diagnostics
+PUT  /api/config | /api/config/raw | /api/settings
 GET  /api/ports/available?start=N
-POST /api/tools/uuid | /api/tools/reality-keypair | /api/tools/parse-json
-GET/POST        /api/outbounds          /api/inbounds
-GET/PUT/DELETE  /api/outbounds/{tag}    /api/inbounds/{tag}
-GET/POST        /api/routes
-PUT/DELETE      /api/routes/{id}
+POST /api/tools/uuid | /api/tools/password | /api/tools/reality-keypair | /api/tools/parse-json | /api/reload
+GET/POST        /api/outbounds          /api/inbounds          /api/routes          /api/users
+GET/PUT/DELETE  /api/outbounds/{tag}    /api/inbounds/{tag}    /api/routes/{id}     /api/users/{name}
+GET/POST        /api/dns/servers       /api/dns/rules        /api/rule-sets        /api/certificate/providers
+PUT/DELETE      /api/dns/servers/{tag}  /api/dns/rules/{id}   /api/rule-sets/{id}   /api/certificate/providers/{id}
+GET/PUT         /api/certificate       PUT /api/dns/options
 ```
 
 ## 已知限制
