@@ -110,9 +110,11 @@ func (h *Handler) handleDeleteInbound(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errors.New("inbound 不存在: " + tag)
 		}
-		for i, rule := range options.Route.Rules {
-			if ruleReferencesInbound(&rule, tag) {
-				return errors.New("route 规则 #" + itoa(i+1) + " 引用了该 inbound，请先修改路由")
+		if options.Route != nil {
+			for i, rule := range options.Route.Rules {
+				if ruleReferencesInbound(&rule, tag) {
+					return errors.New("route 规则 #" + itoa(i+1) + " 引用了该 inbound，请先修改路由")
+				}
 			}
 		}
 		options.Inbounds = append(options.Inbounds[:index], options.Inbounds[index+1:]...)

@@ -129,6 +129,7 @@ export const api = {
   genUuid: () => http.post<{ uuid: string }>('/tools/uuid').then((r) => r.data.uuid),
   genRealityKeypair: () =>
     http.post<{ private_key: string; public_key: string }>('/tools/reality-keypair').then((r) => r.data),
+  genPassword: () => http.post<{ password: string }>('/tools/password').then((r) => r.data.password),
   parseJson: (json: string) => http.post<{ ok: boolean; data: unknown }>('/tools/parse-json', { json }).then((r) => r.data),
 
   // Outbound CRUD

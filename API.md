@@ -88,7 +88,7 @@ tuic v5 示例：
 }
 ```
 
-## Inbound CRUD（mixed 重点）
+## Inbound CRUD（mixed / shadowsocks / tuic 重点）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -105,6 +105,16 @@ mixed 示例：
   "users": [{ "username": "user", "password": "***" }]
 }
 ```
+
+shadowsocks 示例（webui 表单默认值：method `chacha20-ietf-poly1305`、listen `::`、端口 `23010`、密码自动生成）：
+```json
+{
+  "type": "shadowsocks", "tag": "ss-in", "listen": "::", "listen_port": 23010,
+  "method": "chacha20-ietf-poly1305", "password": "8JCsPssfgS8tiRwiMlhARg=="
+}
+```
+- method 枚举：`none / aes-128-gcm / aes-192-gcm / aes-256-gcm / chacha20-ietf-poly1305 / xchacha20-ietf-poly1305 / 2022-blake3-aes-128-gcm / 2022-blake3-aes-256-gcm / 2022-blake3-chacha20-poly1305`（`none` 无需密码）
+- 密码建议 16 字节随机 base64（`POST /api/tools/password` 生成）；多用户走用户池绑定（`users[]` 注入 name+password，用户池为唯一真相，内联 users[] 会被投影覆盖）
 
 ## Route 规则 CRUD
 
@@ -182,6 +192,7 @@ mixed 示例：
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/api/tools/uuid` | `{uuid}` 生成 v4 uuid |
+| POST | `/api/tools/password` | `{password}` 生成 16 字节随机密码（标准 base64，shadowsocks 入站默认密码格式） |
 | POST | `/api/tools/reality-keypair` | `{private_key, public_key}` Reality X25519 密钥对（URL-safe base64，与 `sing-box generate reality-keypair` 一致） |
 | POST | `/api/tools/parse-json` | body `{json: "<文本>"}`；合法 → `{ok: true, data: <解析结果>}`，非法 → 400 |
 | POST | `/api/reload` | 重载运行中的 sing-box（SIGHUP）；按 settings.reload 配置执行（systemd/pidfile/hook）；未配置返回 400 |

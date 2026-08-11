@@ -96,6 +96,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	// 工具
 	mux.HandleFunc("POST /api/tools/uuid", h.handleToolUUID)
 	mux.HandleFunc("POST /api/tools/reality-keypair", h.handleToolRealityKeypair)
+	mux.HandleFunc("POST /api/tools/password", h.handleToolPassword)
 	mux.HandleFunc("POST /api/tools/parse-json", h.handleToolParseJSON)
 
 	// outbound CRUD
@@ -278,6 +279,10 @@ func readRawBody(r *http.Request) ([]byte, error) {
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	values := h.settings.Values()
+	ruleCount := 0
+	if h.store.Options.Route != nil {
+		ruleCount = len(h.store.Options.Route.Rules)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"config_path":       h.store.Path(),
 		"controller_config": h.settings.Path(),
@@ -287,7 +292,7 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"defaults":          values.Defaults,
 		"inbounds":          len(h.store.Options.Inbounds),
 		"outbounds":         len(h.store.Options.Outbounds),
-		"rules":             len(h.store.Options.Route.Rules),
+		"rules":             ruleCount,
 	})
 }
 

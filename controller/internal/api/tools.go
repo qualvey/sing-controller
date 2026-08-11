@@ -29,6 +29,17 @@ func (h *Handler) handleToolRealityKeypair(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+// handleToolPassword 生成随机密码：16 字节随机数 → 标准 base64（与 shadowsocks 示例密码格式一致，
+// 如 8JCsPssfgS8tiRwiMlhARg==）。新建 shadowsocks 入站时前端默认调用并自动填充。
+func (h *Handler) handleToolPassword(w http.ResponseWriter, r *http.Request) {
+	key := make([]byte, 16)
+	if _, err := rand.Read(key); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"password": base64.StdEncoding.EncodeToString(key)})
+}
+
 // handleToolParseJSON 解析任意 JSON 文本（前端"粘贴 JSON 解析字段"用）：
 // 合法 → {ok:true, data:<解析结果>}；非法 → 400 带错误信息。
 func (h *Handler) handleToolParseJSON(w http.ResponseWriter, r *http.Request) {

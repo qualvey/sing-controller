@@ -10,6 +10,23 @@ import { useStatusStore } from '../stores/status'
 
 const statusStore = useStatusStore()
 
+// shadowsocks 入站：method 枚举与默认值（与 sing-box option/shadowsocks.go 对齐）
+// 新建默认 method=chacha20-ietf-poly1305、listen=::、端口=23010，密码自动生成
+const SS_METHODS = [
+  'none',
+  'aes-128-gcm',
+  'aes-192-gcm',
+  'aes-256-gcm',
+  'chacha20-ietf-poly1305',
+  'xchacha20-ietf-poly1305',
+  '2022-blake3-aes-128-gcm',
+  '2022-blake3-aes-256-gcm',
+  '2022-blake3-chacha20-poly1305'
+]
+const SS_DEFAULT_METHOD = 'chacha20-ietf-poly1305'
+const SS_DEFAULT_LISTEN = '::'
+const SS_DEFAULT_PORT = 23010
+
 const loading = ref(false)
 const outerTab = ref('form')
 const inbounds = ref<Inbound[]>([])
@@ -23,6 +40,7 @@ const editingTag = ref('')
 const saving = ref(false)
 const suppressTypeWatch = ref(false)
 const allocating = ref(false)
+const generating = ref(false)
 const formRef = ref<FormInstance>()
 
 interface InboundForm {
@@ -50,6 +68,9 @@ interface InboundForm {
   keepAlivePeriod: string
   initialPacketSize: number
   disablePathMTU: boolean
+  // shadowsocks
+  ssMethod: string
+  ssPassword: string
 }
 
 const form = reactive<InboundForm>({
@@ -76,6 +97,8 @@ const form = reactive<InboundForm>({
   keepAlivePeriod: '',
   initialPacketSize: 1452,
   disablePathMTU: false,
+  ssMethod: SS_DEFAULT_METHOD,
+  ssPassword: '',
 })
 
 // 用户池（tuic 用户区：只读 + 选择绑定，用户在 Users 页管理）
@@ -86,6 +109,8 @@ const certProviders = ref<string[]>([])
 
 const isMixed = computed(() => form.type === 'mixed')
 const isTuic = computed(() => form.type === 'tuic')
+const isShadowsocks = computed(() => form.type === 'shadowsocks')
+const isSsNoEncryption = computed(() => form.ssMethod === 'none')
 
 const rules = computed<FormRules>(() => {
   const base: FormRules = {
@@ -97,6 +122,17 @@ const rules = computed<FormRules>(() => {
       { required: true, message: 'listen_port 必填', trigger: 'blur' },
       { type: 'number', min: 1, max: 65535, message: '端口范围 1-65535', trigger: 'blur' }
     ]
+  }
+  if (isShadowsocks.value) {
+    base.listen_port = [
+      { required: true, message: 'listen_port 必填', trigger: 'blur' },
+      { type: 'number', min: 1, max: 65535, message: '端口范围 1-65535', trigger: 'blur' }
+    ]
+    base.method = [{ required: true, message: 'method 必选', trigger: 'change' }]
+    // method 为 none（无加密）时不需要密码
+    if (!isSsNoEncryption.value) {
+      base.ssPassword = [{ required: true, message: 'password 必填（method 为 none 时除外）', trigger: 'blur' }]
+    }
   }
   return base
 })
@@ -113,8 +149,10 @@ function resetForm(type: string) {
   form.type = type
   form.tag = ''
   form.listen = ''
-  form.listen_port = undefined
+  form.listen_port = 443
   form.users = [{ username: '', password: '' }]
+  form.ssMethod = SS_DEFAULT_METHOD
+  form.ssPassword = ''
 }
 
 function fillForm(obj: Inbound) {
@@ -125,21 +163,26 @@ function fillForm(obj: Inbound) {
   if (form.type === 'mixed') {
     form.users = Array.isArray(obj.users)
       ? obj.users.map((u) => {
-          const rec = (u ?? {}) as Record<string, unknown>
-          return { username: str(rec.username), password: str(rec.password) }
-        })
+        const rec = (u ?? {}) as Record<string, unknown>
+        return { username: str(rec.username), password: str(rec.password) }
+      })
       : [{ username: '', password: '' }]
   } else {
     form.users = []
+  }
+  if (form.type === 'shadowsocks') {
+    const s = (obj ?? {}) as Record<string, unknown>
+    form.ssMethod = str(s.method) || SS_DEFAULT_METHOD
+    form.ssPassword = str(s.password)
   }
   if (form.type === 'tuic') {
     const t = (obj ?? {}) as Record<string, unknown>
     form.tuicUsers = Array.isArray(t.users)
       ? (t.users as Record<string, unknown>[]).map((u) => ({
-          name: str(u.name),
-          uuid: str(u.uuid),
-          password: str(u.password)
-        }))
+        name: str(u.name),
+        uuid: str(u.uuid),
+        password: str(u.password)
+      }))
       : [{ name: '', uuid: '', password: '' }]
     form.congestionControl = str(t.congestion_control) || 'bbr'
     form.authTimeout = str(t.auth_timeout)
@@ -152,13 +195,30 @@ function fillForm(obj: Inbound) {
     form.insecure = Boolean(tls.insecure)
     form.certificatePath = str(tls.certificate_path)
     form.keyPath = str(tls.key_path)
-    form.alpn = Array.isArray(tls.alpn) ? (tls.alpn as string[]).join(',') : ''
+    form.alpn = 'h3'
     form.minVersion = str(tls.min_version)
     form.maxVersion = str(tls.max_version)
     form.idleTimeout = str(t.idle_timeout)
     form.keepAlivePeriod = str(t.keep_alive_period)
     form.initialPacketSize = typeof t.initial_packet_size === 'number' ? t.initial_packet_size : 1452
     form.disablePathMTU = Boolean(t.disable_path_mtu_discovery)
+  }
+}
+
+// 生成 shadowsocks 随机密码：优先后端（16 字节 → 标准 base64，与示例密码格式一致），
+// 后端不可用时浏览器端兜底（crypto.getRandomValues + btoa）
+const generateSsPassword = async (notify = true) => {
+  generating.value = true
+  try {
+    form.ssPassword = await api.genPassword()
+    if (notify) ElMessage.success('已生成随机密码')
+  } catch {
+    const bytes = new Uint8Array(16)
+    crypto.getRandomValues(bytes)
+    form.ssPassword = btoa(String.fromCharCode(...bytes))
+    if (notify) ElMessage.warning('后端生成失败，已用浏览器随机数生成')
+  } finally {
+    generating.value = false
   }
 }
 
@@ -203,8 +263,15 @@ const openCreate = async () => {
   // listen 默认值来自后端 settings.defaults.listen（实时拉取）
   form.listen = ''
   await fillDefaults()
-  // listen_port 默认 443（常见入站端口），可手动修改或自动分配
-  form.listen_port = 443
+  if (form.type === 'shadowsocks') {
+    // shadowsocks 默认值：listen "::" / 端口 23010 / method chacha20-ietf-poly1305 / 密码自动生成
+    form.listen = SS_DEFAULT_LISTEN
+    form.listen_port = SS_DEFAULT_PORT
+    void generateSsPassword(false)
+  } else {
+    // listen_port 默认 443（常见入站端口），可手动修改或自动分配
+    form.listen_port = 443
+  }
   selectedPoolUsers.value = []
   void loadPoolUsers()
   void loadCertProviders()
@@ -221,13 +288,13 @@ const openEdit = async (row: Inbound) => {
     const data = await api.getInbound(row.tag)
     sourceJson.value = JSON.stringify(data, null, 2)
     fillForm(data)
-    if (isTuic.value) {
+    if (isTuic.value || isShadowsocks.value) {
       void loadPoolUsers().then(() => {
         selectedPoolUsers.value = poolUsers.value
           .filter((u) => u.bound_inbounds?.includes(data.tag))
           .map((u) => u.name)
       })
-      void loadCertProviders()
+      if (isTuic.value) void loadCertProviders()
     }
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
@@ -241,7 +308,14 @@ watch(
   (t) => {
     if (!suppressTypeWatch.value && dialogVisible.value && !isEdit.value) {
       resetForm(t)
-      void fillDefaults() // 切换类型后重新填充 listen 默认值
+      if (t === 'shadowsocks') {
+        // 切到 shadowsocks：应用默认 listen/端口 并自动生成密码
+        form.listen = SS_DEFAULT_LISTEN
+        form.listen_port = SS_DEFAULT_PORT
+        void generateSsPassword(false)
+      } else {
+        void fillDefaults() // 切换类型后重新填充 listen 默认值
+      }
     }
   }
 )
@@ -333,6 +407,12 @@ function buildBody(): Inbound {
     if (form.initialPacketSize > 0) body.initial_packet_size = form.initialPacketSize
     if (form.disablePathMTU) body.disable_path_mtu_discovery = true
   }
+  if (form.type === 'shadowsocks') {
+    body.method = form.ssMethod || SS_DEFAULT_METHOD
+    // method 为 none（无加密）时忽略密码；其余 method 密码必填（表单校验已拦）
+    if (form.ssPassword.trim()) body.password = form.ssPassword.trim()
+    // 用户由用户池绑定投影（见 Users 页），此处不输出 users
+  }
   body.type = form.type
   if (!body.tag) body.tag = form.tag.trim()
   return body
@@ -347,31 +427,35 @@ const handleResult = (res: unknown) => {
   }
 }
 
+// 把用户池绑定同步到当前入站（tuic/shadowsocks：用户在 Users 页管理，此处只读选择）
+const syncBoundUsers = async () => {
+  const tag = isEdit.value ? editingTag.value : form.tag.trim()
+  if (!tag) return
+  const current = new Set(
+    poolUsers.value.filter((u) => u.bound_inbounds?.includes(tag)).map((u) => u.name)
+  )
+  const target = new Set(selectedPoolUsers.value)
+  for (const u of poolUsers.value) {
+    const has = current.has(u.name)
+    const want = target.has(u.name)
+    if (has !== want) {
+      const binds = new Set(u.bound_inbounds || [])
+      if (want) binds.add(tag)
+      else binds.delete(tag)
+      await api.updateUser(u.name, { ...u, bound_inbounds: [...binds] })
+    }
+  }
+}
+
 const save = async () => {
   const valid = await formRef.value?.validate().then(() => true).catch(() => false)
   if (!valid) return
   saving.value = true
   try {
     // 源码 tab 被修改时用源码内容作为提交体（覆盖表单）
-    // tuic：先把用户池绑定同步到当前入站（用户在 Users 页管理，这里只读选择）
-    if (isTuic.value) {
-      const tag = isEdit.value ? editingTag.value : form.tag.trim()
-      if (tag) {
-        const current = new Set(
-          poolUsers.value.filter((u) => u.bound_inbounds?.includes(tag)).map((u) => u.name)
-        )
-        const target = new Set(selectedPoolUsers.value)
-        for (const u of poolUsers.value) {
-          const has = current.has(u.name)
-          const want = target.has(u.name)
-          if (has !== want) {
-            const binds = new Set(u.bound_inbounds || [])
-            if (want) binds.add(tag)
-            else binds.delete(tag)
-            await api.updateUser(u.name, { ...u, bound_inbounds: [...binds] })
-          }
-        }
-      }
+    // tuic/shadowsocks：先把用户池绑定同步到当前入站（用户在 Users 页管理，这里只读选择）
+    if (isTuic.value || isShadowsocks.value) {
+      await syncBoundUsers()
     }
     const body = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildBody()
     const res = isEdit.value ? await api.updateInbound(editingTag.value, body) : await api.createInbound(body)
@@ -418,8 +502,8 @@ const loadInbounds = async () => {
 onMounted(async () => {
   try {
     const t = await api.types()
-    // 只保留已实现表单的类型（mixed/tuic）；编辑旧配置时其他类型附加显示
-    const implemented = ['mixed', 'tuic']
+    // 只保留已实现表单的类型（mixed/tuic/shadowsocks）；编辑旧配置时其他类型附加显示
+    const implemented = ['mixed', 'tuic', 'shadowsocks']
     const all = t.inbounds || []
     inboundTypes.value = implemented.filter((x) => all.includes(x))
   } catch (e) {
@@ -433,187 +517,247 @@ onMounted(async () => {
   <div class="page">
     <el-tabs v-model="outerTab">
       <el-tab-pane label="表单" name="form">
-    <div class="toolbar">
-      <el-button type="primary" @click="openCreate">新建 Inbound</el-button>
-      <el-button :loading="loading" @click="loadInbounds">刷新</el-button>
-    </div>
+        <div class="toolbar">
+          <el-button type="primary" @click="openCreate">新建 Inbound</el-button>
+          <el-button :loading="loading" @click="loadInbounds">刷新</el-button>
+        </div>
 
-    <el-table :data="inbounds" v-loading="loading" border stripe>
-      <el-table-column prop="type" label="类型" width="130" />
-      <el-table-column prop="tag" label="tag" min-width="160" />
-      <el-table-column label="listen" min-width="160">
-        <template #default="{ row }">{{ row.listen ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="listen_port" width="120">
-        <template #default="{ row }">{{ row.listen_port ?? '—' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" type="primary" link @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" link @click="remove(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+        <el-table :data="inbounds" v-loading="loading" border stripe>
+          <el-table-column prop="type" label="类型" width="130" />
+          <el-table-column prop="tag" label="tag" min-width="160" />
+          <el-table-column label="listen" min-width="160">
+            <template #default="{ row }">{{ row.listen ?? '—' }}</template>
+          </el-table-column>
+          <el-table-column label="listen_port" width="120">
+            <template #default="{ row }">{{ row.listen_port ?? '—' }}</template>
+          </el-table-column>
+          <el-table-column label="method" width="210">
+            <template #default="{ row }">{{ row.method ?? '—' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button size="small" type="primary" link @click="openEdit(row)">编辑</el-button>
+              <el-button size="small" type="danger" link @click="remove(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
 
-    <el-dialog
-      v-model="dialogVisible"
-      :title="isEdit ? '编辑 Inbound' : '新建 Inbound'"
-      width="680px"
-      :close-on-click-modal="false"
-    >
-      <el-tabs>
-        <el-tab-pane label="表单">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="130px">
-        <el-form-item>
-          <el-button size="small" @click="fillFromJson">从 JSON 填充（粘贴解析）</el-button>
-          <span class="fill-hint">粘贴完整 inbound JSON，自动解析并填充下方字段</span>
-        </el-form-item>
-        <el-form-item label="类型" prop="type">
-          <el-select v-model="form.type" :disabled="isEdit" style="width: 100%">
-            <el-option v-for="t in inboundTypes" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="tag" prop="tag">
-          <el-input v-model="form.tag" placeholder="唯一标识，如 mixed-in" />
-        </el-form-item>
+        <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑 Inbound' : '新建 Inbound'" width="680px"
+          :close-on-click-modal="false">
+          <el-tabs>
+            <el-tab-pane label="表单">
+              <el-form ref="formRef" :model="form" :rules="rules" label-width="130px">
+                <el-form-item>
+                  <el-button size="small" @click="fillFromJson">从 JSON 填充（粘贴解析）</el-button>
+                  <span class="fill-hint">粘贴完整 inbound JSON，自动解析并填充下方字段</span>
+                </el-form-item>
+                <el-form-item label="类型" prop="type">
+                  <el-select v-model="form.type" :disabled="isEdit" style="width: 100%">
+                    <el-option v-for="t in inboundTypes" :key="t" :label="t" :value="t" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="tag" prop="tag">
+                  <el-input v-model="form.tag" placeholder="唯一标识，如 mixed-in" />
+                </el-form-item>
 
-        <!-- mixed：渲染 users 动态行 -->
-        <template v-if="isMixed">
-          <el-form-item label="listen" prop="listen">
-            <el-input v-model="form.listen" placeholder="监听地址，如 127.0.0.1" />
-          </el-form-item>
-          <el-form-item label="listen_port" prop="listen_port">
-            <div class="row">
-              <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
-              <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
-            </div>
-          </el-form-item>
-          <el-divider content-position="left">用户（可选）</el-divider>
-          <el-form-item v-for="(u, i) in form.users" :key="i" :label="`用户 ${i + 1}`">
-            <div class="user-row">
-              <el-input v-model="u.username" placeholder="用户名" />
-              <el-input v-model="u.password" type="password" show-password placeholder="密码" />
-              <el-button type="danger" link @click="form.users.splice(i, 1)">删除</el-button>
-            </div>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" plain @click="form.users.push({ username: '', password: '' })">添加用户</el-button>
-          </el-form-item>
-        </template>
+                <!-- mixed：渲染 users 动态行 -->
+                <template v-if="isMixed">
+                  <el-form-item label="listen" prop="listen">
+                    <el-input v-model="form.listen" placeholder="监听地址，如 127.0.0.1" />
+                  </el-form-item>
+                  <el-form-item label="listen_port" prop="listen_port">
+                    <div class="row">
+                      <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right"
+                        style="width: 100%" />
+                      <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
+                    </div>
+                  </el-form-item>
+                  <el-divider content-position="left">用户（可选）</el-divider>
+                  <el-form-item v-for="(u, i) in form.users" :key="i" :label="`用户 ${i + 1}`">
+                    <div class="user-row">
+                      <el-input v-model="u.username" placeholder="用户名" />
+                      <el-input v-model="u.password" type="password" show-password placeholder="密码" />
+                      <el-button type="danger" link @click="form.users.splice(i, 1)">删除</el-button>
+                    </div>
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" plain
+                      @click="form.users.push({ username: '', password: '' })">添加用户</el-button>
+                  </el-form-item>
+                </template>
 
-        <!-- tuic：完整字段表单 -->
-        <template v-else-if="isTuic">
-          <el-form-item label="listen" prop="listen">
-            <el-input v-model="form.listen" placeholder="监听地址，如 0.0.0.0" />
-          </el-form-item>
-          <el-form-item label="listen_port" prop="listen_port">
-            <div class="row">
-              <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
-              <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
-            </div>
-          </el-form-item>
-          <el-divider content-position="left">用户（Users 页统一管理）</el-divider>
-          <el-form-item label="绑定用户">
-            <el-select v-model="selectedPoolUsers" multiple filterable style="width: 100%" placeholder="从用户池选择（多选）">
-              <el-option v-for="u in poolUsers" :key="u.name" :label="u.name" :value="u.name" />
-            </el-select>
-            <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
-              用户统一在 Users 页创建/编辑；此处仅选择要绑定到本入站的用户，保存后自动注入 users[]（按类型取用字段）
-            </div>
-          </el-form-item>
-          <el-form-item label="当前绑定" v-if="selectedPoolUsers.length">
-            <div class="flex w-full flex-wrap gap-1">
-              <el-tag v-for="name in selectedPoolUsers" :key="name" size="small" type="primary" effect="plain">
-                {{ name }}
-              </el-tag>
-            </div>
-          </el-form-item>
-          <el-divider content-position="left">协议</el-divider>
-          <el-form-item label="拥塞控制">
-            <el-select v-model="form.congestionControl" style="width: 100%">
-              <el-option label="cubic" value="cubic" />
-              <el-option label="new_reno" value="new_reno" />
-              <el-option label="bbr" value="bbr" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="认证超时">
-            <el-input v-model="form.authTimeout" placeholder="如 3s" />
-          </el-form-item>
-          <el-form-item label="心跳间隔">
-            <el-input v-model="form.heartbeat" placeholder="如 10s" />
-          </el-form-item>
-          <el-form-item label="0-RTT 握手">
-            <el-switch v-model="form.zeroRTT" />
-          </el-form-item>
-          <el-divider content-position="left">TLS（tuic 强制启用）</el-divider>
-            <el-form-item label="证书来源">
-              <el-select v-model="form.certificateProvider" clearable style="width: 100%" placeholder="选择 Certificate Provider（推荐）" :disabled="!!form.certificatePath.trim() || !!form.keyPath.trim()">
-                <el-option v-for="id in certProviders" :key="id" :label="id" :value="id" />
-              </el-select>
-              <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
-                证书 Provider 在「证书」页管理（引用其 tag）；与下方手动证书路径二选一
-              </div>
-            </el-form-item>
-            <el-form-item label="server_name">
-              <el-input v-model="form.serverName" placeholder="证书域名" />
-            </el-form-item>
-            <el-form-item label="证书路径">
-              <el-input v-model="form.certificatePath" placeholder="/etc/sing-box/cert.pem" :disabled="!!form.certificateProvider" />
-            </el-form-item>
-            <el-form-item label="私钥路径">
-              <el-input v-model="form.keyPath" placeholder="/etc/sing-box/key.pem" :disabled="!!form.certificateProvider" />
-            </el-form-item>
-            <el-form-item label="ALPN">
-              <el-input v-model="form.alpn" placeholder="h3，逗号分隔多个" />
-            </el-form-item>
-            <el-form-item label="TLS 版本">
-              <div class="row">
-                <el-select v-model="form.minVersion" placeholder="最小" style="width: 50%">
-                  <el-option v-for="v in ['1.0', '1.1', '1.2', '1.3']" :key="v" :label="v" :value="v" />
-                </el-select>
-                <el-select v-model="form.maxVersion" placeholder="最大" style="width: 50%">
-                  <el-option v-for="v in ['1.0', '1.1', '1.2', '1.3']" :key="v" :label="v" :value="v" />
-                </el-select>
-              </div>
-            </el-form-item>
-          <el-divider content-position="left">QUIC</el-divider>
-          <el-form-item label="空闲超时">
-            <el-input v-model="form.idleTimeout" placeholder="如 30s" />
-          </el-form-item>
-          <el-form-item label="保活周期">
-            <el-input v-model="form.keepAlivePeriod" placeholder="如 15s" />
-          </el-form-item>
-          <el-form-item label="初始包大小">
-            <el-input-number v-model="form.initialPacketSize" :min="0" :max="10000" controls-position="right" style="width: 100%" />
-          </el-form-item>
-          <el-form-item label="禁用 MTU 发现">
-            <el-switch v-model="form.disablePathMTU" />
-          </el-form-item>
-        </template>
+                <!-- shadowsocks：method + 密码（自动生成）+ 用户池绑定 -->
+                <template v-else-if="isShadowsocks">
+                  <el-form-item label="listen" prop="listen">
+                    <el-input v-model="form.listen" placeholder="监听地址，默认 ::" />
+                  </el-form-item>
+                  <el-form-item label="listen_port" prop="listen_port">
+                    <div class="row">
+                      <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right"
+                        style="width: 100%" />
+                      <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
+                    </div>
+                  </el-form-item>
+                  <el-divider content-position="left">协议</el-divider>
+                  <el-form-item label="method" prop="method">
+                    <el-select v-model="form.ssMethod" style="width: 100%">
+                      <el-option v-for="m in SS_METHODS" :key="m" :label="m" :value="m" />
+                    </el-select>
+                    <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
+                      默认 chacha20-ietf-poly1305；none 为无加密（仅调试用），2022-blake3-* 为 SIP022 系
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="password" prop="ssPassword">
+                    <div class="row">
+                      <el-input v-model="form.ssPassword" type="password" show-password
+                        placeholder="新建时自动生成" :disabled="isSsNoEncryption" />
+                      <el-button :loading="generating" :disabled="isSsNoEncryption"
+                        @click="generateSsPassword()">重新生成</el-button>
+                    </div>
+                    <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
+                      默认自动生成 16 字节随机密码（base64，如 8JCsPssfgS8tiRwiMlhARg==）
+                    </div>
+                  </el-form-item>
+                  <el-divider content-position="left">用户（Users 页统一管理，可选）</el-divider>
+                  <el-form-item label="绑定用户">
+                    <el-select v-model="selectedPoolUsers" multiple filterable style="width: 100%"
+                      placeholder="从用户池选择（多选）">
+                      <el-option v-for="u in poolUsers" :key="u.name" :label="u.name" :value="u.name" />
+                    </el-select>
+                    <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
+                      绑定后注入 users[]（name+password）；非 2022 method 以用户密码为准，2022 method 以顶部 password 为主密钥
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="当前绑定" v-if="selectedPoolUsers.length">
+                    <div class="flex w-full flex-wrap gap-1">
+                      <el-tag v-for="name in selectedPoolUsers" :key="name" size="small" type="primary" effect="plain">
+                        {{ name }}
+                      </el-tag>
+                    </div>
+                  </el-form-item>
+                </template>
 
-        <!-- 其他类型：原始 JSON 兜底 -->
-        <template v-else>
-          <el-form-item label="listen" prop="listen">
-            <el-input v-model="form.listen" placeholder="监听地址（可选）" />
-          </el-form-item>
-          <el-form-item label="listen_port" prop="listen_port">
-            <div class="row">
-              <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right" style="width: 100%" />
-              <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
-            </div>
-          </el-form-item>
-        </template>
-      </el-form>
-      </el-tab-pane>
-      <el-tab-pane label="源码">
-        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
-      </el-tab-pane>
-    </el-tabs>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
-      </template>
-    </el-dialog>
+                <!-- tuic：完整字段表单 -->
+                <template v-else-if="isTuic">
+                  <el-form-item label="listen" prop="listen">
+                    <el-input v-model="form.listen" placeholder="监听地址，如 0.0.0.0" />
+                  </el-form-item>
+                  <el-form-item label="listen_port" prop="listen_port">
+                    <div class="row">
+                      <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right"
+                        style="width: 100%" />
+                      <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
+                    </div>
+                  </el-form-item>
+                  <el-divider content-position="left">用户（Users 页统一管理）</el-divider>
+                  <el-form-item label="绑定用户">
+                    <el-select v-model="selectedPoolUsers" multiple filterable style="width: 100%"
+                      placeholder="从用户池选择（多选）">
+                      <el-option v-for="u in poolUsers" :key="u.name" :label="u.name" :value="u.name" />
+                    </el-select>
+                    <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
+                      用户统一在 Users 页创建/编辑；此处仅选择要绑定到本入站的用户，保存后自动注入 users[]（按类型取用字段）
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="当前绑定" v-if="selectedPoolUsers.length">
+                    <div class="flex w-full flex-wrap gap-1">
+                      <el-tag v-for="name in selectedPoolUsers" :key="name" size="small" type="primary" effect="plain">
+                        {{ name }}
+                      </el-tag>
+                    </div>
+                  </el-form-item>
+                  <el-divider content-position="left">协议</el-divider>
+                  <el-form-item label="拥塞控制">
+                    <el-select v-model="form.congestionControl" style="width: 100%">
+                      <el-option label="cubic" value="cubic" />
+                      <el-option label="new_reno" value="new_reno" />
+                      <el-option label="bbr" value="bbr" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="认证超时">
+                    <el-input v-model="form.authTimeout" placeholder="如 3s" />
+                  </el-form-item>
+                  <el-form-item label="心跳间隔">
+                    <el-input v-model="form.heartbeat" placeholder="如 10s" />
+                  </el-form-item>
+                  <el-form-item label="0-RTT 握手">
+                    <el-switch v-model="form.zeroRTT" />
+                  </el-form-item>
+                  <el-divider content-position="left">TLS（tuic 强制启用）</el-divider>
+                  <el-form-item label="证书来源">
+                    <el-select v-model="form.certificateProvider" clearable style="width: 100%"
+                      placeholder="选择 Certificate Provider（推荐）"
+                      :disabled="!!form.certificatePath.trim() || !!form.keyPath.trim()">
+                      <el-option v-for="id in certProviders" :key="id" :label="id" :value="id" />
+                    </el-select>
+                    <div class="mt-1 w-full text-xs text-[var(--el-text-color-secondary)]">
+                      证书 Provider 在「证书」页管理（引用其 tag）；与下方手动证书路径二选一
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="server_name">
+                    <el-input v-model="form.serverName" placeholder="证书域名" />
+                  </el-form-item>
+                  <el-form-item label="证书路径">
+                    <el-input v-model="form.certificatePath" placeholder="/etc/sing-box/cert.pem"
+                      :disabled="!!form.certificateProvider" />
+                  </el-form-item>
+                  <el-form-item label="私钥路径">
+                    <el-input v-model="form.keyPath" placeholder="/etc/sing-box/key.pem"
+                      :disabled="!!form.certificateProvider" />
+                  </el-form-item>
+                  <el-form-item label="ALPN">
+                    <el-tag type="info">h3</el-tag>
+                  </el-form-item>
+                  <el-form-item label="TLS 版本">
+                    <div class="row">
+                      <el-select v-model="form.minVersion" placeholder="最小" style="width: 50%">
+                        <el-option v-for="v in ['1.0', '1.1', '1.2', '1.3']" :key="v" :label="v" :value="v" />
+                      </el-select>
+                      <el-select v-model="form.maxVersion" placeholder="最大" style="width: 50%">
+                        <el-option v-for="v in ['1.0', '1.1', '1.2', '1.3']" :key="v" :label="v" :value="v" />
+                      </el-select>
+                    </div>
+                  </el-form-item>
+                  <el-divider content-position="left">QUIC</el-divider>
+                  <el-form-item label="空闲超时">
+                    <el-input v-model="form.idleTimeout" placeholder="如 30s" />
+                  </el-form-item>
+                  <el-form-item label="保活周期">
+                    <el-input v-model="form.keepAlivePeriod" placeholder="如 15s" />
+                  </el-form-item>
+                  <el-form-item label="初始包大小">
+                    <el-input-number v-model="form.initialPacketSize" :min="0" :max="10000" controls-position="right"
+                      style="width: 100%" />
+                  </el-form-item>
+                  <el-form-item label="禁用 MTU 发现">
+                    <el-switch v-model="form.disablePathMTU" />
+                  </el-form-item>
+                </template>
+
+                <!-- 其他类型：原始 JSON 兜底 -->
+                <template v-else>
+                  <el-form-item label="listen" prop="listen">
+                    <el-input v-model="form.listen" placeholder="监听地址（可选）" />
+                  </el-form-item>
+                  <el-form-item label="listen_port" prop="listen_port">
+                    <div class="row">
+                      <el-input-number v-model="form.listen_port" :min="1" :max="65535" controls-position="right"
+                        style="width: 100%" />
+                      <el-button :loading="allocating" @click="allocatePort">自动分配</el-button>
+                    </div>
+                  </el-form-item>
+                </template>
+              </el-form>
+            </el-tab-pane>
+            <el-tab-pane label="源码">
+              <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+            </el-tab-pane>
+          </el-tabs>
+          <template #footer>
+            <el-button @click="dialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+          </template>
+        </el-dialog>
       </el-tab-pane>
       <el-tab-pane label="源码" name="source">
         <SourcePane segment="inbounds" @saved="loadInbounds" />
@@ -628,22 +772,27 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
 }
+
 .user-row {
   display: flex;
   gap: 8px;
   width: 100%;
 }
+
 .user-row .el-input {
   flex: 1;
 }
+
 .row {
   display: flex;
   gap: 8px;
   width: 100%;
 }
+
 .row .el-input-number {
   flex: 1;
 }
+
 .fill-hint {
   font-size: 12px;
   color: #909399;

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9.0（2026-08-10）
+
+### 新功能
+- **shadowsocks 入站控制**：Inbounds 页新增 shadowsocks 表单（第三类已实现表单，mixed/tuic 之后）——
+  - 默认值：method `chacha20-ietf-poly1305`、listen `::`、端口 `23010`（与需求示例一致）
+  - 密码自动生成：新建时自动调用后端 `POST /api/tools/password`（16 字节随机 → 标准 base64），失败浏览器端兜底；表单内可一键「重新生成」
+  - method 九选一（none / aes-gcm 系 / chacha20 系 / 2022-blake3 系）；method 为 none 时密码字段禁用、校验跳过
+  - 用户池绑定（Users 页统一管理，name+password 注入 users[]；非 2022 method 以用户密码为准，2022 method 以顶部 password 为主密钥）
+  - 列表新增 method 列
+- 后端新增 `POST /api/tools/password` 工具接口
+
+### 修复
+- **handleDeleteInbound 无 route 段空指针崩溃**（配置缺少 route 段时删除入站 panic；handleDeleteOutbound 已有同样防护，补齐）
+- handleStatus 无 route 段空指针（`rules` 计数防护）
+
+### 工程
+- 后端单测新增：密码工具格式/随机性、shadowsocks 入站 CRUD 全链路（创建/回读/更新/非法 method/缺密码/none/用户池绑定投影/删除）
+
 ## v0.8.0（2026-08-10）
 
 ### 新功能
