@@ -37,10 +37,11 @@ type LogOptions struct {
 
 // ReloadOptions 配置保存后/手动触发 sing-box 重载的方式。
 // sing-box 官方重载机制只有 SIGHUP（cmd_run.go 收到 SIGHUP 重载配置）：
+//   - auto（默认）：自动探测可用的 init 机制（systemd → openrc/rc-service → OpenWrt/procd → SysV service）
 //   - systemd：systemctl reload <service>（推荐，默认服务名 sing-box）
 //   - pidfile：读 pid 文件后 kill -HUP
 //   - hook：自定义 shell 命令（最灵活）
-//   - none/空：不启用
+//   - none：不启用
 // clash_api 无 reload 端点（已查源码确认），不走该方案。
 type ReloadOptions struct {
 	Mode      string `json:"mode,omitempty"`
@@ -55,8 +56,10 @@ func (o *ReloadOptions) Validate() error {
 		return nil
 	}
 	switch o.Mode {
-	case "", "none":
-		o.Mode = "none"
+	case "", "auto":
+		o.Mode = "auto"
+		return nil
+	case "none":
 		return nil
 	case "systemd":
 		return nil
@@ -71,7 +74,7 @@ func (o *ReloadOptions) Validate() error {
 		}
 		return nil
 	default:
-		return errors.New("未知 reload 模式: " + o.Mode + "（systemd/pidfile/hook/none）")
+		return errors.New("未知 reload 模式: " + o.Mode + "（auto/systemd/pidfile/hook/none）")
 	}
 }
 
@@ -117,6 +120,7 @@ func defaultSettings() Settings {
 		Listen:  "127.0.0.1:8080",
 		Log:     &LogOptions{Level: "info"},
 		MinPort: 8000,
+		Reload:  &ReloadOptions{Mode: "auto"},
 		Defaults: Defaults{
 			InboundType:  "mixed",
 			OutboundType: "vless",
@@ -156,6 +160,12 @@ func (m *Manager) Load() error {
 	if values.Defaults.AttachToSelector == nil {
 		attached := true
 		values.Defaults.AttachToSelector = &attached
+	}
+	// 重载默认自动适配：未配置/空模式 → auto（systemd → rc-service → OpenWrt service）；显式 none 保留
+	if values.Reload == nil {
+		values.Reload = &ReloadOptions{Mode: "auto"}
+	} else if values.Reload.Mode == "" {
+		values.Reload.Mode = "auto"
 	}
 	if values.MinPort == 0 {
 		values.MinPort = 8000

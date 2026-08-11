@@ -79,7 +79,7 @@ pnpm run dev     # http://localhost:5173
 - **每个配置页带「源码」tab**：手动编辑对应段 JSON（JSONC），保存时与主配置合并（整段替换/写 null 删除，其余配置不变）——通用 SourcePane 组件（inbounds/outbounds/route/dns/route.rule_set/certificate）
 - **配置诊断页**：静态分析（重复 tag、route/dns 悬空引用、组引用、监听冲突、未使用 outbound），补 sing-box 校验盲区（悬空引用 box.New 不拦）
 - **完整校验管线**：所有写操作 = 严格解码（未知字段/多态/重复 tag 检查）→ `box.New` 干跑预检 → 原子写盘（.bak 备份）；失败不落盘、内存回滚
-- **sing-box 重载（SIGHUP）**:`POST /api/reload` 三模式（systemd / pidfile / hook，由 settings.reload 配置）;保存配置后自动重载;全页面左下角悬浮重载按钮
+- **sing-box 重载（SIGHUP）**:`POST /api/reload`，默认 **auto 自动适配**——systemd（Debian/Ubuntu 等）→ openrc `rc-service`（Alpine）→ OpenWrt `service`/procd → SysV service，有什么用什么；也可显式 systemd / pidfile / hook / none；保存配置后自动重载（after_save）；全页面左下角悬浮重载按钮；配套 Alpine/OpenWrt 参考 init 脚本见 `packaging/openrc`、`packaging/openwrt`
 - **日/夜主题切换**:右上角 ☀️/🌙 切换,localStorage 持久化（默认暗色）;Element Plus dark css-vars 全组件适配;CodeMirror 用 Compartment 动态切换 oneDark/亮色（含编辑器 UI 外壳）
 - **移动端响应式**:<768px 侧边栏自动折叠为 64px 图标栏,汉堡按钮自身伸展为完整菜单（遮罩点击收起）,选中路由自动收起
 - **后端单元测试**:`go test ./...`（internal/api 36.0% 覆盖,36 个测试函数/111 个用例:配置往返/引用保护/删除回写/端口分配/诊断计数/shadowsocks 入站 CRUD/密码工具;httptest 全链路 config/raw JSONC 注释保留）
@@ -118,6 +118,9 @@ CI 流程：checkout 主仓库 → clone `qualvey/sing-box` fork 到 `<workspace
 → setup-go(1.26) + setup-node(22) → `pnpm install --frozen-lockfile && pnpm run build` → goreleaser（自动 embed dist）。
 
 自动产物：linux amd64 / arm64 / armv7 的 `tar.gz` + **deb**（含 systemd 单元，安装后自动建用户、启停服务）。
+
+**Alpine / OpenWrt**（无 deb 包）：参考 init 脚本在 `packaging/`——Alpine 用 `openrc/sing-box`（`rc-service sing-box reload`），
+OpenWrt 用 `openwrt/sing-box.init`（`service sing-box reload`，procd）；装好后 controller 的 reload.mode 保持默认 `auto` 即可自动适配。
 
 ## Linux 部署（deb）
 
@@ -195,6 +198,6 @@ controller/              # sing-box-controller（Go module，嵌入 webui）
     └── api/             # REST handlers（web 页面 / outbound / inbound / route / config / settings / ports / tools）
 API.md                   # API 契约
 .github/workflows/       # release.yml：tag 触发 CI/CD
-packaging/               # deb 打包资源（systemd unit、默认配置、postinstall/postremove）
+packaging/               # 部署资源（systemd unit + postinstall/postremove；openrc/OpenWrt 参考 init 脚本）
 .goreleaser.yaml         # 交叉编译 + deb 打包配置
 ```

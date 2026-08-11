@@ -16,13 +16,17 @@ import (
 )
 
 // sing-box 重载：向运行中的 sing-box 发送 SIGHUP（官方唯一可靠机制，cmd_run.go:197）。
-// 触发方式由 settings.reload 配置：systemd（systemctl reload）/ pidfile（kill -HUP）/ hook（自定义命令）。
+// 触发方式由 settings.reload 配置：
+//   - auto（默认）：自动探测 systemd → openrc(rc-service) → OpenWrt/procd → SysV service
+//   - systemd：systemctl reload <service>
+//   - pidfile：kill -HUP
+//   - hook：自定义命令
 
-// reloadNow 按配置执行一次重载；未配置返回 (false, nil)。
+// reloadNow 按配置执行一次重载；mode 为 none 时返回 (false, nil)。
 func (h *Handler) reloadNow() (bool, error) {
 	values := h.settings.Values()
 	reload := values.Reload
-	if reload == nil || reload.Mode == "" || reload.Mode == "none" {
+	if reload == nil || reload.Mode == "none" {
 		return false, nil
 	}
 	if err := h.reloadWithMode(reload, context.Background()); err != nil {
@@ -36,6 +40,27 @@ func (h *Handler) reloadWithMode(reload *settings.ReloadOptions, parent context.
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	switch reload.Mode {
+	case "auto":
+		service := reload.Service
+		if service == "" {
+			service = "sing-box"
+		}
+		cmd, detected, err := detectReloadCommand(service)
+		if err != nil {
+			slog.Warn("sing-box reload failed", "mode", "auto", "error", err)
+			return fmt.Errorf("自动检测重载方式失败: %w", err)
+		}
+		out, runErr := cmd.CombinedOutput()
+		if runErr != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail == "" {
+				detail = runErr.Error()
+			}
+			slog.Warn("sing-box reload failed", "mode", "auto", "detected", detected, "service", service, "error", detail)
+			return fmt.Errorf("%s reload %s 失败: %s", detected, service, detail)
+		}
+		slog.Info("sing-box reloaded", "mode", "auto", "detected", detected, "service", service)
+		return nil
 	case "systemd":
 		service := reload.Service
 		if service == "" {
@@ -100,11 +125,49 @@ func (h *Handler) reloadWithMode(reload *settings.ReloadOptions, parent context.
 // reloadIfEnabled 保存成功后调用：启用 after_save 时执行重载，返回 (是否执行, 错误)。
 func (h *Handler) reloadIfEnabled() (bool, error) {
 	values := h.settings.Values()
-	if values.Reload == nil || values.Reload.Mode == "" || values.Reload.Mode == "none" || !values.Reload.AfterSave {
+	if values.Reload == nil || values.Reload.Mode == "none" || !values.Reload.AfterSave {
 		return false, nil
 	}
 	executed, err := h.reloadNow()
 	return executed, err
+}
+
+// detectReloadCommand 自动探测可用的 init 重载机制（按优先级）：
+//  1. systemd：/run/systemd/system 存在（systemd 为 PID 1）→ systemctl reload <service>
+//  2. openrc（Alpine 等）：rc-service 在 PATH → rc-service <service> reload
+//  3. OpenWrt / procd：/etc/openwrt_release 标记 → /etc/init.d/<service> reload（脚本不存在时退回 service 包装）
+//  4. 通用 SysV：/etc/init.d/<service> 存在且 service 命令可用 → service <service> reload
+//
+// 返回 (命令, 探测到的机制名, 错误)。
+func detectReloadCommand(service string) (*exec.Cmd, string, error) {
+	// systemd：/run/systemd/system 是 systemd 作为 PID 1 的标准标志（比 systemctl 二进制更可靠）
+	if _, err := os.Stat("/run/systemd/system"); err == nil {
+		if _, err := exec.LookPath("systemctl"); err == nil {
+			return exec.Command("systemctl", "reload", service), "systemd", nil
+		}
+	}
+	// openrc（Alpine 默认 init）
+	if path, err := exec.LookPath("rc-service"); err == nil {
+		return exec.Command(path, service, "reload"), "openrc", nil
+	}
+	// OpenWrt / procd
+	if _, err := os.Stat("/etc/openwrt_release"); err == nil {
+		initScript := "/etc/init.d/" + service
+		if _, err := os.Stat(initScript); err == nil {
+			return exec.Command(initScript, "reload"), "openwrt", nil
+		}
+		if _, err := exec.LookPath("service"); err == nil {
+			return exec.Command("service", service, "reload"), "openwrt", nil
+		}
+		return nil, "", errors.New("OpenWrt 下未找到 /etc/init.d/" + service + "（请先安装 sing-box init 脚本）")
+	}
+	// 通用 SysV service
+	if _, err := os.Stat("/etc/init.d/" + service); err == nil {
+		if path, err := exec.LookPath("service"); err == nil {
+			return exec.Command(path, service, "reload"), "sysv", nil
+		}
+	}
+	return nil, "", errors.New("未检测到 systemd / openrc(rc-service) / OpenWrt(procd) 等重载机制（请安装对应 init 脚本，或在 Settings 配置 pidfile/hook）")
 }
 
 func (h *Handler) handleReload(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +177,7 @@ func (h *Handler) handleReload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !executed {
-		writeError(w, http.StatusBadRequest, errors.New("未配置重载方式（Settings → reload.mode：systemd/pidfile/hook）"))
+		writeError(w, http.StatusBadRequest, errors.New("重载已禁用（Settings → reload.mode 为 none）"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reloaded": true})

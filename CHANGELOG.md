@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.0（2026-08-10）
+
+### 新功能
+- **重载方式自动适配（OpenWrt / Alpine 支持）**：reload.mode 新增并默认 `auto`——自动探测 init 机制，
+  有 systemd 用 systemd（systemctl reload），否则按序探测 openrc（`rc-service <svc> reload`，Alpine）、
+  OpenWrt procd（`/etc/init.d/<svc> reload` / `service <svc> reload`）、SysV（`service <svc> reload`）；
+  旧配置（无 reload 段/空 mode）自动迁移为 auto，显式 none 保留
+- packaging 新增参考 init 脚本：`packaging/openrc/sing-box`（Alpine）、`packaging/openwrt/sing-box.init`（procd），
+  均实现 reload = 发 SIGHUP（sing-box 官方重载机制）；`packaging/README.md` 附安装说明
+
+### 工程
+- 单测：settings 层 reload 模式校验（空→auto、none 保留、未知拒绝）+ 旧配置迁移用例
+
 ## v0.9.0（2026-08-10）
 
 ### 新功能

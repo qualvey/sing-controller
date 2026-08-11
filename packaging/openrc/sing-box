@@ -1,0 +1,26 @@
+#!/sbin/openrc-run
+# Alpine Linux / openrc init script for sing-box (reference).
+# Install:  cp sing-box /etc/init.d/sing-box && chmod +x /etc/init.d/sing-box
+#           rc-update add sing-box default && rc-service sing-box start
+# Reload:   rc-service sing-box reload   （发送 SIGHUP，sing-box 重载配置）
+#           —— controller reload.mode=auto 会自动探测到 rc-service 并调用
+
+name="sing-box"
+description="sing-box proxy service"
+
+command="/usr/bin/sing-box"
+command_args="run -c /etc/sing-box/config.json"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+depend() {
+	need net
+	after firewall
+}
+
+# openrc 默认 reload 即向 pidfile 进程发 SIGHUP；显式声明便于阅读与覆盖
+reload() {
+	ebegin "Reloading ${RC_SVCNAME} (SIGHUP)"
+	start-stop-daemon --signal HUP --pidfile "${pidfile}"
+	eend $?
+}

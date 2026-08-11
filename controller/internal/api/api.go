@@ -362,6 +362,9 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("min_port 需在 1024-65535 之间"))
 		return
 	}
+	if newValues.Reload == nil {
+		newValues.Reload = &settings.ReloadOptions{Mode: "auto"}
+	}
 	if err := newValues.Reload.Validate(); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return

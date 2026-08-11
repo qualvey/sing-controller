@@ -1,0 +1,27 @@
+#!/bin/sh /etc/rc.common
+# OpenWrt / procd init script for sing-box (reference).
+# Install:  cp sing-box.init /etc/init.d/sing-box && chmod +x /etc/init.d/sing-box
+#           /etc/init.d/sing-box enable && /etc/init.d/sing-box start
+# Reload:   /etc/init.d/sing-box reload   （等价 service sing-box reload，procd 向实例发 SIGHUP）
+#           —— controller reload.mode=auto 会自动探测到 OpenWrt 并调用
+
+USE_PROCD=1
+
+START=99
+STOP=10
+
+CONFIG_FILE=/etc/sing-box/config.json
+
+start_service() {
+	procd_open_instance
+	procd_set_param command /usr/bin/sing-box
+	procd_append_param command run -c "$CONFIG_FILE"
+	procd_set_param respawn
+	procd_set_param limits nofile 1048576
+	procd_close_instance
+}
+
+# 显式声明：reload = 向运行中的实例发 SIGHUP（sing-box 收到后重载配置）
+reload_service() {
+	procd_send_signal SIGHUP
+}

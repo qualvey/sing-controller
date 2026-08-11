@@ -221,12 +221,12 @@ tuic 示例（webui 表单：TLS 强制 + 证书 Provider，用户走用户池�
 | POST | `/api/tools/password` | `{password}` 生成 16 字节随机密码（标准 base64，shadowsocks 入站默认密码格式） |
 | POST | `/api/tools/reality-keypair` | `{private_key, public_key}` Reality X25519 密钥对（URL-safe base64，与 `sing-box generate reality-keypair` 一致） |
 | POST | `/api/tools/parse-json` | body `{json: "<文本>"}`；合法 → `{ok: true, data: <解析结果>}`，非法 → 400 |
-| POST | `/api/reload` | 重载运行中的 sing-box（SIGHUP）；按 settings.reload 配置执行（systemd/pidfile/hook）；未配置返回 400 |
+| POST | `/api/reload` | 重载运行中的 sing-box（SIGHUP）；按 settings.reload 执行（auto 自动适配 systemd/rc-service/OpenWrt；或 systemd/pidfile/hook）；mode 为 none 返回 400 |
 
 ## sing-box 重载（settings.reload）
 
 - sing-box 官方重载机制只有 SIGHUP（`cmd_run.go` 收到 SIGHUP 重载配置）；clash_api **无** reload 端点
-- `mode`：`systemd`（systemctl reload &lt;service&gt;，默认 sing-box）/ `pidfile`（读 pid 文件 → kill -HUP，仅 Linux）/ `hook`（sh -c 自定义命令）/ `none`
+- `mode`：`auto`（默认，自动探测：systemd → openrc/rc-service → OpenWrt/procd → SysV service，`service` 字段为服务名/init 脚本名）/ `systemd`（systemctl reload &lt;service&gt;，默认 sing-box）/ `pidfile`（读 pid 文件 → kill -HUP，仅 Linux）/ `hook`（sh -c 自定义命令）/ `none`（禁用）
 - `after_save`：开启后所有配置写操作保存成功自动触发重载（成功响应含 `reloaded: true`；失败附 `reload_error` 不影响保存）
 - 权限提示：systemd 模式需 sing-controller 用户有 unit 管理权限（root/polkit）；hook 模式如需 sudo 配置 NOPASSWD
 
