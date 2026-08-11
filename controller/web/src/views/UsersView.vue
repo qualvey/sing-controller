@@ -9,6 +9,7 @@ const users = ref<UserMeta[]>([])
 const inbounds = ref<Inbound[]>([])
 const dialogVisible = ref(false)
 const saving = ref(false)
+const generating = ref(false)
 const isEdit = ref(false)
 const editingName = ref('')
 
@@ -51,6 +52,8 @@ const openCreate = () => {
   editingName.value = ''
   resetForm()
   dialogVisible.value = true
+  // 新建默认自动生成密码（与 shadowsocks 入站同格式：16 字节 → base64）
+  void genPassword()
 }
 
 const openEdit = (u: UserMeta) => {
@@ -77,6 +80,21 @@ const genUuid = () => {
 // UUID v4 格式校验
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const isValidUuid = (v: string) => UUID_RE.test(v)
+
+// 生成随机密码：优先后端（POST /api/tools/password），失败浏览器端兜底（格式一致）
+const genPassword = async (notify = false) => {
+  generating.value = true
+  try {
+    form.password = await api.genPassword()
+    if (notify) ElMessage.success('已生成随机密码')
+  } catch {
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    form.password = btoa(String.fromCharCode(...bytes))
+    if (notify) ElMessage.warning('后端生成失败，已用浏览器随机数生成')
+  } finally {
+    generating.value = false
+  }
+}
 
 const save = async () => {
   if (!form.name.trim()) {
@@ -206,7 +224,10 @@ onMounted(() => {
           </div>
         </el-form-item>
         <el-form-item label="password">
-          <el-input v-model="form.password" type="password" show-password placeholder="密码（trojan/tuic/hysteria2 用）" />
+          <div class="flex w-full gap-2">
+            <el-input v-model="form.password" type="password" show-password placeholder="密码（trojan/tuic/hysteria2 用）" />
+            <el-button :icon="Key" :loading="generating" @click="genPassword(true)">生成</el-button>
+          </div>
         </el-form-item>
         <el-form-item label="flow">
           <el-select v-model="form.flow" clearable style="width: 100%" placeholder="vless flow（xtls-rprx-vision 等）">

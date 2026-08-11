@@ -10,6 +10,7 @@
   - 用户池绑定（Users 页统一管理，name+password 注入 users[]；非 2022 method 以用户密码为准，2022 method 以顶部 password 为主密钥）
   - 列表新增 method 列
 - 后端新增 `POST /api/tools/password` 工具接口
+- **用户池密码自动生成**：新建用户默认自动生成随机密码（16 字节 → base64，复用 /api/tools/password），密码输入框新增「生成」按钮可随时重新生成（编辑保留原密码）
 
 ### 修复
 - **shadowsocks 表单「password 必填」提示残留/误报**：条件式增删必填规则会触发 validate-on-rule-change，在异步密码生成/编辑回填窗口对空值误报一次后错误状态不再更新（method 非 none 时一直显示）。修复：密码校验改为始终挂载的自定义 validator（method 为 none 或已绑定用户时放行）；密码生成完成、编辑回填、method 切换后主动 clearValidate；method 为 none 时隐藏密码字段
