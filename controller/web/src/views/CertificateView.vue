@@ -5,7 +5,7 @@ import { showConfirmDialog } from '@/helper/confirmDialog'
 import { PlusIcon } from 'lucide-vue-next'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
@@ -299,12 +299,7 @@ onMounted(load)
           <div class="grid max-w-[720px] gap-x-4 gap-y-5" style="grid-template-columns: 180px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">store</label>
             <div class="flex items-center gap-2">
-              <SelectField v-model="certForm.store" class="w-full">
-                <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="s in STORE_OPTIONS" :key="s" :value="s">{{ s }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="certForm.store" class="w-full" :options="STORE_OPTIONS" />
               <span class="text-xs text-[#909399]">system 为默认（省略时）</span>
             </div>
 
@@ -388,12 +383,7 @@ onMounted(load)
         <TabsContent value="form">
           <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 170px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">type</label>
-            <SelectField v-model="providerForm.type">
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="t in PROVIDER_TYPES" :key="t" :value="t">{{ t }}</SelectItem>
-              </SelectContent>
-            </SelectField>
+            <SelectField v-model="providerForm.type" :options="PROVIDER_TYPES"  />
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag</label>
             <input v-model="providerForm.tag" type="text" class="input input-bordered input-sm w-full" placeholder="provider tag（供 tls.certificate_provider 引用，可选）" />
 
@@ -419,27 +409,17 @@ onMounted(load)
             <input v-model="providerForm.default_server_name" type="text" class="input input-bordered input-sm w-full" placeholder="默认服务器名（可选）" />
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">DNS-01 服务商</label>
             <div class="flex flex-col gap-1">
-              <SelectField v-model="providerForm.provider">
-                <SelectTrigger><SelectValue placeholder="不需要时清空（默认 cloudflare）" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="d in DNS01_PROVIDERS" :key="d" :value="d">{{ d }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="providerForm.provider" :options="DNS01_PROVIDERS" placeholder="不需要时清空（默认 cloudflare）"  />
               <p class="text-xs text-[#909399]">写入 dns01_challenge.provider（源码枚举 alidns/cloudflare/acmedns）；对应凭证（如 cloudflare.api_token）写在附加字段</p>
             </div>
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">account_key</label>
             <input v-model="providerForm.account_key" type="text" class="input input-bordered input-sm w-full" placeholder="账户密钥（可选）" />
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">key_type</label>
-            <SelectField v-model="providerForm.key_type">
-              <SelectTrigger><SelectValue placeholder="默认" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="k in KEY_TYPE_OPTIONS" :key="k" :value="k">{{ k }}</SelectItem>
-              </SelectContent>
-            </SelectField>
+            <SelectField v-model="providerForm.key_type" :options="KEY_TYPE_OPTIONS" placeholder="默认"  />
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">禁用 HTTP 挑战</label>
-            <Switch v-model="providerForm.disable_http_challenge" class="mt-1.5" />
+            <Switch v-model="providerForm.disable_http_challenge" class="self-center" />
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">禁用 TLS-ALPN 挑战</label>
-            <Switch v-model="providerForm.disable_tls_alpn_challenge" class="mt-1.5" />
+            <Switch v-model="providerForm.disable_tls_alpn_challenge" class="self-center" />
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">alternative_http_port</label>
             <input v-model.number="providerForm.alternative_http_port" type="number" min="0" max="65535" class="input input-bordered input-sm w-40" />
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">alternative_tls_port</label>

@@ -6,7 +6,7 @@ import { PlusIcon, RefreshCw, ClipboardPasteIcon, KeyRoundIcon, WandIcon, UserPl
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
@@ -569,12 +569,7 @@ onMounted(async () => {
           <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 130px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
             <template v-if="inboundTypes.length">
-              <SelectField v-model="form.type" :disabled="isEdit">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="t in inboundTypes" :key="t" :value="t">{{ t }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.type" :disabled="isEdit" :options="inboundTypes"  />
             </template>
             <div v-else class="alert alert-warning py-2 text-xs">当前没有后端连接，无法使用该功能</div>
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
@@ -632,12 +627,7 @@ onMounted(async () => {
               </div>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">method <span class="text-destructive">*</span></label>
               <div class="flex flex-col gap-1">
-                <SelectField v-model="form.ssMethod">
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="m in SS_METHODS" :key="m" :value="m">{{ m }}</SelectItem>
-                  </SelectContent>
-                </SelectField>
+                <SelectField v-model="form.ssMethod" :options="SS_METHODS"  />
                 <p class="text-xs text-[#606266] dark:text-[#a6b0bf]">默认 chacha20-ietf-poly1305；none 为无加密（仅调试用），2022-blake3-* 为 SIP022 系</p>
               </div>
               <template v-if="!isSsNoEncryption">
@@ -691,32 +681,20 @@ onMounted(async () => {
                 <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />协议<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
               </div>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">拥塞控制</label>
-              <SelectField v-model="form.congestionControl">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cubic">cubic</SelectItem>
-                  <SelectItem value="new_reno">new_reno</SelectItem>
-                  <SelectItem value="bbr">bbr</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.congestionControl" :options="['cubic', 'new_reno', 'bbr']" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">认证超时</label>
               <input v-model="form.authTimeout" type="text" class="input input-bordered input-sm w-full" placeholder="如 3s" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">心跳间隔</label>
               <input v-model="form.heartbeat" type="text" class="input input-bordered input-sm w-full" placeholder="如 10s" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">0-RTT 握手</label>
-              <Switch v-model="form.zeroRTT" class="mt-1.5" />
+              <Switch v-model="form.zeroRTT" class="self-center" />
 
               <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
                 <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />TLS（tuic 强制启用）<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
               </div>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">证书来源</label>
               <div class="flex flex-col gap-1">
-                <SelectField v-model="form.certificateProvider" :disabled="!!form.certificatePath.trim() || !!form.keyPath.trim()">
-                  <SelectTrigger><SelectValue placeholder="选择 Certificate Provider（推荐）" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="id in certProviders" :key="id" :value="id">{{ id }}</SelectItem>
-                  </SelectContent>
-                </SelectField>
+                <SelectField v-model="form.certificateProvider" :disabled="!!form.certificatePath.trim() || !!form.keyPath.trim()" :options="certProviders" placeholder="选择 Certificate Provider（推荐）"  />
                 <p class="text-xs text-[#606266] dark:text-[#a6b0bf]">证书 Provider 在「证书」页管理（引用其 tag）；与下方手动证书路径二选一</p>
               </div>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server_name</label>
@@ -729,18 +707,8 @@ onMounted(async () => {
               <span class="badge badge-info mt-1 w-fit">h3</span>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">TLS 版本</label>
               <div class="flex gap-2">
-                <SelectField v-model="form.minVersion" class="flex-1">
-                  <SelectTrigger><SelectValue placeholder="最小" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="v in TLS_VERSIONS" :key="v" :value="v">{{ v }}</SelectItem>
-                  </SelectContent>
-                </SelectField>
-                <SelectField v-model="form.maxVersion" class="flex-1">
-                  <SelectTrigger><SelectValue placeholder="最大" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="v in TLS_VERSIONS" :key="v" :value="v">{{ v }}</SelectItem>
-                  </SelectContent>
-                </SelectField>
+                <SelectField v-model="form.minVersion" class="flex-1" :options="TLS_VERSIONS" placeholder="最小"  />
+                <SelectField v-model="form.maxVersion" class="flex-1" :options="TLS_VERSIONS" placeholder="最大"  />
               </div>
 
               <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
@@ -753,7 +721,7 @@ onMounted(async () => {
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">初始包大小</label>
               <input v-model.number="form.initialPacketSize" type="number" min="0" max="10000" class="input input-bordered input-sm w-40" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">禁用 MTU 发现</label>
-              <Switch v-model="form.disablePathMTU" class="mt-1.5" />
+              <Switch v-model="form.disablePathMTU" class="self-center" />
             </template>
 
             <!-- 其他类型 -->

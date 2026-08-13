@@ -5,7 +5,7 @@ import { showConfirmDialog } from '@/helper/confirmDialog'
 import { PlusIcon, RefreshCw } from 'lucide-vue-next'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField } from '@/components/ui/select'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
 import ResourceSourceTab from '../components/ResourceSourceTab.vue'
@@ -292,12 +292,7 @@ onMounted(load)
         <TabsContent value="form">
           <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 130px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">type <span class="text-destructive">*</span></label>
-            <SelectField v-model="form.type">
-              <SelectTrigger><SelectValue placeholder="选择类型" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="t in RULE_SET_TYPES" :key="t" :value="t">{{ t }}</SelectItem>
-              </SelectContent>
-            </SelectField>
+            <SelectField v-model="form.type" :options="RULE_SET_TYPES" placeholder="选择类型"  />
 
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
             <div class="flex flex-col gap-1.5">
@@ -331,23 +326,13 @@ onMounted(load)
             </template>
             <template v-else-if="form.type === 'local'">
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">format</label>
-              <SelectField v-model="form.format">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="f in FORMAT_OPTIONS" :key="f" :value="f">{{ f }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.format" :options="FORMAT_OPTIONS"  />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">path <span class="text-destructive">*</span></label>
               <input v-model="form.path" type="text" class="input input-bordered input-sm w-full" placeholder="规则集文件路径（.json→source，.srs→binary，多 tag 时含 {tag}）" />
             </template>
             <template v-else>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">format</label>
-              <SelectField v-model="form.format">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="f in FORMAT_OPTIONS" :key="f" :value="f">{{ f }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.format" :options="FORMAT_OPTIONS"  />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">url <span class="text-destructive">*</span></label>
               <input v-model="form.url" type="text" class="input input-bordered input-sm w-full" placeholder="https://example.com/rule-set.json（多 tag 时含 {tag}）" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">initial_path</label>

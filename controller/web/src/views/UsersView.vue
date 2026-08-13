@@ -10,7 +10,7 @@ import { toTypedSchema, z } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 import { Checkbox } from '@/components/ui/checkbox'
-import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField } from '@/components/ui/select'
 import { api, type Inbound, type UserMeta } from '../api'
 
 const loading = ref(false)
@@ -269,16 +269,7 @@ onMounted(() => {
         <FormItem class="contents">
           <FormLabel class="pt-2">flow</FormLabel>
           <FormControl>
-            <SelectField v-model="flow">
-              <SelectTrigger v-bind="flowAttrs">
-                <SelectValue placeholder="vless flow（xtls-rprx-vision 等）" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">（无）</SelectItem>
-                <SelectItem value="xtls-rprx-vision">xtls-rprx-vision</SelectItem>
-                <SelectItem value="xtls-rprx-vision-udp443">xtls-rprx-vision-udp443</SelectItem>
-              </SelectContent>
-            </SelectField>
+            <SelectField v-model="flow" v-bind="flowAttrs" :options="[{ value: 'none', label: '（无）' }, { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' }, { value: 'xtls-rprx-vision-udp443', label: 'xtls-rprx-vision-udp443' }]" placeholder="vless flow（xtls-rprx-vision 等）" />
           </FormControl>
         </FormItem>
 

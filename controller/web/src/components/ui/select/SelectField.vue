@@ -1,17 +1,33 @@
 <script setup lang="ts">
-// radix SelectRoot 是多根组件（trigger + teleport 锚点 + 隐藏 select 共 3 节点），
-// 直接放进 grid 布局会被展开成 3 个 grid item 导致错位 → 用单根 div 包装
+// 原生 select（daisyUI 样式）：点击显示/选中隐藏由浏览器原生保证，零依赖零坑
+// 替代 reka-ui Select（该组件在当前 vue 版本下存在多项交互问题）
 import type { HTMLAttributes } from 'vue'
-import { SelectRoot } from 'reka-ui'
 
-const model = defineModel<any>()
-const props = defineProps<{ class?: HTMLAttributes['class'] }>()
+export type SelectOption = string | { value: string | number; label: string }
+
+const model = defineModel<string | number | null>()
+defineProps<{
+  options?: readonly SelectOption[]
+  placeholder?: string
+  disabled?: boolean
+  class?: HTMLAttributes['class']
+}>()
 </script>
 
 <template>
-  <div :class="['w-full min-w-0', props.class]">
-    <SelectRoot v-model="model" v-bind="$attrs">
-      <slot />
-    </SelectRoot>
-  </div>
+  <select
+    v-model="model"
+    v-bind="$attrs"
+    :disabled="disabled"
+    :class="['select select-bordered select-sm w-full min-w-0', $attrs.class]"
+  >
+    <option v-if="placeholder" value="" disabled>{{ placeholder }}</option>
+    <option
+      v-for="o in options"
+      :key="typeof o === 'string' ? o : o.value"
+      :value="typeof o === 'string' ? o : o.value"
+    >
+      {{ typeof o === 'string' ? o : o.label }}
+    </option>
+  </select>
 </template>

@@ -1,5 +1,1 @@
-export { default as SelectTrigger } from './SelectTrigger.vue'
-export { default as SelectContent } from './SelectContent.vue'
-export { default as SelectItem } from './SelectItem.vue'
-export { default as SelectField } from './SelectField.vue'
-export { SelectRoot, SelectValue, SelectItemIndicator } from 'reka-ui'
+export { default as SelectField, type SelectOption } from './SelectField.vue'

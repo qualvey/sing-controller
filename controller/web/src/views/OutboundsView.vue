@@ -6,7 +6,7 @@ import { PlusIcon, RefreshCw, ClipboardPasteIcon, KeyRoundIcon, LoaderIcon } fro
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
@@ -490,12 +490,7 @@ onMounted(async () => {
           <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 170px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
             <template v-if="outboundTypes.length">
-              <SelectField v-model="form.type" :disabled="isEdit">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="t in outboundTypes" :key="t" :value="t">{{ t }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.type" :disabled="isEdit" :options="outboundTypes"  />
             </template>
             <div v-else class="alert alert-warning py-2 text-xs">当前没有后端连接，无法使用该功能</div>
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
@@ -519,43 +514,26 @@ onMounted(async () => {
                 </button>
               </div>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">flow</label>
-              <SelectField v-model="form.flow">
-                <SelectTrigger><SelectValue placeholder="留空则不启用" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">（无）</SelectItem>
-                  <SelectItem value="xtls-rprx-vision">xtls-rprx-vision</SelectItem>
-                  <SelectItem value="xtls-rprx-vision-udp443">xtls-rprx-vision-udp443</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.flow" :options="[{ value: 'none', label: '（无）' }, { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' }, { value: 'xtls-rprx-vision-udp443', label: 'xtls-rprx-vision-udp443' }]" placeholder="留空则不启用" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">network</label>
-              <SelectField v-model="form.network">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="n in networkOptionsAll" :key="n" :value="n">{{ n }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.network" :options="networkOptionsAll"  />
 
               <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
                 <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />TLS<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
               </div>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.enabled</label>
-              <Switch v-model="form.tls.enabled" class="mt-1.5" />
+              <Switch v-model="form.tls.enabled" class="self-center" />
               <template v-if="form.tls.enabled">
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.server_name <span class="text-destructive">*</span></label>
                 <input v-model="form.tls.server_name" type="text" class="input input-bordered input-sm w-full" placeholder="SNI，如 www.example.com" />
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.utls.enabled</label>
-                <Switch v-model="form.tls.utls.enabled" class="mt-1.5" />
+                <Switch v-model="form.tls.utls.enabled" class="self-center" />
                 <template v-if="form.tls.utls.enabled">
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.utls.fingerprint</label>
-                  <SelectField v-model="form.tls.utls.fingerprint">
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem v-for="f in fingerprintOptions" :key="f" :value="f">{{ f }}</SelectItem>
-                    </SelectContent>
-                  </SelectField>
+                  <SelectField v-model="form.tls.utls.fingerprint" :options="fingerprintOptions"  />
                 </template>
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.reality.enabled</label>
-                <Switch v-model="form.tls.reality.enabled" class="mt-1.5" />
+                <Switch v-model="form.tls.reality.enabled" class="self-center" />
                 <template v-if="form.tls.reality.enabled">
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.reality.public_key <span class="text-destructive">*</span></label>
                   <div class="flex gap-2">
@@ -584,23 +562,13 @@ onMounted(async () => {
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">password <span class="text-destructive">*</span></label>
               <input v-model="form.password" type="password" class="input input-bordered input-sm w-full" placeholder="tuic 密码" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">congestion_control</label>
-              <SelectField v-model="form.congestion_control">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="c in congestionOptions" :key="c" :value="c">{{ c }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.congestion_control" :options="congestionOptions"  />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">udp_relay_mode</label>
-              <SelectField v-model="form.udp_relay_mode">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="m in udpRelayOptions" :key="m" :value="m">{{ m }}</SelectItem>
-                </SelectContent>
-              </SelectField>
+              <SelectField v-model="form.udp_relay_mode" :options="udpRelayOptions"  />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">zero_rtt_handshake</label>
-              <Switch v-model="form.zero_rtt_handshake" class="mt-1.5" />
+              <Switch v-model="form.zero_rtt_handshake" class="self-center" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.enabled</label>
-              <Switch v-model="form.tls.enabled" class="mt-1.5" />
+              <Switch v-model="form.tls.enabled" class="self-center" />
               <template v-if="form.tls.enabled">
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.server_name <span class="text-destructive">*</span></label>
                 <input v-model="form.tls.server_name" type="text" class="input input-bordered input-sm w-full" placeholder="SNI，如 www.example.com" />
@@ -615,12 +583,7 @@ onMounted(async () => {
               <ChipInput v-model="form.outbounds" :suggestions="groupCandidates" placeholder="选择组成员（回车添加，可多选）" />
               <template v-if="isSelector">
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">default</label>
-                <SelectField v-model="form.default_out">
-                  <SelectTrigger><SelectValue placeholder="可选，默认选中项" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="t in form.outbounds" :key="t" :value="t">{{ t }}</SelectItem>
-                  </SelectContent>
-                </SelectField>
+                <SelectField v-model="form.default_out" :options="form.outbounds" placeholder="可选，默认选中项"  />
               </template>
               <template v-if="isUrlTest">
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">url</label>
@@ -631,7 +594,7 @@ onMounted(async () => {
                 <input v-model.number="form.tolerance" type="number" min="0" max="65535" class="input input-bordered input-sm w-40" />
               </template>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">interrupt_exist_connections</label>
-              <Switch v-model="form.interrupt_exist_connections" class="mt-1.5" />
+              <Switch v-model="form.interrupt_exist_connections" class="self-center" />
             </template>
 
             <!-- 其他类型：原始 JSON 兜底 -->
