@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { showToast } from '@/helper/toast'
+import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import type { ControllerSettings, Outbound } from '../api'
 
@@ -145,7 +146,7 @@ const save = async () => {
         <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 180px minmax(0, 1fr)">
           <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">并入 Proxy(selector)</label>
           <div>
-            <input v-model="form.defaults.attach_to_selector" type="checkbox" class="toggle toggle-primary toggle-sm" />
+            <Switch v-model="form.defaults.attach_to_selector" />
             <p class="mt-1 text-xs leading-relaxed text-[#909399]">默认开启：新建 outbound 时自动追加到指定 selector 的成员列表。</p>
           </div>
           <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">目标组 tag</label>
@@ -207,7 +208,7 @@ const save = async () => {
           </template>
           <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">保存后自动重载</label>
           <div>
-            <input v-model="form.reload!.after_save" type="checkbox" class="toggle toggle-primary toggle-sm" :disabled="form.reload!.mode === 'none'" />
+            <Switch v-model="form.reload!.after_save" :disabled="form.reload!.mode === 'none'" />
             <p class="mt-1 text-xs leading-relaxed text-[#909399]">开启后所有配置写操作保存成功即自动触发重载；失败不影响保存，仅提示。</p>
           </div>
         </div>

@@ -1,13 +1,13 @@
 <script setup lang="ts">
+// 原生 label（reka-ui 的 Label 组件在当前 vue 版本下渲染异常：内容丢失/宽度错乱）
 import type { HTMLAttributes } from 'vue'
 import { cn } from '@/lib/utils'
-import Label from '@/components/ui/label/Label.vue'
 
 const props = defineProps<{ class?: HTMLAttributes['class'] }>()
 </script>
 
 <template>
-  <Label :class="cn('text-[#606266] dark:text-[#a6b0bf]', props.class)">
+  <label :class="cn('text-[#606266] dark:text-[#a6b0bf]', props.class)">
     <slot />
-  </Label>
+  </label>
 </template>
