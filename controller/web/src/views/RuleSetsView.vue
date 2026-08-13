@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { showToast } from '@/helper/toast'
+import { showConfirmDialog } from '@/helper/confirmDialog'
+import { PlusIcon, RefreshCw } from 'lucide-vue-next'
+import DialogWrapper from '@/components/common/DialogWrapper.vue'
+import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { SelectRoot, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
 import ResourceSourceTab from '../components/ResourceSourceTab.vue'
@@ -34,6 +39,22 @@ const form = reactive({
   rulesJson: ''
 })
 
+// tag chip 输入（替代 el-select multiple+allow-create）：回车/逗号添加，chip 可删
+const tagInput = ref('')
+const addTag = () => {
+  const parts = tagInput.value
+    .split(/[,，\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  for (const p of parts) {
+    if (!form.tag.includes(p)) form.tag.push(p)
+  }
+  tagInput.value = ''
+}
+const removeTag = (t: string) => {
+  form.tag = form.tag.filter((x) => x !== t)
+}
+
 const resetForm = () => {
   form.type = 'remote'
   form.tag = []
@@ -43,6 +64,7 @@ const resetForm = () => {
   form.initial_path = ''
   form.update_interval = ''
   form.rulesJson = ''
+  tagInput.value = ''
 }
 
 function buildRuleSet(): Record<string, any> {
@@ -104,15 +126,15 @@ function openEdit(row: { id: string; rule_set: Record<string, any> }) {
 
 const save = async () => {
   if (!form.tag.length) {
-    ElMessage.warning('请填写 tag')
+    showToast('请填写 tag', 'warning')
     return
   }
   if (form.type !== 'inline' && form.type === 'local' && !form.path.trim()) {
-    ElMessage.warning('local 规则集需要 path')
+    showToast('local 规则集需要 path', 'warning')
     return
   }
   if (form.type === 'remote' && !form.url.trim()) {
-    ElMessage.warning('remote 规则集需要 url')
+    showToast('remote 规则集需要 url', 'warning')
     return
   }
   saving.value = true
@@ -123,55 +145,51 @@ const save = async () => {
     } else {
       await api.createRuleSet(payload)
     }
-    ElMessage.success('保存成功')
+    showToast('保存成功', 'success')
     dialogVisible.value = false
     await load()
     await statusStore.refresh()
   } catch (e) {
-    ElMessage.error((e as Error).message || '保存失败')
+    showToast((e as Error).message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
 }
 
 const remove = async (row: { id: string; rule_set: Record<string, any> }) => {
-  try {
-    await ElMessageBox.confirm('确定删除该规则集？被引用的规则将失效。', '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const first = await showConfirmDialog({
+    title: '删除确认',
+    message: '确定删除该规则集？被引用的规则将失效。',
+    confirmText: '删除',
+    confirmButtonClass: 'btn-error'
+  })
+  if (!first.confirmed) return
   try {
     await api.deleteRuleSet(row.id)
-    ElMessage.success('删除成功')
+    showToast('删除成功', 'success')
     await load()
     await statusStore.refresh()
   } catch (e) {
     const err = e as Error & { references?: string[] }
     if (err.references?.length) {
-      try {
-        await ElMessageBox.confirm(
-          `该规则集被引用：${err.references.join('、')}\\n删除后将自动从这些规则中移除引用。确认删除？`,
-          '被引用确认',
-          { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
-        )
-      } catch {
-        return
-      }
+      const second = await showConfirmDialog({
+        title: '被引用确认',
+        message: `该规则集被引用：${err.references.join('、')}\n删除后将自动从这些规则中移除引用。确认删除？`,
+        confirmText: '确认删除',
+        confirmButtonClass: 'btn-error'
+      })
+      if (!second.confirmed) return
       try {
         await api.deleteRuleSet(row.id, true)
-        ElMessage.success('删除成功（已移除引用）')
+        showToast('删除成功（已移除引用）', 'success')
         await load()
         await statusStore.refresh()
       } catch (e2) {
-        ElMessage.error((e2 as Error).message || '删除失败')
+        showToast((e2 as Error).message || '删除失败', 'error')
       }
       return
     }
-    ElMessage.error(err.message || '删除失败')
+    showToast(err.message || '删除失败', 'error')
   }
 }
 
@@ -181,7 +199,7 @@ const load = async () => {
     const data = await api.ruleSets()
     items.value = data.rule_sets || []
   } catch (e) {
-    ElMessage.error((e as Error).message || '加载规则集失败')
+    showToast((e as Error).message || '加载规则集失败', 'error')
   } finally {
     loading.value = false
   }
@@ -203,125 +221,150 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <el-tabs v-model="outerTab">
-      <el-tab-pane label="表单" name="form">
-    <div class="toolbar">
-      <el-button type="primary" @click="openCreate">新建规则集</el-button>
-      <el-button :loading="loading" @click="load">刷新</el-button>
-      <span class="hint">规则集定义在 route.rule_set 段（sing-box 1.14）：inline 内联 / local 本地文件 / remote 远程 URL；规则通过 rule_set 字段引用</span>
-    </div>
+  <div>
+    <TabsRoot v-model="outerTab">
+      <TabsList>
+        <TabsTrigger value="form">表单</TabsTrigger>
+        <TabsTrigger value="source">源码</TabsTrigger>
+      </TabsList>
 
-    <el-table :data="items" v-loading="loading" border stripe>
-      <el-table-column label="tag(s)" min-width="140">
-        <template #default="{ row }">{{ fmtList(row.rule_set.tag) }}</template>
-      </el-table-column>
-      <el-table-column label="type" width="80">
-        <template #default="{ row }">{{ row.rule_set.type || 'inline' }}</template>
-      </el-table-column>
-      <el-table-column label="format" width="80">
-        <template #default="{ row }">{{ inferFormat(row.rule_set) }}</template>
-      </el-table-column>
-      <el-table-column label="来源" min-width="220">
-        <template #default="{ row }">
-          <span v-if="row.rule_set.url" class="mono">{{ row.rule_set.url }}</span>
-          <span v-else-if="row.rule_set.path" class="mono">{{ row.rule_set.path }}</span>
-          <span v-else-if="Array.isArray(row.rule_set.rules)">{{ row.rule_set.rules.length }} 条内联规则</span>
-          <span v-else class="muted">—</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="update_interval" width="130">
-        <template #default="{ row }">{{ row.rule_set.update_interval || '—' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" type="primary" link @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" link @click="remove(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+      <TabsContent value="form">
+        <div class="mb-3.5 flex flex-wrap items-center gap-2.5">
+          <button class="btn btn-primary btn-sm" @click="openCreate">
+            <PlusIcon class="h-4 w-4" />
+            新建规则集
+          </button>
+          <button class="btn btn-ghost btn-sm" :disabled="loading" @click="load">
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
+            刷新
+          </button>
+          <span class="text-xs text-[#909399]">规则集定义在 route.rule_set 段（sing-box 1.14）：inline 内联 / local 本地文件 / remote 远程 URL；规则通过 rule_set 字段引用</span>
+        </div>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑规则集' : '新建规则集'" width="620px" :close-on-click-modal="false">
-      <el-tabs>
-        <el-tab-pane label="表单">
-      <el-form label-width="130px">
-        <el-form-item label="type" required>
-          <el-select v-model="form.type" style="width: 100%">
-            <el-option v-for="t in RULE_SET_TYPES" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="tag" required>
-          <el-select v-model="form.tag" multiple filterable allow-create default-first-option style="width: 100%" placeholder="规则集 tag（inline 仅支持单个）">
-            <el-option v-for="t in form.tag" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <template v-if="form.type === 'inline'">
-          <el-form-item label="rules (JSON)">
-            <el-input v-model="form.rulesJson" type="textarea" :rows="10" class="mono" placeholder='[{"domain_suffix": ".cn"}, {"ip_cidr": ["10.0.0.0/8"]}]' />
-          </el-form-item>
-          <span class="hint">HeadlessRule 数组（无 action 的匹配规则）；多个 tag 时 path/url 需含 {tag} 占位符</span>
-        </template>
-        <template v-else-if="form.type === 'local'">
-          <el-form-item label="format">
-            <el-select v-model="form.format" style="width: 100%">
-              <el-option v-for="f in FORMAT_OPTIONS" :key="f" :label="f" :value="f" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="path" required>
-            <el-input v-model="form.path" placeholder="规则集文件路径（.json→source，.srs→binary，多 tag 时含 {tag}）" />
-          </el-form-item>
-        </template>
-        <template v-else>
-          <el-form-item label="format">
-            <el-select v-model="form.format" style="width: 100%">
-              <el-option v-for="f in FORMAT_OPTIONS" :key="f" :label="f" :value="f" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="url" required>
-            <el-input v-model="form.url" placeholder="https://example.com/rule-set.json（多 tag 时含 {tag}）" />
-          </el-form-item>
-          <el-form-item label="initial_path">
-            <el-input v-model="form.initial_path" placeholder="初始下载路径（可选）" />
-          </el-form-item>
-          <el-form-item label="update_interval">
-            <el-input v-model="form.update_interval" placeholder="如 24h（可选）" />
-          </el-form-item>
-        </template>
-      </el-form>
-      </el-tab-pane>
-      <el-tab-pane label="源码">
-        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
-      </el-tab-pane>
-    </el-tabs>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
-      </template>
-    </el-dialog>
-      </el-tab-pane>
-      <el-tab-pane label="源码" name="source">
+        <div class="overflow-hidden rounded-lg border border-[#e4e7ed] bg-white dark:border-[#303030] dark:bg-[#1d1e1f]">
+          <div v-if="loading && !items.length" class="p-10 text-center text-sm text-[#909399]">加载中…</div>
+          <table v-else class="table table-sm w-full">
+            <thead>
+              <tr>
+                <th class="w-[140px]">tag(s)</th>
+                <th class="w-20">type</th>
+                <th class="w-20">format</th>
+                <th>来源</th>
+                <th class="w-[130px]">update_interval</th>
+                <th class="w-[130px] text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in items" :key="row.id">
+                <td class="font-mono text-xs">{{ fmtList(row.rule_set.tag) }}</td>
+                <td class="text-xs">{{ row.rule_set.type || 'inline' }}</td>
+                <td class="text-xs">{{ inferFormat(row.rule_set) }}</td>
+                <td>
+                  <span v-if="row.rule_set.url" class="font-mono text-xs">{{ row.rule_set.url }}</span>
+                  <span v-else-if="row.rule_set.path" class="font-mono text-xs">{{ row.rule_set.path }}</span>
+                  <span v-else-if="Array.isArray(row.rule_set.rules)" class="text-xs">{{ row.rule_set.rules.length }} 条内联规则</span>
+                  <span v-else class="text-xs text-[#c0c4cc]">—</span>
+                </td>
+                <td class="text-xs">{{ row.rule_set.update_interval || '—' }}</td>
+                <td class="text-right">
+                  <button class="btn btn-ghost btn-xs text-primary" @click="openEdit(row)">编辑</button>
+                  <button class="btn btn-ghost btn-xs text-error" @click="remove(row)">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-if="!loading && !items.length" class="py-8 text-center text-sm text-[#606266] dark:text-[#a6b0bf]">暂无规则集</div>
+        </div>
+      </TabsContent>
+
+      <TabsContent value="source">
         <SourcePane segment="route.rule_set" @saved="load" />
-      </el-tab-pane>
-    </el-tabs>
+      </TabsContent>
+    </TabsRoot>
+
+    <!-- 新建/编辑弹窗 -->
+    <DialogWrapper v-model="dialogVisible" :title="isEdit ? '编辑规则集' : '新建规则集'" box-class="max-w-[620px]">
+      <TabsRoot :model-value="'form'">
+        <TabsList>
+          <TabsTrigger value="form">表单</TabsTrigger>
+          <TabsTrigger value="source">源码</TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 130px minmax(0, 1fr)">
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">type <span class="text-destructive">*</span></label>
+            <SelectRoot v-model="form.type">
+              <SelectTrigger><SelectValue placeholder="选择类型" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="t in RULE_SET_TYPES" :key="t" :value="t">{{ t }}</SelectItem>
+              </SelectContent>
+            </SelectRoot>
+
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
+            <div class="flex flex-col gap-1.5">
+              <div class="flex flex-wrap gap-1.5">
+                <span v-for="t in form.tag" :key="t" class="badge badge-primary badge-outline gap-1">
+                  {{ t }}
+                  <button type="button" class="cursor-pointer text-xs opacity-70 hover:opacity-100" @click="removeTag(t)">×</button>
+                </span>
+              </div>
+              <input
+                v-model="tagInput"
+                type="text"
+                class="input input-bordered input-sm w-full"
+                :placeholder="form.type === 'inline' ? '单个 tag（回车添加）' : 'tag（回车/逗号添加，多个）'"
+                @keydown.enter.prevent="addTag"
+                @blur="addTag"
+              />
+            </div>
+
+            <template v-if="form.type === 'inline'">
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">rules (JSON)</label>
+              <div class="flex flex-col gap-1">
+                <textarea
+                  v-model="form.rulesJson"
+                  rows="10"
+                  class="textarea textarea-bordered w-full font-mono text-xs"
+                  placeholder='[{"domain_suffix": ".cn"}, {"ip_cidr": ["10.0.0.0/8"]}]'
+                />
+                <p class="text-xs text-[#909399]">HeadlessRule 数组（无 action 的匹配规则）；多个 tag 时 path/url 需含 {tag} 占位符</p>
+              </div>
+            </template>
+            <template v-else-if="form.type === 'local'">
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">format</label>
+              <SelectRoot v-model="form.format">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="f in FORMAT_OPTIONS" :key="f" :value="f">{{ f }}</SelectItem>
+                </SelectContent>
+              </SelectRoot>
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">path <span class="text-destructive">*</span></label>
+              <input v-model="form.path" type="text" class="input input-bordered input-sm w-full" placeholder="规则集文件路径（.json→source，.srs→binary，多 tag 时含 {tag}）" />
+            </template>
+            <template v-else>
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">format</label>
+              <SelectRoot v-model="form.format">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="f in FORMAT_OPTIONS" :key="f" :value="f">{{ f }}</SelectItem>
+                </SelectContent>
+              </SelectRoot>
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">url <span class="text-destructive">*</span></label>
+              <input v-model="form.url" type="text" class="input input-bordered input-sm w-full" placeholder="https://example.com/rule-set.json（多 tag 时含 {tag}）" />
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">initial_path</label>
+              <input v-model="form.initial_path" type="text" class="input input-bordered input-sm w-full" placeholder="初始下载路径（可选）" />
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">update_interval</label>
+              <input v-model="form.update_interval" type="text" class="input input-bordered input-sm w-full" placeholder="如 24h（可选）" />
+            </template>
+          </div>
+        </TabsContent>
+        <TabsContent value="source">
+          <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+        </TabsContent>
+      </TabsRoot>
+      <div class="mt-5 flex justify-end gap-2">
+        <button class="btn btn-ghost btn-sm" @click="dialogVisible = false">取消</button>
+        <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">保存</button>
+      </div>
+    </DialogWrapper>
   </div>
 </template>
-
-<style scoped>
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.hint {
-  font-size: 12px;
-  color: #909399;
-}
-.mono {
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 12px;
-}
-.muted {
-  color: #c0c4cc;
-}
-</style>

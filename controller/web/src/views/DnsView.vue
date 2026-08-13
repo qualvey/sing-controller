@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { showToast } from '@/helper/toast'
+import { showConfirmDialog } from '@/helper/confirmDialog'
+import { PlusIcon, RefreshCw } from 'lucide-vue-next'
+import DialogWrapper from '@/components/common/DialogWrapper.vue'
+import ChipInput from '@/components/common/ChipInput.vue'
+import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { SelectRoot, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import { useStatusStore } from '../stores/status'
 import SourcePane from '../components/SourcePane.vue'
@@ -81,7 +88,7 @@ const serverForm = reactive<Record<string, any>>({
   udp_fragment: false,
   network_strategy: '',
   network_type: [] as string[],
-  // domain_resolver（域名字段：带域名的 server 需要；子字段全部控件化）
+  // domain_resolver
   dr_server: '',
   dr_timeout: '',
   dr_strategy: '',
@@ -130,7 +137,7 @@ function buildServer(): Record<string, any> {
   if (serverForm.udp_fragment) s.udp_fragment = true
   if (serverForm.network_strategy) s.network_strategy = serverForm.network_strategy
   if (serverForm.network_type.length) s.network_type = [...serverForm.network_type]
-  // domain_resolver：server 必填才创建对象（带域名的 server 必需）
+  // domain_resolver：server 必填才创建对象
   if (serverForm.dr_server) {
     const dr: Record<string, any> = { server: serverForm.dr_server }
     if (serverForm.dr_timeout.trim()) dr.timeout = serverForm.dr_timeout.trim()
@@ -213,7 +220,7 @@ function openEditServer(row: Record<string, any>) {
 
 const saveServer = async () => {
   if (!serverForm.tag.trim()) {
-    ElMessage.warning('请填写 tag')
+    showToast('请填写 tag', 'warning')
     return
   }
   saving.value = true
@@ -224,61 +231,55 @@ const saveServer = async () => {
     } else {
       await api.createDnsServer(payload)
     }
-    ElMessage.success('保存成功')
+    showToast('保存成功', 'success')
     serverDialogVisible.value = false
     await loadDns()
     await statusStore.refresh()
   } catch (e) {
-    ElMessage.error((e as Error).message || '保存失败')
+    showToast((e as Error).message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
 }
 
 const removeServer = async (row: Record<string, any>) => {
-  try {
-    await ElMessageBox.confirm(`确定删除 DNS server「${row.tag}」？该操作不可恢复。`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const first = await showConfirmDialog({
+    title: '删除确认',
+    message: `确定删除 DNS server「${row.tag}」？该操作不可恢复。`,
+    confirmText: '删除',
+    confirmButtonClass: 'btn-error'
+  })
+  if (!first.confirmed) return
   try {
     await api.deleteDnsServer(String(row.tag))
-    ElMessage.success('删除成功')
+    showToast('删除成功', 'success')
     await loadDns()
     await statusStore.refresh()
   } catch (e) {
     const err = e as Error & { references?: string[] }
     if (err.references?.length) {
-      try {
-        await ElMessageBox.confirm(
-          `DNS server「${row.tag}」被引用：${err.references.join('、')}\\n删除后将自动清除这些引用。确认删除？`,
-          '被引用确认',
-          { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
-        )
-      } catch {
-        return
-      }
+      const second = await showConfirmDialog({
+        title: '被引用确认',
+        message: `DNS server「${row.tag}」被引用：${err.references.join('、')}\n删除后将自动清除这些引用。确认删除？`,
+        confirmText: '确认删除',
+        confirmButtonClass: 'btn-error'
+      })
+      if (!second.confirmed) return
       try {
         await api.deleteDnsServer(String(row.tag), true)
-        ElMessage.success('删除成功（已清除引用）')
+        showToast('删除成功（已清除引用）', 'success')
         await loadDns()
         await statusStore.refresh()
       } catch (e2) {
-        ElMessage.error((e2 as Error).message || '删除失败')
+        showToast((e2 as Error).message || '删除失败', 'error')
       }
       return
     }
-    ElMessage.error(err.message || '删除失败')
+    showToast(err.message || '删除失败', 'error')
   }
 }
 
 // ---------- DNS 规则 ----------
-// 规则表单：字段表驱动（含 json 类型字段的字段级 JSON 输入），无附加字段兜底；
-// 支持 default（匹配字段）与 logical（and/or 嵌套子规则）两种类型（option/rule_dns.go 多态）
 const ruleForm = reactive<Record<string, any>>({
   ruleType: 'default',
   mode: 'and',
@@ -372,7 +373,6 @@ function buildDnsRule(): Record<string, any> {
 }
 
 // action 与参数（route=server 字段模型；其余动作参数各有 JSON 本体）——default/logical 共用
-// 注意：非 route action 时保留 server 字段（防静默丢数据，sing-box 接受与否由校验决定）
 function buildDnsAction(rule: Record<string, any>) {
   const action = ruleForm.action
   if (action === 'reject') {
@@ -417,7 +417,7 @@ function openEditRule(row: { id: string; rule: Record<string, any> }) {
   sourceJson.value = JSON.stringify(row.rule, null, 2)
   resetRuleForm()
   const r = row.rule
-  // logical 类型（多态）：mode + 嵌套子规则 + 共用 action
+  // logical 类型（多态）
   if (r.type === 'logical') {
     ruleForm.ruleType = 'logical'
     ruleForm.mode = r.mode === 'or' ? 'or' : 'and'
@@ -466,34 +466,32 @@ const saveRule = async () => {
     } else {
       await api.createDnsRule(payload)
     }
-    ElMessage.success('保存成功')
+    showToast('保存成功', 'success')
     ruleDialogVisible.value = false
     await loadDns()
     await statusStore.refresh()
   } catch (e) {
-    ElMessage.error((e as Error).message || '保存失败')
+    showToast((e as Error).message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
 }
 
 const removeRule = async (row: { id: string; rule: Record<string, any> }) => {
-  try {
-    await ElMessageBox.confirm('确定删除这条 DNS 规则？该操作不可恢复。', '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const { confirmed } = await showConfirmDialog({
+    title: '删除确认',
+    message: '确定删除这条 DNS 规则？该操作不可恢复。',
+    confirmText: '删除',
+    confirmButtonClass: 'btn-error'
+  })
+  if (!confirmed) return
   try {
     await api.deleteDnsRule(row.id)
-    ElMessage.success('删除成功')
+    showToast('删除成功', 'success')
     await loadDns()
     await statusStore.refresh()
   } catch (e) {
-    ElMessage.error((e as Error).message || '删除失败')
+    showToast((e as Error).message || '删除失败', 'error')
   }
 }
 
@@ -520,11 +518,11 @@ const saveOptions = async () => {
     patch.independent_cache = optsForm.independent_cache
     patch.reverse_mapping = optsForm.reverse_mapping
     await api.updateDnsOptions(patch)
-    ElMessage.success('DNS 选项已保存')
+    showToast('DNS 选项已保存', 'success')
     await loadDns()
     await statusStore.refresh()
   } catch (e) {
-    ElMessage.error((e as Error).message || '保存失败')
+    showToast((e as Error).message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
@@ -546,7 +544,7 @@ const loadDns = async () => {
     optsForm.reverse_mapping = !!opts.reverse_mapping
     dnsTags.value = servers.value.map((s) => String(s.tag)).filter(Boolean)
   } catch (e) {
-    ElMessage.error((e as Error).message || '加载 DNS 配置失败')
+    showToast((e as Error).message || '加载 DNS 配置失败', 'error')
   } finally {
     loading.value = false
   }
@@ -591,377 +589,403 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
-    <el-tabs v-model="outerTab">
-      <el-tab-pane label="表单" name="form">
-        <div class="toolbar">
-      <el-button type="primary" @click="openCreateServer">新建 Server</el-button>
-      <el-button type="primary" @click="openCreateRule">新建规则</el-button>
-      <el-button :loading="loading" @click="loadDns">刷新</el-button>
-      <span class="hint">DNS 管理：servers（传输类型多态）+ 规则（匹配 → server）+ 基础选项；保存走 sing-box 完整校验</span>
-    </div>
+  <div>
+    <TabsRoot v-model="outerTab">
+      <TabsList>
+        <TabsTrigger value="form">表单</TabsTrigger>
+        <TabsTrigger value="source">源码</TabsTrigger>
+      </TabsList>
 
-    <el-tabs v-model="activeTab">
-      <el-tab-pane label="Servers" name="servers">
-        <el-table :data="servers" v-loading="loading" border stripe>
-          <el-table-column prop="tag" label="tag" min-width="120" />
-          <el-table-column prop="type" label="type" width="90" />
-          <el-table-column label="地址" min-width="180">
-            <template #default="{ row }">
-              <span v-if="row.server">{{ row.server }}<template v-if="row.server_port">:{{ row.server_port }}</template></span>
-              <span v-else-if="row.inet4_range || row.inet6_range">{{ row.inet4_range || '' }} {{ row.inet6_range || '' }}</span>
-              <span v-else class="muted">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="TLS" width="70">
-            <template #default="{ row }">{{ row.tls?.enabled ? '✓' : '—' }}</template>
-          </el-table-column>
-          <el-table-column prop="detour" label="detour" width="110">
-            <template #default="{ row }">{{ row.detour || '—' }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="140" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" type="primary" link @click="openEditServer(row)">编辑</el-button>
-              <el-button size="small" type="danger" link @click="removeServer(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-tab-pane>
+      <TabsContent value="form">
+        <div class="mb-3.5 flex flex-wrap items-center gap-2.5">
+          <button class="btn btn-primary btn-sm" @click="openCreateServer">
+            <PlusIcon class="h-4 w-4" />
+            新建 Server
+          </button>
+          <button class="btn btn-primary btn-sm" @click="openCreateRule">
+            <PlusIcon class="h-4 w-4" />
+            新建规则
+          </button>
+          <button class="btn btn-ghost btn-sm" :disabled="loading" @click="loadDns">
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
+            刷新
+          </button>
+          <span class="text-xs text-[#909399]">DNS 管理：servers（传输类型多态）+ 规则（匹配 → server）+ 基础选项；保存走 sing-box 完整校验</span>
+        </div>
 
-      <el-tab-pane label="规则" name="rules">
-        <el-table :data="rules" v-loading="loading" border stripe>
-          <el-table-column type="index" label="#" width="56" />
-          <el-table-column label="规则" min-width="300">
-            <template #default="{ row }">
-              <div class="rule-cell">
-                <template v-if="ruleSummary(row.rule).items.length">
-                  <span v-for="it in ruleSummary(row.rule).items" :key="it.k" class="rule-item">
-                    <b>{{ it.k }}</b> {{ it.v }}
-                  </span>
-                  <span v-if="ruleSummary(row.rule).otherCount" class="rule-item muted">+{{ ruleSummary(row.rule).otherCount }} 项</span>
-                </template>
-                <span v-else class="rule-item muted">全部（无匹配条件）</span>
-                <el-tag v-if="row.rule.invert" size="small" type="warning" style="margin-left: 6px">取反</el-tag>
+        <TabsRoot v-model="activeTab">
+          <TabsList>
+            <TabsTrigger value="servers">Servers</TabsTrigger>
+            <TabsTrigger value="rules">规则</TabsTrigger>
+            <TabsTrigger value="options">选项</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="servers">
+            <div class="overflow-hidden rounded-lg border border-[#e4e7ed] bg-white dark:border-[#303030] dark:bg-[#1d1e1f]">
+              <div v-if="loading && !servers.length" class="p-10 text-center text-sm text-[#909399]">加载中…</div>
+              <table v-else class="table table-sm w-full">
+                <thead>
+                  <tr>
+                    <th class="w-[120px]">tag</th>
+                    <th class="w-20">type</th>
+                    <th>地址</th>
+                    <th class="w-14">TLS</th>
+                    <th class="w-[110px]">detour</th>
+                    <th class="w-[130px] text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in servers" :key="row.tag">
+                    <td class="text-xs font-medium">{{ row.tag }}</td>
+                    <td class="text-xs">{{ row.type }}</td>
+                    <td class="text-xs">
+                      <span v-if="row.server">{{ row.server }}<template v-if="row.server_port">:{{ row.server_port }}</template></span>
+                      <span v-else-if="row.inet4_range || row.inet6_range">{{ row.inet4_range || '' }} {{ row.inet6_range || '' }}</span>
+                      <span v-else class="text-[#c0c4cc]">—</span>
+                    </td>
+                    <td class="text-xs">{{ row.tls?.enabled ? '✓' : '—' }}</td>
+                    <td class="text-xs">{{ row.detour || '—' }}</td>
+                    <td class="text-right">
+                      <button class="btn btn-ghost btn-xs text-primary" @click="openEditServer(row)">编辑</button>
+                      <button class="btn btn-ghost btn-xs text-error" @click="removeServer(row)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!loading && !servers.length" class="py-8 text-center text-sm text-[#606266] dark:text-[#a6b0bf]">暂无 DNS server</div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="rules">
+            <div class="overflow-hidden rounded-lg border border-[#e4e7ed] bg-white dark:border-[#303030] dark:bg-[#1d1e1f]">
+              <div v-if="loading && !rules.length" class="p-10 text-center text-sm text-[#909399]">加载中…</div>
+              <table v-else class="table table-sm w-full">
+                <thead>
+                  <tr>
+                    <th class="w-14">#</th>
+                    <th>规则</th>
+                    <th class="w-[140px]">动作</th>
+                    <th class="w-[130px] text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in rules" :key="row.id">
+                    <td class="text-xs text-[#909399]">{{ idx + 1 }}</td>
+                    <td>
+                      <div class="flex flex-col gap-0.5">
+                        <template v-if="ruleSummary(row.rule).items.length">
+                          <span v-for="it in ruleSummary(row.rule).items" :key="it.k" class="text-[13px]">
+                            <b class="mr-1 font-medium text-[#909399]">{{ it.k }}</b> {{ it.v }}
+                          </span>
+                          <span v-if="ruleSummary(row.rule).otherCount" class="text-[13px] text-[#c0c4cc]">+{{ ruleSummary(row.rule).otherCount }} 项</span>
+                        </template>
+                        <span v-else class="text-[13px] text-[#c0c4cc]">全部（无匹配条件）</span>
+                        <span v-if="row.rule.invert" class="badge badge-warning badge-outline w-fit text-xs">取反</span>
+                      </div>
+                    </td>
+                    <td class="text-xs">{{ ruleActionText(row.rule) }}</td>
+                    <td class="text-right">
+                      <button class="btn btn-ghost btn-xs text-primary" @click="openEditRule(row)">编辑</button>
+                      <button class="btn btn-ghost btn-xs text-error" @click="removeRule(row)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!loading && !rules.length" class="py-8 text-center text-sm text-[#606266] dark:text-[#a6b0bf]">暂无 DNS 规则</div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="options">
+            <div class="grid max-w-[560px] gap-x-4 gap-y-5" style="grid-template-columns: 160px minmax(0, 1fr)">
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">final（默认 server）</label>
+              <SelectRoot v-model="optsForm.final">
+                <SelectTrigger><SelectValue placeholder="选择默认 DNS server（留空则不指定）" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="t in dnsTags" :key="t" :value="t">{{ t }}</SelectItem>
+                </SelectContent>
+              </SelectRoot>
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">strategy（解析策略）</label>
+              <SelectRoot v-model="optsForm.strategy">
+                <SelectTrigger><SelectValue placeholder="不指定" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="s in STRATEGY_OPTIONS" :key="s" :value="s">{{ s }}</SelectItem>
+                </SelectContent>
+              </SelectRoot>
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">timeout</label>
+              <input v-model="optsForm.timeout" type="text" class="input input-bordered input-sm w-full" placeholder="如 5s（留空用默认）" />
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">disable_cache</label>
+              <div class="flex items-center gap-2">
+                <Switch v-model="optsForm.disable_cache" />
+                <span class="text-xs text-[#909399]">禁用 DNS 缓存</span>
               </div>
-            </template>
-          </el-table-column>
-          <el-table-column label="动作" min-width="140">
-            <template #default="{ row }">{{ ruleActionText(row.rule) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="140" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" type="primary" link @click="openEditRule(row)">编辑</el-button>
-              <el-button size="small" type="danger" link @click="removeRule(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-tab-pane>
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">independent_cache</label>
+              <Switch v-model="optsForm.independent_cache" class="mt-1.5" />
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">reverse_mapping</label>
+              <div class="flex items-center gap-2">
+                <Switch v-model="optsForm.reverse_mapping" />
+                <span class="text-xs text-[#909399]">IP 反查域名</span>
+              </div>
+              <span />
+              <button class="btn btn-primary btn-sm w-fit" :disabled="saving" @click="saveOptions">保存选项</button>
+            </div>
+          </TabsContent>
+        </TabsRoot>
 
-      <el-tab-pane label="选项" name="options">
-        <el-form label-width="160px" style="max-width: 560px">
-          <el-form-item label="final（默认 server）">
-            <el-select v-model="optsForm.final" style="width: 100%" clearable placeholder="选择默认 DNS server（留空则不指定）">
-              <el-option v-for="t in dnsTags" :key="t" :label="t" :value="t" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="strategy（解析策略）">
-            <el-select v-model="optsForm.strategy" style="width: 100%" clearable placeholder="不指定">
-              <el-option v-for="s in STRATEGY_OPTIONS" :key="s" :label="s" :value="s" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="timeout">
-            <el-input v-model="optsForm.timeout" placeholder="如 5s（留空用默认）" />
-          </el-form-item>
-          <el-form-item label="disable_cache">
-            <el-switch v-model="optsForm.disable_cache" />
-            <span class="hint" style="margin-left: 8px">禁用 DNS 缓存</span>
-          </el-form-item>
-          <el-form-item label="independent_cache">
-            <el-switch v-model="optsForm.independent_cache" />
-          </el-form-item>
-          <el-form-item label="reverse_mapping">
-            <el-switch v-model="optsForm.reverse_mapping" />
-            <span class="hint" style="margin-left: 8px">IP 反查域名</span>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" :loading="saving" @click="saveOptions">保存选项</el-button>
-          </el-form-item>
-        </el-form>
-      </el-tab-pane>
-    </el-tabs>
+        <!-- Server 编辑弹窗 -->
+        <DialogWrapper v-model="serverDialogVisible" :title="isEditServer ? '编辑 DNS Server' : '新建 DNS Server'" box-class="max-w-[560px]">
+          <TabsRoot :model-value="'form'">
+            <TabsList>
+              <TabsTrigger value="form">表单</TabsTrigger>
+              <TabsTrigger value="source">源码</TabsTrigger>
+            </TabsList>
+            <TabsContent value="form">
+              <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 120px minmax(0, 1fr)">
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">type <span class="text-destructive">*</span></label>
+                <SelectRoot v-model="serverForm.type">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="t in DNS_TYPES" :key="t" :value="t">{{ t }}</SelectItem>
+                  </SelectContent>
+                </SelectRoot>
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
+                <input v-model="serverForm.tag" type="text" class="input input-bordered input-sm w-full" placeholder="唯一标识，如 local-dns / cf-doh" />
+                <template v-if="serverFieldKeys(serverForm.type).includes('server')">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server</label>
+                  <input v-model="serverForm.server" type="text" class="input input-bordered input-sm w-full" placeholder="IP 或域名" />
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server_port</label>
+                  <input v-model.number="serverForm.server_port" type="number" min="1" max="65535" class="input input-bordered input-sm w-40" />
+                </template>
+                <template v-if="serverFieldKeys(serverForm.type).includes('tls_server_name')">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">TLS server_name</label>
+                  <input v-model="serverForm.tls_server_name" type="text" class="input input-bordered input-sm w-full" placeholder="如 dns.google（启用 TLS 并校验证书）" />
+                </template>
+                <template v-if="serverFieldKeys(serverForm.type).includes('path')">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">path</label>
+                  <input v-model="serverForm.path" type="text" class="input input-bordered input-sm w-full" placeholder="如 /dns-query" />
+                </template>
+                <template v-if="serverFieldKeys(serverForm.type).includes('inet4_range')">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">inet4_range</label>
+                  <input v-model="serverForm.inet4_range" type="text" class="input input-bordered input-sm w-full font-mono" placeholder="如 198.18.0.0/15" />
+                </template>
+                <template v-if="serverFieldKeys(serverForm.type).includes('inet6_range')">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">inet6_range</label>
+                  <input v-model="serverForm.inet6_range" type="text" class="input input-bordered input-sm w-full font-mono" placeholder="如 fc00::/18" />
+                </template>
+                <template v-if="serverFieldKeys(serverForm.type).includes('interface')">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">interface</label>
+                  <input v-model="serverForm.interface" type="text" class="input input-bordered input-sm w-full" placeholder="网卡名" />
+                </template>
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">detour</label>
+                <SelectRoot v-model="serverForm.detour">
+                  <SelectTrigger><SelectValue placeholder="经出站代理（可选）" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="t in outboundTags" :key="t" :value="t">{{ t }}</SelectItem>
+                  </SelectContent>
+                </SelectRoot>
 
-    <!-- Server 编辑 -->
-    <el-dialog v-model="serverDialogVisible" :title="isEditServer ? '编辑 DNS Server' : '新建 DNS Server'" width="560px" :close-on-click-modal="false">
-      <el-tabs>
-        <el-tab-pane label="表单">
-      <el-form label-width="120px">
-        <el-form-item label="type" required>
-          <el-select v-model="serverForm.type" style="width: 100%">
-            <el-option v-for="t in DNS_TYPES" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="tag" required>
-          <el-input v-model="serverForm.tag" placeholder="唯一标识，如 local-dns / cf-doh" />
-        </el-form-item>
-        <template v-if="serverFieldKeys(serverForm.type).includes('server')">
-          <el-form-item label="server">
-            <el-input v-model="serverForm.server" placeholder="IP 或域名" />
-          </el-form-item>
-          <el-form-item label="server_port">
-            <el-input-number v-model="serverForm.server_port" :min="1" :max="65535" />
-          </el-form-item>
-        </template>
-        <el-form-item v-if="serverFieldKeys(serverForm.type).includes('tls_server_name')" label="TLS server_name">
-          <el-input v-model="serverForm.tls_server_name" placeholder="如 dns.google（启用 TLS 并校验证书）" />
-        </el-form-item>
-        <el-form-item v-if="serverFieldKeys(serverForm.type).includes('path')" label="path">
-          <el-input v-model="serverForm.path" placeholder="如 /dns-query" />
-        </el-form-item>
-        <el-form-item v-if="serverFieldKeys(serverForm.type).includes('inet4_range')" label="inet4_range">
-          <el-input v-model="serverForm.inet4_range" placeholder="如 198.18.0.0/15" />
-        </el-form-item>
-        <el-form-item v-if="serverFieldKeys(serverForm.type).includes('inet6_range')" label="inet6_range">
-          <el-input v-model="serverForm.inet6_range" placeholder="如 fc00::/18" />
-        </el-form-item>
-        <el-form-item v-if="serverFieldKeys(serverForm.type).includes('interface')" label="interface">
-          <el-input v-model="serverForm.interface" placeholder="网卡名" />
-        </el-form-item>
-        <el-form-item label="detour">
-          <el-select v-model="serverForm.detour" style="width: 100%" clearable placeholder="经出站代理（可选）">
-            <el-option v-for="t in outboundTags" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-divider content-position="left">拨号选项（DialerOptions）</el-divider>
-        <el-form-item label="bind_interface">
-          <el-input v-model="serverForm.bind_interface" placeholder="绑定网卡名（可选）" />
-        </el-form-item>
-        <el-form-item label="connect_timeout">
-          <el-input v-model="serverForm.connect_timeout" placeholder="如 5s（可选）" />
-        </el-form-item>
-        <el-form-item label="routing_mark">
-          <el-input-number v-model="serverForm.routing_mark" :min="0" />
-        </el-form-item>
-        <el-form-item label="reuse_addr">
-          <el-switch v-model="serverForm.reuse_addr" />
-        </el-form-item>
-        <el-form-item label="udp_fragment">
-          <el-switch v-model="serverForm.udp_fragment" />
-        </el-form-item>
-        <el-form-item label="network_strategy">
-          <el-select v-model="serverForm.network_strategy" style="width: 100%" clearable placeholder="不指定">
-            <el-option v-for="s in STRATEGY_OPTIONS" :key="s" :label="s" :value="s" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="network_type">
-          <el-select v-model="serverForm.network_type" multiple filterable allow-create default-first-option style="width: 100%" placeholder="wifi/cellular/ethernet/other">
-            <el-option v-for="t in ['wifi', 'cellular', 'ethernet', 'other']" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-divider content-position="left">domain_resolver（server 为域名的必填）</el-divider>
-        <el-form-item label="resolver server">
-          <el-select v-model="serverForm.dr_server" style="width: 100%" clearable placeholder="选择 DNS server（如 local/ali）">
-            <el-option v-for="t in dnsTags" :key="t" :label="t" :value="t" />
-          </el-select>
-          <div class="field-hint">server/url 是域名时，用该 resolver 解析域名的 IP（避免自举）</div>
-        </el-form-item>
-        <el-form-item v-if="serverForm.dr_server" label="resolver timeout">
-          <el-input v-model="serverForm.dr_timeout" placeholder="如 5s" />
-        </el-form-item>
-        <el-form-item v-if="serverForm.dr_server" label="resolver strategy">
-          <el-select v-model="serverForm.dr_strategy" style="width: 100%" clearable>
-            <el-option v-for="s in STRATEGY_OPTIONS" :key="s" :label="s" :value="s" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="serverForm.dr_server" label="resolver disable_cache">
-          <el-switch v-model="serverForm.dr_disable_cache" />
-        </el-form-item>
-        <el-form-item v-if="serverForm.dr_server" label="disable_optimistic_cache">
-          <el-switch v-model="serverForm.dr_disable_optimistic_cache" />
-        </el-form-item>
-        <el-form-item v-if="serverForm.dr_server" label="rewrite_ttl">
-          <el-input-number v-model="serverForm.dr_rewrite_ttl" :min="0" />
-        </el-form-item>
-        <el-form-item v-if="serverForm.dr_server" label="client_subnet">
-          <el-input v-model="serverForm.dr_client_subnet" placeholder="如 1.2.3.4/24" />
-        </el-form-item>
-        <el-form-item v-if="serverForm.type === 'hosts'" label="predefined (JSON)">
-          <el-input v-model="serverForm.predefined_json" type="textarea" :rows="4" class="mono" placeholder='{"example.com": "1.2.3.4"}' />
-        </el-form-item>
-      </el-form>
-      </el-tab-pane>
-      <el-tab-pane label="源码">
-        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
-      </el-tab-pane>
-    </el-tabs>
-      <template #footer>
-        <el-button @click="serverDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveServer">保存</el-button>
-      </template>
-    </el-dialog>
+                <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
+                  <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />拨号选项（DialerOptions）<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+                </div>
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">bind_interface</label>
+                <input v-model="serverForm.bind_interface" type="text" class="input input-bordered input-sm w-full" placeholder="绑定网卡名（可选）" />
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">connect_timeout</label>
+                <input v-model="serverForm.connect_timeout" type="text" class="input input-bordered input-sm w-full" placeholder="如 5s（可选）" />
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">routing_mark</label>
+                <input v-model.number="serverForm.routing_mark" type="number" min="0" class="input input-bordered input-sm w-40" />
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">reuse_addr</label>
+                <Switch v-model="serverForm.reuse_addr" class="mt-1.5" />
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">udp_fragment</label>
+                <Switch v-model="serverForm.udp_fragment" class="mt-1.5" />
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">network_strategy</label>
+                <SelectRoot v-model="serverForm.network_strategy">
+                  <SelectTrigger><SelectValue placeholder="不指定" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="s in STRATEGY_OPTIONS" :key="s" :value="s">{{ s }}</SelectItem>
+                  </SelectContent>
+                </SelectRoot>
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">network_type</label>
+                <ChipInput v-model="serverForm.network_type" :suggestions="['wifi', 'cellular', 'ethernet', 'other']" placeholder="wifi/cellular/ethernet/other" />
 
-    <!-- 规则编辑 -->
-    <el-dialog v-model="ruleDialogVisible" :title="isEditRule ? '编辑 DNS 规则' : '新建 DNS 规则'" width="760px" :close-on-click-modal="false">
-      <el-tabs>
-        <el-tab-pane label="表单">
-      <el-form label-width="150px">
-        <el-form-item label="类型">
-          <el-select v-model="ruleForm.ruleType" style="width: 100%">
-            <el-option v-for="t in DNS_RULE_TYPES" :key="t.value" :label="t.label" :value="t.value" />
-          </el-select>
-        </el-form-item>
-        <template v-if="ruleForm.ruleType === 'logical'">
-          <el-form-item label="mode" required>
-            <el-select v-model="ruleForm.mode" style="width: 100%">
-              <el-option v-for="m in LOGICAL_MODES" :key="m" :label="m" :value="m" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="invert">
-            <el-switch v-model="ruleForm.invert" />
-          </el-form-item>
-          <el-form-item label="子规则 (JSON)" required>
-            <el-input v-model="ruleForm.rulesJson" type="textarea" :rows="10" class="mono" placeholder='[{"rule_set": "gfw", "invert": true}, {"clash_mode": "direct"}]' />
-          </el-form-item>
-          <span class="hint">嵌套子规则为 DNSRule 数组（可再嵌套 logical）；每个子规则也可带 server 等动作</span>
-        </template>
-        <el-tabs>
-          <el-tab-pane v-if="ruleForm.ruleType === 'default'" label="匹配条件">
-            <template v-for="g in DNS_RULE_GROUPS" :key="g">
-              <el-divider content-position="left">{{ g }}</el-divider>
-              <el-form-item v-for="f in DNS_RULE_FIELDS.filter((x) => x.group === g)" :key="f.key" :label="f.label">
-                <el-select
-                  v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
-                  v-model="ruleForm[f.key]"
-                  multiple
-                  filterable
-                  allow-create
-                  default-first-option
-                  style="width: 100%"
-                  :placeholder="f.placeholder || '输入后回车添加，可多值'"
-                >
-                  <el-option v-for="o in f.options ?? (f.key === 'inbound' ? inboundTags : [])" :key="o" :label="o" :value="o" />
-                </el-select>
-                <el-select
-                  v-else-if="f.type === 'select'"
-                  v-model="ruleForm[f.key]"
-                  style="width: 100%"
-                  :placeholder="f.placeholder || '请选择'"
-                >
-                  <el-option v-for="o in f.options ?? []" :key="o" :label="o" :value="o" />
-                </el-select>
-                <el-switch v-else-if="f.type === 'bool'" v-model="ruleForm[f.key]" />
-                <el-input v-else-if="f.type === 'string'" v-model="ruleForm[f.key]" :placeholder="f.placeholder || '请输入'" />
-                <el-input
-                  v-else
-                  v-model="ruleForm[f.key]"
-                  type="textarea"
-                  :rows="3"
-                  class="mono"
-                  :placeholder="f.placeholder || '字段 JSON 对象'"
-                />
-              </el-form-item>
-            </template>
-          </el-tab-pane>
-          <el-tab-pane label="动作">
-            <el-form-item label="action">
-              <el-select v-model="ruleForm.action" style="width: 100%">
-                <el-option v-for="a in DNS_RULE_ACTIONS" :key="a.value" :label="a.label" :value="a.value" />
-              </el-select>
-            </el-form-item>
-            <template v-if="ruleForm.action === 'route'">
-              <el-form-item label="server">
-                <el-select v-model="ruleForm.server" style="width: 100%" clearable placeholder="选择 DNS server">
-                  <el-option v-for="t in dnsTags" :key="t" :label="t" :value="t" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="speculative">
-                <el-switch v-model="ruleForm.speculative" />
-                <span class="hint" style="margin-left: 8px">先返回假结果再修正</span>
-              </el-form-item>
-            </template>
-            <template v-else-if="ruleForm.action === 'evaluate'">
-              <el-form-item label="server">
-                <el-select v-model="ruleForm.server" style="width: 100%" clearable placeholder="选择 DNS server">
-                  <el-option v-for="t in dnsTags" :key="t" :label="t" :value="t" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="tag">
-                <el-input v-model="ruleForm.evaluate_tag" placeholder="评估结果写入的 tag（可选）" />
-              </el-form-item>
-              <el-form-item label="speculative">
-                <el-switch v-model="ruleForm.evaluate_speculative" />
-              </el-form-item>
-            </template>
-            <el-form-item v-else-if="ruleForm.action === 'reject'" label="method">
-              <el-input v-model="ruleForm.reject_method" placeholder="拒绝方法（默认 drop，如 reject）" />
-            </el-form-item>
-            <el-alert
-              v-else-if="ruleForm.action === 'respond'"
-              type="info"
-              :closable="false"
-              title="respond 无参数；应答内容用匹配条件的 response_* 字段"
-            />
-            <el-form-item v-else label="动作参数 (JSON)">
-              <el-input
-                v-model="ruleForm.actionParamsJson"
-                type="textarea"
-                :rows="6"
-                class="mono"
-                :placeholder="ruleForm.action === 'route-options' ? 'route-options 参数对象' : PREDEFINED_PLACEHOLDER"
-              />
-            </el-form-item>
-          </el-tab-pane>
-        </el-tabs>
-      </el-form>
-      </el-tab-pane>
-      <el-tab-pane label="源码">
-        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
-      </el-tab-pane>
-    </el-tabs>
-      <template #footer>
-        <el-button @click="ruleDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveRule">保存</el-button>
-      </template>
-    </el-dialog>
+                <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
+                  <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />domain_resolver（server 为域名的必填）<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+                </div>
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">resolver server</label>
+                <div class="flex flex-col gap-1">
+                  <SelectRoot v-model="serverForm.dr_server">
+                    <SelectTrigger><SelectValue placeholder="选择 DNS server（如 local/ali）" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="t in dnsTags" :key="t" :value="t">{{ t }}</SelectItem>
+                    </SelectContent>
+                  </SelectRoot>
+                  <p class="text-xs text-[#606266] dark:text-[#a6b0bf]">server/url 是域名时，用该 resolver 解析域名的 IP（避免自举）</p>
+                </div>
+                <template v-if="serverForm.dr_server">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">resolver timeout</label>
+                  <input v-model="serverForm.dr_timeout" type="text" class="input input-bordered input-sm w-full" placeholder="如 5s" />
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">resolver strategy</label>
+                  <SelectRoot v-model="serverForm.dr_strategy">
+                    <SelectTrigger><SelectValue placeholder="不指定" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="s in STRATEGY_OPTIONS" :key="s" :value="s">{{ s }}</SelectItem>
+                    </SelectContent>
+                  </SelectRoot>
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">resolver disable_cache</label>
+                  <Switch v-model="serverForm.dr_disable_cache" class="mt-1.5" />
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">disable_optimistic_cache</label>
+                  <Switch v-model="serverForm.dr_disable_optimistic_cache" class="mt-1.5" />
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">rewrite_ttl</label>
+                  <input v-model.number="serverForm.dr_rewrite_ttl" type="number" min="0" class="input input-bordered input-sm w-40" />
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">client_subnet</label>
+                  <input v-model="serverForm.dr_client_subnet" type="text" class="input input-bordered input-sm w-full font-mono" placeholder="如 1.2.3.4/24" />
+                </template>
+                <template v-if="serverForm.type === 'hosts'">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">predefined (JSON)</label>
+                  <textarea v-model="serverForm.predefined_json" rows="4" class="textarea textarea-bordered w-full font-mono text-xs" placeholder='{"example.com": "1.2.3.4"}' />
+                </template>
+              </div>
+            </TabsContent>
+            <TabsContent value="source">
+              <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+            </TabsContent>
+          </TabsRoot>
+          <div class="mt-5 flex justify-end gap-2">
+            <button class="btn btn-ghost btn-sm" @click="serverDialogVisible = false">取消</button>
+            <button class="btn btn-primary btn-sm" :disabled="saving" @click="saveServer">保存</button>
+          </div>
+        </DialogWrapper>
 
-    </el-tab-pane>
-    <el-tab-pane label="源码" name="source">
-      <SourcePane segment="dns" @saved="loadDns" />
-    </el-tab-pane>
-  </el-tabs>
+        <!-- 规则编辑弹窗 -->
+        <DialogWrapper v-model="ruleDialogVisible" :title="isEditRule ? '编辑 DNS 规则' : '新建 DNS 规则'" box-class="max-w-[760px]">
+          <TabsRoot :model-value="'form'">
+            <TabsList>
+              <TabsTrigger value="form">表单</TabsTrigger>
+              <TabsTrigger value="source">源码</TabsTrigger>
+            </TabsList>
+            <TabsContent value="form">
+              <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 150px minmax(0, 1fr)">
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
+                <SelectRoot v-model="ruleForm.ruleType">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="t in DNS_RULE_TYPES" :key="t.value" :value="t.value">{{ t.label }}</SelectItem>
+                  </SelectContent>
+                </SelectRoot>
+
+                <template v-if="ruleForm.ruleType === 'logical'">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">mode <span class="text-destructive">*</span></label>
+                  <SelectRoot v-model="ruleForm.mode">
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="m in LOGICAL_MODES" :key="m" :value="m">{{ m }}</SelectItem>
+                    </SelectContent>
+                  </SelectRoot>
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">invert</label>
+                  <Switch v-model="ruleForm.invert" class="mt-1.5" />
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">子规则 (JSON) <span class="text-destructive">*</span></label>
+                  <div class="flex flex-col gap-1">
+                    <textarea v-model="ruleForm.rulesJson" rows="10" class="textarea textarea-bordered w-full font-mono text-xs" placeholder='[{"rule_set": "gfw", "invert": true}, {"clash_mode": "direct"}]' />
+                    <p class="text-xs text-[#909399]">嵌套子规则为 DNSRule 数组（可再嵌套 logical）；每个子规则也可带 server 等动作</p>
+                  </div>
+                </template>
+
+                <template v-if="ruleForm.ruleType === 'default'">
+                  <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
+                    <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />匹配条件<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+                  </div>
+                  <template v-for="g in DNS_RULE_GROUPS" :key="g">
+                    <div class="flex items-center gap-2 text-xs font-semibold text-[#909399]" style="grid-column: 1 / -1">
+                      <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />{{ g }}<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+                    </div>
+                    <template v-for="f in DNS_RULE_FIELDS.filter((x) => x.group === g)" :key="f.key">
+                      <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">{{ f.label }}</label>
+                      <ChipInput
+                        v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
+                        v-model="ruleForm[f.key]"
+                        :placeholder="f.placeholder || '输入后回车添加，可多值'"
+                        :suggestions="f.options ?? (f.key === 'inbound' ? inboundTags : [])"
+                      />
+                      <SelectRoot v-else-if="f.type === 'select'" v-model="ruleForm[f.key]">
+                        <SelectTrigger><SelectValue :placeholder="f.placeholder || '请选择'" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem v-for="o in f.options ?? []" :key="o" :value="o">{{ o }}</SelectItem>
+                        </SelectContent>
+                      </SelectRoot>
+                      <Switch v-else-if="f.type === 'bool'" v-model="ruleForm[f.key]" class="mt-1.5" />
+                      <input v-else-if="f.type === 'string'" v-model="ruleForm[f.key]" type="text" class="input input-bordered input-sm w-full" :placeholder="f.placeholder || '请输入'" />
+                      <textarea v-else v-model="ruleForm[f.key]" rows="3" class="textarea textarea-bordered w-full font-mono text-xs" :placeholder="f.placeholder || '字段 JSON 对象'" />
+                    </template>
+                  </template>
+                </template>
+
+                <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
+                  <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />动作<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+                </div>
+                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">action</label>
+                <SelectRoot v-model="ruleForm.action">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="a in DNS_RULE_ACTIONS" :key="a.value" :value="a.value">{{ a.label }}</SelectItem>
+                  </SelectContent>
+                </SelectRoot>
+                <template v-if="ruleForm.action === 'route'">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server</label>
+                  <SelectRoot v-model="ruleForm.server">
+                    <SelectTrigger><SelectValue placeholder="选择 DNS server" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="t in dnsTags" :key="t" :value="t">{{ t }}</SelectItem>
+                    </SelectContent>
+                  </SelectRoot>
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">speculative</label>
+                  <div class="flex items-center gap-2">
+                    <Switch v-model="ruleForm.speculative" />
+                    <span class="text-xs text-[#909399]">先返回假结果再修正</span>
+                  </div>
+                </template>
+                <template v-else-if="ruleForm.action === 'evaluate'">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server</label>
+                  <SelectRoot v-model="ruleForm.server">
+                    <SelectTrigger><SelectValue placeholder="选择 DNS server" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="t in dnsTags" :key="t" :value="t">{{ t }}</SelectItem>
+                    </SelectContent>
+                  </SelectRoot>
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag</label>
+                  <input v-model="ruleForm.evaluate_tag" type="text" class="input input-bordered input-sm w-full" placeholder="评估结果写入的 tag（可选）" />
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">speculative</label>
+                  <Switch v-model="ruleForm.evaluate_speculative" class="mt-1.5" />
+                </template>
+                <template v-else-if="ruleForm.action === 'reject'">
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">method</label>
+                  <input v-model="ruleForm.reject_method" type="text" class="input input-bordered input-sm w-full" placeholder="拒绝方法（默认 drop，如 reject）" />
+                </template>
+                <p v-else-if="ruleForm.action === 'respond'" class="text-xs text-[#606266] dark:text-[#a6b0bf]" style="grid-column: 2">
+                  respond 无参数；应答内容用匹配条件的 response_* 字段
+                </p>
+                <template v-else>
+                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">动作参数 (JSON)</label>
+                  <textarea
+                    v-model="ruleForm.actionParamsJson"
+                    rows="6"
+                    class="textarea textarea-bordered w-full font-mono text-xs"
+                    :placeholder="ruleForm.action === 'route-options' ? 'route-options 参数对象' : PREDEFINED_PLACEHOLDER"
+                  />
+                </template>
+              </div>
+            </TabsContent>
+            <TabsContent value="source">
+              <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+            </TabsContent>
+          </TabsRoot>
+          <div class="mt-5 flex justify-end gap-2">
+            <button class="btn btn-ghost btn-sm" @click="ruleDialogVisible = false">取消</button>
+            <button class="btn btn-primary btn-sm" :disabled="saving" @click="saveRule">保存</button>
+          </div>
+        </DialogWrapper>
+      </TabsContent>
+
+      <TabsContent value="source">
+        <SourcePane segment="dns" @saved="loadDns" />
+      </TabsContent>
+    </TabsRoot>
   </div>
 </template>
-
-<style scoped>
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.hint {
-  font-size: 12px;
-  color: #909399;
-}
-.muted {
-  color: #c0c4cc;
-}
-.rule-text {
-  font-size: 13px;
-}
-.rule-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.rule-item {
-  font-size: 13px;
-}
-.rule-item b {
-  color: #909399;
-  font-weight: 500;
-  margin-right: 4px;
-}
-.rule-item.muted {
-  color: #c0c4cc;
-}
-</style>

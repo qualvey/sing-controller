@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { showToast } from '@/helper/toast'
+import { showConfirmDialog } from '@/helper/confirmDialog'
+import { PlusIcon } from 'lucide-vue-next'
+import DialogWrapper from '@/components/common/DialogWrapper.vue'
+import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { SelectRoot, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
 import ResourceSourceTab from '../components/ResourceSourceTab.vue'
@@ -51,6 +57,35 @@ const providerForm = reactive({
   dns01_challenge_json: ''
 })
 
+// chip 输入（替代 el-select multiple+allow-create）
+const certChip = { certificate: '', certificate_path: '', certificate_directory_path: '' }
+const addChip = (list: string[], input: { value: string }) => {
+  const parts = input.value
+    .split(/[,，\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  for (const p of parts) {
+    if (!list.includes(p)) list.push(p)
+  }
+  input.value = ''
+}
+const removeChip = (list: string[], t: string) => {
+  const i = list.indexOf(t)
+  if (i >= 0) list.splice(i, 1)
+}
+
+const domainInput = ref('')
+const addDomain = () => {
+  const parts = domainInput.value
+    .split(/[,，\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  for (const p of parts) {
+    if (!providerForm.domain.includes(p)) providerForm.domain.push(p)
+  }
+  domainInput.value = ''
+}
+
 const resetProviderForm = () => {
   providerForm.type = 'acme'
   providerForm.tag = ''
@@ -58,7 +93,6 @@ const resetProviderForm = () => {
   providerForm.data_directory = ''
   providerForm.default_server_name = ''
   providerForm.email = ''
-  providerForm.provider = ''
   providerForm.account_key = ''
   providerForm.disable_http_challenge = false
   providerForm.disable_tls_alpn_challenge = false
@@ -67,6 +101,7 @@ const resetProviderForm = () => {
   providerForm.key_type = ''
   providerForm.provider = 'cloudflare'
   providerForm.dns01_challenge_json = ''
+  domainInput.value = ''
 }
 
 const load = async () => {
@@ -87,7 +122,7 @@ const load = async () => {
     }
     providers.value = data.providers || []
   } catch (e) {
-    ElMessage.error((e as Error).message || '加载证书配置失败')
+    showToast((e as Error).message || '加载证书配置失败', 'error')
   } finally {
     loading.value = false
   }
@@ -107,10 +142,10 @@ const saveCertificate = async () => {
     if (certForm.certificate_path.length) cert.certificate_path = [...certForm.certificate_path]
     if (certForm.certificate_directory_path.length) cert.certificate_directory_path = [...certForm.certificate_directory_path]
     await api.saveCertificate(Object.keys(cert).length ? cert : null)
-    ElMessage.success('certificate 已保存')
+    showToast('certificate 已保存', 'success')
     await statusStore.refresh()
   } catch (e) {
-    ElMessage.error((e as Error).message || '保存失败')
+    showToast((e as Error).message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
@@ -199,55 +234,51 @@ const saveProvider = async () => {
     } else {
       await api.createCertProvider(payload)
     }
-    ElMessage.success('保存成功')
+    showToast('保存成功', 'success')
     dialogVisible.value = false
     await load()
     await statusStore.refresh()
   } catch (e) {
-    ElMessage.error((e as Error).message || '保存失败')
+    showToast((e as Error).message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
 }
 
 const removeProvider = async (row: { id: string; provider: Record<string, any> }) => {
-  try {
-    await ElMessageBox.confirm(`确定删除 certificate provider「${row.provider.tag || row.id}」？`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
-  } catch {
-    return
-  }
+  const first = await showConfirmDialog({
+    title: '删除确认',
+    message: `确定删除 certificate provider「${row.provider.tag || row.id}」？`,
+    confirmText: '删除',
+    confirmButtonClass: 'btn-error'
+  })
+  if (!first.confirmed) return
   try {
     await api.deleteCertProvider(row.id)
-    ElMessage.success('删除成功')
+    showToast('删除成功', 'success')
     await load()
     await statusStore.refresh()
   } catch (e) {
     const err = e as Error & { references?: string[] }
     if (err.references?.length) {
-      try {
-        await ElMessageBox.confirm(
-          `该 provider 被引用：${err.references.join('、')}\\n删除后将自动清除引用。确认删除？`,
-          '被引用确认',
-          { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
-        )
-      } catch {
-        return
-      }
+      const second = await showConfirmDialog({
+        title: '被引用确认',
+        message: `该 provider 被引用：${err.references.join('、')}\n删除后将自动清除引用。确认删除？`,
+        confirmText: '确认删除',
+        confirmButtonClass: 'btn-error'
+      })
+      if (!second.confirmed) return
       try {
         await api.deleteCertProvider(row.id, true)
-        ElMessage.success('删除成功（已清除引用）')
+        showToast('删除成功（已清除引用）', 'success')
         await load()
         await statusStore.refresh()
       } catch (e2) {
-        ElMessage.error((e2 as Error).message || '删除失败')
+        showToast((e2 as Error).message || '删除失败', 'error')
       }
       return
     }
-    ElMessage.error(err.message || '删除失败')
+    showToast(err.message || '删除失败', 'error')
   }
 }
 
@@ -255,153 +286,179 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <el-tabs v-model="outerTab">
-      <el-tab-pane label="表单" name="form">
-    <div class="section">
-      <div class="section-title">certificate（全局证书配置）</div>
-      <el-form label-width="180px" style="max-width: 720px">
-        <el-form-item label="store">
-          <el-select v-model="certForm.store" style="width: 100%">
-            <el-option v-for="s in STORE_OPTIONS" :key="s" :label="s" :value="s" />
-          </el-select>
-          <span class="hint" style="margin-left: 8px">system 为默认（省略时）</span>
-        </el-form-item>
-        <el-form-item label="certificate">
-          <el-select v-model="certForm.certificate" multiple filterable allow-create default-first-option style="width: 100%" placeholder="PEM 证书内容（可多值）" />
-        </el-form-item>
-        <el-form-item label="certificate_path">
-          <el-select v-model="certForm.certificate_path" multiple filterable allow-create default-first-option style="width: 100%" placeholder="证书文件路径（可多值）" />
-        </el-form-item>
-        <el-form-item label="certificate_directory_path">
-          <el-select v-model="certForm.certificate_directory_path" multiple filterable allow-create default-first-option style="width: 100%" placeholder="证书目录路径（可多值）" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="saving" @click="saveCertificate">保存 certificate</el-button>
-        </el-form-item>
-      </el-form>
-    </div>
+  <div>
+    <TabsRoot v-model="outerTab">
+      <TabsList>
+        <TabsTrigger value="form">表单</TabsTrigger>
+        <TabsTrigger value="source">源码</TabsTrigger>
+      </TabsList>
 
-    <div class="section">
-      <div class="section-title">
-        certificate_providers
-        <el-button size="small" type="primary" style="margin-left: 12px" @click="openCreateProvider">新建 Provider</el-button>
-        <span class="hint" style="margin-left: 8px">多态 provider（acme）；被 tls.certificate_provider 引用</span>
-      </div>
-      <el-table :data="providers" v-loading="loading" border stripe>
-        <el-table-column label="tag" min-width="120">
-          <template #default="{ row }">{{ row.provider.tag || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="type" label="type" width="90">
-          <template #default="{ row }">{{ row.provider.type }}</template>
-        </el-table-column>
-        <el-table-column label="域名" min-width="200">
-          <template #default="{ row }">{{ Array.isArray(row.provider.domain) ? row.provider.domain.join(', ') : row.provider.domain || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="email" min-width="180">
-          <template #default="{ row }">{{ row.provider.email || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" type="primary" link @click="openEditProvider(row)">编辑</el-button>
-            <el-button size="small" type="danger" link @click="removeProvider(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
+      <TabsContent value="form">
+        <div class="mb-5 rounded-lg border border-[#e4e7ed] bg-white p-4 dark:border-[#303030] dark:bg-[#1d1e1f]">
+          <div class="mb-3.5 flex items-center font-semibold text-[#303133] dark:text-[#e5eaf3]">certificate（全局证书配置）</div>
+          <div class="grid max-w-[720px] gap-x-4 gap-y-5" style="grid-template-columns: 180px minmax(0, 1fr)">
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">store</label>
+            <div class="flex items-center gap-2">
+              <SelectRoot v-model="certForm.store" class="w-full">
+                <SelectTrigger class="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="s in STORE_OPTIONS" :key="s" :value="s">{{ s }}</SelectItem>
+                </SelectContent>
+              </SelectRoot>
+              <span class="text-xs text-[#909399]">system 为默认（省略时）</span>
+            </div>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑 Certificate Provider' : '新建 Certificate Provider'" width="640px" :close-on-click-modal="false">
-      <el-tabs>
-        <el-tab-pane label="表单">
-      <el-form label-width="170px">
-        <el-form-item label="type">
-          <el-select v-model="providerForm.type" style="width: 100%">
-            <el-option v-for="t in PROVIDER_TYPES" :key="t" :label="t" :value="t" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="tag">
-          <el-input v-model="providerForm.tag" placeholder="provider tag（供 tls.certificate_provider 引用，可选）" />
-        </el-form-item>
-        <el-divider content-position="left">ACME 选项</el-divider>
-        <el-form-item label="domain">
-          <el-select v-model="providerForm.domain" multiple filterable allow-create default-first-option style="width: 100%" placeholder="证书域名（可多值）" />
-        </el-form-item>
-        <el-form-item label="email">
-          <el-input v-model="providerForm.email" placeholder="ACME 账户邮箱" />
-        </el-form-item>
-        <el-form-item label="data_directory">
-          <el-input v-model="providerForm.data_directory" placeholder="证书数据目录（可选）" />
-        </el-form-item>
-        <el-form-item label="default_server_name">
-          <el-input v-model="providerForm.default_server_name" placeholder="默认服务器名（可选）" />
-        </el-form-item>
-        <el-form-item label="DNS-01 服务商">
-          <el-select v-model="providerForm.provider" clearable style="width: 100%" placeholder="不需要时清空（默认 cloudflare）">
-            <el-option v-for="d in DNS01_PROVIDERS" :key="d" :label="d" :value="d" />
-          </el-select>
-          <div class="field-hint">写入 dns01_challenge.provider（源码枚举 alidns/cloudflare/acmedns）；对应凭证（如 cloudflare.api_token）写在附加字段</div>
-        </el-form-item>
-        <el-form-item label="account_key">
-          <el-input v-model="providerForm.account_key" placeholder="账户密钥（可选）" />
-        </el-form-item>
-        <el-form-item label="key_type">
-          <el-select v-model="providerForm.key_type" style="width: 100%" clearable placeholder="默认">
-            <el-option v-for="k in KEY_TYPE_OPTIONS" :key="k" :label="k" :value="k" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="禁用 HTTP 挑战">
-          <el-switch v-model="providerForm.disable_http_challenge" />
-        </el-form-item>
-        <el-form-item label="禁用 TLS-ALPN 挑战">
-          <el-switch v-model="providerForm.disable_tls_alpn_challenge" />
-        </el-form-item>
-        <el-form-item label="alternative_http_port">
-          <el-input-number v-model="providerForm.alternative_http_port" :min="0" :max="65535" />
-        </el-form-item>
-        <el-form-item label="alternative_tls_port">
-          <el-input-number v-model="providerForm.alternative_tls_port" :min="0" :max="65535" />
-        </el-form-item>
-        <el-form-item label="dns01_challenge (JSON)">
-          <el-input v-model="providerForm.dns01_challenge_json" type="textarea" :rows="4" class="mono" placeholder='{"cloudflare": {"api_token": "..."}, "ttl": "300s"}' />
-          <div class="field-hint">云厂商凭证等 dns01_challenge 子字段（provider 由上方下拉决定，此处不需写）；其余字段（external_account/http_client 等）用「源码」tab</div>
-        </el-form-item>
-      </el-form>
-      </el-tab-pane>
-      <el-tab-pane label="源码">
-        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
-      </el-tab-pane>
-    </el-tabs>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveProvider">保存</el-button>
-      </template>
-    </el-dialog>
-      </el-tab-pane>
-      <el-tab-pane label="源码" name="source">
+            <template v-for="key in (['certificate', 'certificate_path', 'certificate_directory_path'] as const)" :key="key">
+              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">{{ key }}</label>
+              <div class="flex flex-col gap-1.5">
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-for="t in certForm[key]" :key="t" class="badge badge-primary badge-outline gap-1">
+                    {{ t }}
+                    <button type="button" class="cursor-pointer text-xs opacity-70 hover:opacity-100" @click="removeChip(certForm[key], t)">×</button>
+                  </span>
+                </div>
+                <input
+                  :value="certChip[key]"
+                  type="text"
+                  class="input input-bordered input-sm w-full"
+                  :placeholder="`${key}（回车添加，可多值）`"
+                  @input="certChip[key] = ($event.target as HTMLInputElement).value"
+                  @keydown.enter.prevent="addChip(certForm[key], certChip[key] ? { value: certChip[key] } : { value: '' })"
+                  @blur="certChip[key] && addChip(certForm[key], { value: certChip[key] })"
+                />
+              </div>
+            </template>
+
+            <span />
+            <button class="btn btn-primary btn-sm w-fit" :disabled="saving" @click="saveCertificate">保存 certificate</button>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-[#e4e7ed] bg-white p-4 dark:border-[#303030] dark:bg-[#1d1e1f]">
+          <div class="mb-3.5 flex items-center font-semibold text-[#303133] dark:text-[#e5eaf3]">
+            certificate_providers
+            <button class="btn btn-primary btn-sm ml-3" @click="openCreateProvider">
+              <PlusIcon class="h-4 w-4" />
+              新建 Provider
+            </button>
+            <span class="ml-2 text-xs font-normal text-[#909399]">多态 provider（acme）；被 tls.certificate_provider 引用</span>
+          </div>
+          <div class="overflow-hidden rounded-lg border border-[#e4e7ed] dark:border-[#303030]">
+            <div v-if="loading && !providers.length" class="p-10 text-center text-sm text-[#909399]">加载中…</div>
+            <table v-else class="table table-sm w-full">
+              <thead>
+                <tr>
+                  <th class="w-[120px]">tag</th>
+                  <th class="w-20">type</th>
+                  <th>域名</th>
+                  <th class="w-[180px]">email</th>
+                  <th class="w-[130px] text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in providers" :key="row.id">
+                  <td class="text-xs">{{ row.provider.tag || '—' }}</td>
+                  <td class="text-xs">{{ row.provider.type }}</td>
+                  <td class="text-xs">{{ Array.isArray(row.provider.domain) ? row.provider.domain.join(', ') : row.provider.domain || '—' }}</td>
+                  <td class="text-xs">{{ row.provider.email || '—' }}</td>
+                  <td class="text-right">
+                    <button class="btn btn-ghost btn-xs text-primary" @click="openEditProvider(row)">编辑</button>
+                    <button class="btn btn-ghost btn-xs text-error" @click="removeProvider(row)">删除</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!loading && !providers.length" class="py-8 text-center text-sm text-[#606266] dark:text-[#a6b0bf]">暂无 provider</div>
+          </div>
+        </div>
+      </TabsContent>
+
+      <TabsContent value="source">
         <SourcePane segment="certificate" @saved="load" />
-      </el-tab-pane>
-    </el-tabs>
+      </TabsContent>
+    </TabsRoot>
+
+    <!-- 新建/编辑 Provider 弹窗 -->
+    <DialogWrapper v-model="dialogVisible" :title="isEdit ? '编辑 Certificate Provider' : '新建 Certificate Provider'" box-class="max-w-[640px]">
+      <TabsRoot :model-value="'form'">
+        <TabsList>
+          <TabsTrigger value="form">表单</TabsTrigger>
+          <TabsTrigger value="source">源码</TabsTrigger>
+        </TabsList>
+        <TabsContent value="form">
+          <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 170px minmax(0, 1fr)">
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">type</label>
+            <SelectRoot v-model="providerForm.type">
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="t in PROVIDER_TYPES" :key="t" :value="t">{{ t }}</SelectItem>
+              </SelectContent>
+            </SelectRoot>
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag</label>
+            <input v-model="providerForm.tag" type="text" class="input input-bordered input-sm w-full" placeholder="provider tag（供 tls.certificate_provider 引用，可选）" />
+
+            <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
+              <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />ACME 选项<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+            </div>
+
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">domain</label>
+            <div class="flex flex-col gap-1.5">
+              <div class="flex flex-wrap gap-1.5">
+                <span v-for="t in providerForm.domain" :key="t" class="badge badge-primary badge-outline gap-1">
+                  {{ t }}
+                  <button type="button" class="cursor-pointer text-xs opacity-70 hover:opacity-100" @click="removeChip(providerForm.domain, t)">×</button>
+                </span>
+              </div>
+              <input v-model="domainInput" type="text" class="input input-bordered input-sm w-full" placeholder="证书域名（回车添加，可多值）" @keydown.enter.prevent="addDomain" @blur="addDomain" />
+            </div>
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">email</label>
+            <input v-model="providerForm.email" type="text" class="input input-bordered input-sm w-full" placeholder="ACME 账户邮箱" />
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">data_directory</label>
+            <input v-model="providerForm.data_directory" type="text" class="input input-bordered input-sm w-full" placeholder="证书数据目录（可选）" />
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">default_server_name</label>
+            <input v-model="providerForm.default_server_name" type="text" class="input input-bordered input-sm w-full" placeholder="默认服务器名（可选）" />
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">DNS-01 服务商</label>
+            <div class="flex flex-col gap-1">
+              <SelectRoot v-model="providerForm.provider">
+                <SelectTrigger><SelectValue placeholder="不需要时清空（默认 cloudflare）" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="d in DNS01_PROVIDERS" :key="d" :value="d">{{ d }}</SelectItem>
+                </SelectContent>
+              </SelectRoot>
+              <p class="text-xs text-[#909399]">写入 dns01_challenge.provider（源码枚举 alidns/cloudflare/acmedns）；对应凭证（如 cloudflare.api_token）写在附加字段</p>
+            </div>
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">account_key</label>
+            <input v-model="providerForm.account_key" type="text" class="input input-bordered input-sm w-full" placeholder="账户密钥（可选）" />
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">key_type</label>
+            <SelectRoot v-model="providerForm.key_type">
+              <SelectTrigger><SelectValue placeholder="默认" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="k in KEY_TYPE_OPTIONS" :key="k" :value="k">{{ k }}</SelectItem>
+              </SelectContent>
+            </SelectRoot>
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">禁用 HTTP 挑战</label>
+            <Switch v-model="providerForm.disable_http_challenge" class="mt-1.5" />
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">禁用 TLS-ALPN 挑战</label>
+            <Switch v-model="providerForm.disable_tls_alpn_challenge" class="mt-1.5" />
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">alternative_http_port</label>
+            <input v-model.number="providerForm.alternative_http_port" type="number" min="0" max="65535" class="input input-bordered input-sm w-40" />
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">alternative_tls_port</label>
+            <input v-model.number="providerForm.alternative_tls_port" type="number" min="0" max="65535" class="input input-bordered input-sm w-40" />
+            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">dns01_challenge (JSON)</label>
+            <div class="flex flex-col gap-1">
+              <textarea v-model="providerForm.dns01_challenge_json" rows="4" class="textarea textarea-bordered w-full font-mono text-xs" placeholder='{"cloudflare": {"api_token": "..."}, "ttl": "300s"}' />
+              <p class="text-xs text-[#909399]">云厂商凭证等 dns01_challenge 子字段（provider 由上方下拉决定，此处不需写）；其余字段（external_account/http_client 等）用「源码」tab</p>
+            </div>
+          </div>
+        </TabsContent>
+        <TabsContent value="source">
+          <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+        </TabsContent>
+      </TabsRoot>
+      <div class="mt-5 flex justify-end gap-2">
+        <button class="btn btn-ghost btn-sm" @click="dialogVisible = false">取消</button>
+        <button class="btn btn-primary btn-sm" :disabled="saving" @click="saveProvider">保存</button>
+      </div>
+    </DialogWrapper>
   </div>
 </template>
-
-<style scoped>
-.section {
-  margin-bottom: 20px;
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  padding: 16px;
-}
-.section-title {
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 14px;
-  display: flex;
-  align-items: center;
-}
-.hint {
-  font-size: 12px;
-  color: #909399;
-  font-weight: 400;
-}
-</style>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Close, VideoPause, VideoPlay, Search, Document } from '@element-plus/icons-vue'
+import { showToast } from '@/helper/toast'
+import { showConfirmDialog } from '@/helper/confirmDialog'
+import { PauseIcon, PlayIcon, TrashIcon, Search, FileTextIcon, XIcon } from 'lucide-vue-next'
+import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { useRuntimeStore } from '../stores/runtime'
 import type { Connection } from '@/gen/daemon/started_service_pb'
 
@@ -70,22 +72,37 @@ const filtered = computed(() => {
   })
 })
 
+// 表头点击切换排序
+const sortableCols = ['target', 'network', 'outbound', 'up', 'down', 'time'] as const
+const toggleSort = (key: (typeof sortableCols)[number]) => {
+  if (sortKey.value === key) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortDir.value = 'desc'
+  }
+}
+const sortArrow = (key: string) => (sortKey.value === key ? (sortDir.value === 'asc' ? ' ↑' : ' ↓') : '')
+
 const closeOne = async (id: string) => {
   try {
     await runtime.closeOne(id)
   } catch (e) {
-    ElMessage.error((e as Error).message || '断开失败')
+    showToast((e as Error).message || '断开失败', 'error')
   }
 }
 
 const closeAll = async () => {
+  const { confirmed } = await showConfirmDialog({
+    title: '断开全部',
+    message: `确认断开全部 ${runtime.connections.length} 条连接？`,
+    confirmButtonClass: 'btn-error'
+  })
+  if (!confirmed) return
   try {
-    await ElMessageBox.confirm(`确认断开全部 ${runtime.connections.length} 条连接？`, '断开全部', {
-      type: 'warning'
-    })
     await runtime.closeAll()
-  } catch {
-    // 取消
+  } catch (e) {
+    showToast((e as Error).message || '断开失败', 'error')
   }
 }
 </script>
@@ -93,140 +110,136 @@ const closeAll = async () => {
 <template>
   <div class="flex flex-col gap-4">
     <!-- 统计条 -->
-    <div class="flex flex-wrap items-center gap-4 rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)] px-4 py-3">
+    <div class="flex flex-wrap items-center gap-4 rounded-lg border border-[#e4e7ed] bg-white px-4 py-3 dark:border-[#303030] dark:bg-[#1d1e1f]">
       <div class="flex items-baseline gap-1.5">
-        <span class="text-xs text-[var(--el-text-color-secondary)]">上传</span>
+        <span class="text-xs text-[#606266] dark:text-[#a6b0bf]">上传</span>
         <span class="text-sm font-semibold tabular-nums text-green-600 dark:text-green-400">{{ formatSpeed(runtime.upSpeed) }}</span>
       </div>
       <div class="flex items-baseline gap-1.5">
-        <span class="text-xs text-[var(--el-text-color-secondary)]">下载</span>
+        <span class="text-xs text-[#606266] dark:text-[#a6b0bf]">下载</span>
         <span class="text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">{{ formatSpeed(runtime.downSpeed) }}</span>
       </div>
-      <el-divider direction="vertical" />
-      <span class="text-xs text-[var(--el-text-color-secondary)]">连接数</span>
+      <span class="h-3.5 w-px bg-[#e4e7ed] dark:bg-[#303030]" />
+      <span class="text-xs text-[#606266] dark:text-[#a6b0bf]">连接数</span>
       <span class="text-sm font-semibold tabular-nums">{{ runtime.connections.length }}</span>
 
-      <el-input
-        v-model="search"
-        size="small"
-        placeholder="搜索 目标/IP/出站/规则"
-        :prefix-icon="Search"
-        clearable
-        style="width: 240px"
-        class="ml-2"
-      />
+      <label class="relative ml-2">
+        <Search class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#909399]" />
+        <input
+          v-model="search"
+          type="text"
+          class="input input-bordered input-sm w-60 pl-9"
+          placeholder="搜索 目标/IP/出站/规则"
+        />
+      </label>
 
       <span class="ml-auto flex items-center gap-2">
-        <span class="flex items-center gap-1 text-xs" :class="runtime.connected ? 'text-[var(--el-text-color-secondary)]' : 'text-red-500'">
+        <span class="flex items-center gap-1 text-xs" :class="runtime.connected ? 'text-[#606266] dark:text-[#a6b0bf]' : 'text-red-500'">
           <span class="inline-block h-2 w-2 animate-pulse rounded-full" :class="runtime.connected ? 'bg-green-500' : 'bg-red-500'" />
           {{ runtime.connected ? '实时推送中' : 'service API 不可用' }}
         </span>
-        <el-button size="small" :icon="runtime.paused ? VideoPlay : VideoPause" @click="runtime.togglePause()">
+        <button class="btn btn-ghost btn-sm" @click="runtime.togglePause()">
+          <PauseIcon v-if="!runtime.paused" class="h-4 w-4" />
+          <PlayIcon v-else class="h-4 w-4" />
           {{ runtime.paused ? '恢复' : '暂停' }}
-        </el-button>
-        <el-button size="small" :icon="Close" :disabled="!runtime.connections.length" @click="closeAll">断开全部</el-button>
+        </button>
+        <button class="btn btn-ghost btn-sm" :disabled="!runtime.connections.length" @click="closeAll">
+          <XIcon class="h-4 w-4" />
+          断开全部
+        </button>
       </span>
     </div>
 
     <!-- 连接表 -->
-    <div class="rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)]">
-      <el-table :data="filtered" size="small" height="calc(100vh - 220px)" style="width: 100%" @row-click="(row: Connection) => (detail = row)">
-        <el-table-column label="目标" min-width="220">
-          <template #default="{ row }">
-            <div class="flex flex-col">
-              <span class="text-[13px] font-medium">{{ targetOf(row) }}</span>
-              <span class="text-xs text-[var(--el-text-color-secondary)]">
-                {{ row.source }} → {{ row.destination }}
-                <template v-if="row.processInfo?.processPath"> · {{ row.processInfo.processPath.split(/[\\/]/).pop() }}</template>
-              </span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="网络" width="80" sortable :sort-by="(r: Connection) => r.network" :sort-orders="['ascending', 'descending']">
-          <template #default="{ row }">
-            <span class="text-xs">{{ row.network }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="出站" min-width="110" sortable :sort-by="(r: Connection) => outboundOf(r)">
-          <template #default="{ row }">
-            <span class="text-xs">{{ outboundOf(row) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="规则" min-width="110">
-          <template #default="{ row }">
-            <span class="text-xs">{{ row.rule || '—' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="上传" width="100" align="right" sortable :sort-by="(r: Connection) => Number(r.uplinkTotal)">
-          <template #default="{ row }">
-            <span class="text-xs tabular-nums text-green-600 dark:text-green-400">{{ formatBytes(row.uplinkTotal) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="下载" width="100" align="right" sortable :sort-by="(r: Connection) => Number(r.downlinkTotal)">
-          <template #default="{ row }">
-            <span class="text-xs tabular-nums text-blue-600 dark:text-blue-400">{{ formatBytes(row.downlinkTotal) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="时长" width="90" align="right" sortable :sort-by="(r: Connection) => durationOf(r)">
-          <template #default="{ row }">
-            <span class="text-xs tabular-nums">{{ formatDuration(durationOf(row)) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="" width="60" align="center">
-          <template #default="{ row }">
-            <el-button size="small" text :icon="Delete" @click.stop="closeOne(row.id)" />
-          </template>
-        </el-table-column>
-        <template #empty>
-          <div class="flex flex-col items-center gap-2 py-10">
-            <span class="text-sm text-[var(--el-text-color-secondary)]">{{ search ? '无匹配连接' : '暂无活动连接' }}</span>
-          </div>
-        </template>
-      </el-table>
+    <div class="overflow-hidden rounded-lg border border-[#e4e7ed] bg-white dark:border-[#303030] dark:bg-[#1d1e1f]">
+      <div class="max-h-[calc(100vh-220px)] overflow-auto">
+        <table class="table table-sm w-full">
+          <thead class="sticky top-0 z-10 bg-[#f5f7fa] dark:bg-[#141414]">
+            <tr>
+              <th class="cursor-pointer select-none" @click="toggleSort('target')">目标{{ sortArrow('target') }}</th>
+              <th class="w-20 cursor-pointer select-none" @click="toggleSort('network')">网络{{ sortArrow('network') }}</th>
+              <th class="w-[110px] cursor-pointer select-none" @click="toggleSort('outbound')">出站{{ sortArrow('outbound') }}</th>
+              <th class="w-[110px]">规则</th>
+              <th class="w-24 cursor-pointer select-none text-right" @click="toggleSort('up')">上传{{ sortArrow('up') }}</th>
+              <th class="w-24 cursor-pointer select-none text-right" @click="toggleSort('down')">下载{{ sortArrow('down') }}</th>
+              <th class="w-20 cursor-pointer select-none text-right" @click="toggleSort('time')">时长{{ sortArrow('time') }}</th>
+              <th class="w-14 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="c in filtered" :key="c.id" class="cursor-pointer hover:bg-black/5 dark:hover:bg-white/5" @click="detail = c">
+              <td>
+                <div class="flex flex-col">
+                  <span class="text-[13px] font-medium">{{ targetOf(c) }}</span>
+                  <span class="text-xs text-[#606266] dark:text-[#a6b0bf]">
+                    {{ c.source }} → {{ c.destination }}
+                    <template v-if="c.processInfo?.processPath"> · {{ c.processInfo.processPath.split(/[\\/]/).pop() }}</template>
+                  </span>
+                </div>
+              </td>
+              <td><span class="text-xs">{{ c.network }}</span></td>
+              <td><span class="text-xs">{{ outboundOf(c) }}</span></td>
+              <td><span class="text-xs">{{ c.rule || '—' }}</span></td>
+              <td class="text-right"><span class="text-xs tabular-nums text-green-600 dark:text-green-400">{{ formatBytes(c.uplinkTotal) }}</span></td>
+              <td class="text-right"><span class="text-xs tabular-nums text-blue-600 dark:text-blue-400">{{ formatBytes(c.downlinkTotal) }}</span></td>
+              <td class="text-right"><span class="text-xs tabular-nums">{{ formatDuration(durationOf(c)) }}</span></td>
+              <td class="text-center">
+                <button class="btn btn-ghost btn-xs text-error" title="断开" @click.stop="closeOne(c.id)">
+                  <TrashIcon class="h-3.5 w-3.5" />
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="!filtered.length" class="py-10 text-center text-sm text-[#606266] dark:text-[#a6b0bf]">
+        {{ search ? '无匹配连接' : '暂无活动连接' }}
+      </div>
     </div>
 
-    <!-- 连接详情抽屉 -->
-    <el-drawer :model-value="detail !== null" size="380px" :with-header="false" @update:model-value="(v: boolean) => { if (!v) detail = null }">
+    <!-- 连接详情弹窗 -->
+    <DialogWrapper :model-value="detail !== null" title="连接详情" box-class="max-w-[380px]" @update:model-value="(v: boolean | undefined) => { if (!v) detail = null }">
       <template v-if="detail">
         <div class="mb-4 flex items-center gap-2">
-          <el-icon :size="16" class="text-[var(--el-color-primary)]"><Document /></el-icon>
+          <FileTextIcon class="h-4 w-4 text-[#409eff]" />
           <span class="text-sm font-semibold">{{ targetOf(detail) }}</span>
         </div>
-        <el-descriptions :column="1" size="small" border>
-          <el-descriptions-item label="ID">{{ detail.id }}</el-descriptions-item>
-          <el-descriptions-item label="网络">{{ detail.network }}</el-descriptions-item>
-          <el-descriptions-item label="入站">{{ detail.inbound }} ({{ detail.inboundType }})</el-descriptions-item>
-          <el-descriptions-item label="来源">{{ detail.source }}</el-descriptions-item>
-          <el-descriptions-item label="目标">{{ detail.destination }}</el-descriptions-item>
-          <el-descriptions-item label="域名">{{ detail.domain || '—' }}</el-descriptions-item>
-          <el-descriptions-item label="协议">{{ detail.protocol || '—' }}</el-descriptions-item>
-          <el-descriptions-item label="用户">{{ detail.user || '—' }}</el-descriptions-item>
-          <el-descriptions-item label="出站">{{ outboundOf(detail) }}</el-descriptions-item>
-          <el-descriptions-item label="出站类型">{{ detail.outboundType || '—' }}</el-descriptions-item>
-          <el-descriptions-item label="规则">{{ detail.rule || '—' }}</el-descriptions-item>
-          <el-descriptions-item label="链">
-            <div class="flex flex-col gap-0.5">
+        <dl class="flex flex-col gap-2 text-sm">
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">ID</dt><dd class="break-all text-right font-mono text-xs">{{ detail.id }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">网络</dt><dd>{{ detail.network }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">入站</dt><dd>{{ detail.inbound }} ({{ detail.inboundType }})</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">来源</dt><dd class="break-all text-right">{{ detail.source }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">目标</dt><dd class="break-all text-right">{{ detail.destination }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">域名</dt><dd class="break-all text-right">{{ detail.domain || '—' }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">协议</dt><dd>{{ detail.protocol || '—' }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">用户</dt><dd>{{ detail.user || '—' }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">出站</dt><dd class="break-all text-right">{{ outboundOf(detail) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">出站类型</dt><dd>{{ detail.outboundType || '—' }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">规则</dt><dd class="break-all text-right">{{ detail.rule || '—' }}</dd></div>
+          <div class="flex justify-between gap-3">
+            <dt class="shrink-0 text-[#909399]">链</dt>
+            <dd class="flex flex-col gap-0.5 text-right">
               <span v-for="(ch, i) in detail.chainList || []" :key="i" class="text-xs">{{ ch }}</span>
               <span v-if="!detail.chainList?.length">—</span>
-            </div>
-          </el-descriptions-item>
-          <el-descriptions-item label="进程">
-            <template v-if="detail.processInfo">
-              <div class="flex flex-col gap-0.5 text-xs">
-                <span>{{ detail.processInfo.processPath || '—' }}</span>
-                <span class="text-[var(--el-text-color-secondary)]">PID {{ detail.processInfo.processId }} · {{ detail.processInfo.userName }}</span>
-              </div>
-            </template>
-            <span v-else>—</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="上传">{{ formatBytes(detail.uplinkTotal) }}</el-descriptions-item>
-          <el-descriptions-item label="下载">{{ formatBytes(detail.downlinkTotal) }}</el-descriptions-item>
-          <el-descriptions-item label="时长">{{ formatDuration(durationOf(detail)) }}</el-descriptions-item>
-        </el-descriptions>
-        <el-button class="mt-4 w-full" type="danger" plain :icon="Delete" @click="closeOne(detail.id); detail = null">
+            </dd>
+          </div>
+          <div class="flex justify-between gap-3">
+            <dt class="shrink-0 text-[#909399]">进程</dt>
+            <dd v-if="detail.processInfo" class="flex flex-col gap-0.5 text-right text-xs">
+              <span>{{ detail.processInfo.processPath || '—' }}</span>
+              <span class="text-[#606266] dark:text-[#a6b0bf]">PID {{ detail.processInfo.processId }} · {{ detail.processInfo.userName }}</span>
+            </dd>
+            <dd v-else>—</dd>
+          </div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">上传</dt><dd>{{ formatBytes(detail.uplinkTotal) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">下载</dt><dd>{{ formatBytes(detail.downlinkTotal) }}</dd></div>
+          <div class="flex justify-between gap-3"><dt class="shrink-0 text-[#909399]">时长</dt><dd>{{ formatDuration(durationOf(detail)) }}</dd></div>
+        </dl>
+        <button class="btn btn-error btn-sm mt-4 w-full" @click="closeOne(detail.id); detail = null">
+          <TrashIcon class="h-4 w-4" />
           断开此连接
-        </el-button>
+        </button>
       </template>
-    </el-drawer>
+    </DialogWrapper>
   </div>
 </template>
