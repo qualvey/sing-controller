@@ -410,8 +410,14 @@ onMounted(async () => {
   try {
     const t = await api.types()
     outboundTypes.value = t.outbounds || []
-  } catch (e) {
-    showToast((e as Error).message || '加载类型列表失败', 'error')
+  } catch {
+    // 后端不可用时用静态兜底列表（与 sing-box 公开枚举对齐），保证离线也能新建
+    outboundTypes.value = [
+      'direct', 'block', 'dns', 'selector', 'urltest',
+      'vless', 'vmess', 'trojan', 'tuic', 'hysteria', 'hysteria2',
+      'shadowsocks', 'shadowtls', 'anytls', 'wireguard', 'ssh', 'socks', 'http'
+    ]
+    showToast('无法连接 controller，已用内置类型列表（功能受限）', 'warning')
   }
   await loadOutbounds()
 })

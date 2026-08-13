@@ -487,8 +487,10 @@ onMounted(async () => {
     const implemented = ['mixed', 'tuic', 'shadowsocks']
     const all = t.inbounds || []
     inboundTypes.value = implemented.filter((x) => all.includes(x))
-  } catch (e) {
-    showToast((e as Error).message || '加载类型列表失败', 'error')
+  } catch {
+    // 后端不可用时用已实现表单的类型兜底，保证离线也能新建
+    inboundTypes.value = ['mixed', 'tuic', 'shadowsocks']
+    showToast('无法连接 controller，已用内置类型列表（功能受限）', 'warning')
   }
   await loadInbounds()
 })
