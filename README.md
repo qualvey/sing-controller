@@ -23,6 +23,8 @@
 # 1. 构建前端（产物被 controller embed）
 cd controller/web
 pnpm install && pnpm run build
+# 子路径反代部署时指定挂载路径（资源/路由/API 均带此前缀）：
+# VITE_BASE_URL=/webui/ pnpm run build   # 默认 '/' 为根路径部署，无需设置
 
 # 2. 启动 controller（页面 + API 同端口，默认 127.0.0.1:8080）
 cd ..

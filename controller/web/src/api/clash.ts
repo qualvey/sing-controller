@@ -111,7 +111,7 @@ export interface DNSQueryResult {
 
 // ============ REST 客户端 ============
 
-const http = axios.create({ baseURL: '/api/clash', timeout: 15000 })
+const http = axios.create({ baseURL: import.meta.env.BASE_URL + 'api/clash', timeout: 15000 })
 
 export const fetchClashVersion = () => http.get<{ version: string }>('/version')
 
@@ -153,7 +153,7 @@ export const disconnectAll = () => http.delete('/connections')
 
 const wsBase = () => {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${proto}://${location.host}/api/clash`
+  return `${proto}://${location.host}${import.meta.env.BASE_URL}api/clash`
 }
 
 /**

@@ -81,7 +81,8 @@ export interface TypesInfo {
 }
 
 const http = axios.create({
-  baseURL: '/api',
+  // 与 vite base 对齐：根路径部署 -> '/api'；子路径部署（VITE_BASE_URL=/webui/）-> '/webui/api'
+  baseURL: import.meta.env.BASE_URL + 'api',
   timeout: 15000
 })
 

@@ -31,7 +31,7 @@ func webHandler() (http.Handler, error) {
 			// webui 未构建：仅 API 模式
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			_, _ = io.WriteString(w, "sing-controller API is running. Web UI not built: run `npm run build` in controller/web. See /api/status.")
+			_, _ = io.WriteString(w, "sing-controller API is running. Web UI not built: run `pnpm run build` in controller/web. See /api/status.")
 			return
 		}
 		// 缓存头

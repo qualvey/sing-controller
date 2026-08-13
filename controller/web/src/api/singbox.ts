@@ -7,7 +7,7 @@ import { StartedService } from '@/gen/daemon/started_service_pb'
 import type { MessageInitShape } from '@bufbuild/protobuf'
 import type { DescMessage } from '@bufbuild/protobuf'
 
-const transport = createGrpcWebTransport({ baseUrl: '/api/grpc' })
+const transport = createGrpcWebTransport({ baseUrl: import.meta.env.BASE_URL + 'api/grpc' })
 
 export type StartedClient = Client<typeof StartedService>
 
