@@ -183,13 +183,6 @@ html.dark .muted {
   color: #a3a6ad;
 }
 
-/* 原始 JSON 编辑框使用等宽字体 */
-.mono .el-textarea__inner,
-.mono-editor .el-textarea__inner {
-  font-family: Consolas, 'Courier New', 'JetBrains Mono', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-}
 
 /* 全局 toast（helper/toast.ts，替代 ElMessage） */
 .toast-container {
