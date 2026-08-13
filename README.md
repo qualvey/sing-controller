@@ -215,4 +215,8 @@ packaging/               # 部署资源（systemd unit + postinstall/postremove�
 > - [技术栈与协议选型](docs/tech-stack-protocol.md)
 > - [集群架构设计](docs/cluster-architecture.md)
 
+## 增强
+
+路由规则支持选择插入位置
+所有的只读选择下拉菜单，可以用键盘模糊搜索
 
