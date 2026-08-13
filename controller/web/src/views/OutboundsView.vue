@@ -6,7 +6,7 @@ import { PlusIcon, RefreshCw, ClipboardPasteIcon, KeyRoundIcon, LoaderIcon } fro
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { SelectRoot, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
@@ -488,12 +488,12 @@ onMounted(async () => {
           </div>
           <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 170px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
-            <SelectRoot v-model="form.type" :disabled="isEdit">
+            <SelectField v-model="form.type" :disabled="isEdit">
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="t in outboundTypes" :key="t" :value="t">{{ t }}</SelectItem>
               </SelectContent>
-            </SelectRoot>
+            </SelectField>
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
             <input v-model="form.tag" type="text" class="input input-bordered input-sm w-full" placeholder="唯一标识，如 vless-out" />
 
@@ -515,21 +515,21 @@ onMounted(async () => {
                 </button>
               </div>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">flow</label>
-              <SelectRoot v-model="form.flow">
+              <SelectField v-model="form.flow">
                 <SelectTrigger><SelectValue placeholder="留空则不启用" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">（无）</SelectItem>
                   <SelectItem value="xtls-rprx-vision">xtls-rprx-vision</SelectItem>
                   <SelectItem value="xtls-rprx-vision-udp443">xtls-rprx-vision-udp443</SelectItem>
                 </SelectContent>
-              </SelectRoot>
+              </SelectField>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">network</label>
-              <SelectRoot v-model="form.network">
+              <SelectField v-model="form.network">
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="n in networkOptionsAll" :key="n" :value="n">{{ n }}</SelectItem>
                 </SelectContent>
-              </SelectRoot>
+              </SelectField>
 
               <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
                 <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />TLS<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
@@ -543,12 +543,12 @@ onMounted(async () => {
                 <Switch v-model="form.tls.utls.enabled" class="mt-1.5" />
                 <template v-if="form.tls.utls.enabled">
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.utls.fingerprint</label>
-                  <SelectRoot v-model="form.tls.utls.fingerprint">
+                  <SelectField v-model="form.tls.utls.fingerprint">
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="f in fingerprintOptions" :key="f" :value="f">{{ f }}</SelectItem>
                     </SelectContent>
-                  </SelectRoot>
+                  </SelectField>
                 </template>
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.reality.enabled</label>
                 <Switch v-model="form.tls.reality.enabled" class="mt-1.5" />
@@ -580,19 +580,19 @@ onMounted(async () => {
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">password <span class="text-destructive">*</span></label>
               <input v-model="form.password" type="password" class="input input-bordered input-sm w-full" placeholder="tuic 密码" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">congestion_control</label>
-              <SelectRoot v-model="form.congestion_control">
+              <SelectField v-model="form.congestion_control">
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="c in congestionOptions" :key="c" :value="c">{{ c }}</SelectItem>
                 </SelectContent>
-              </SelectRoot>
+              </SelectField>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">udp_relay_mode</label>
-              <SelectRoot v-model="form.udp_relay_mode">
+              <SelectField v-model="form.udp_relay_mode">
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="m in udpRelayOptions" :key="m" :value="m">{{ m }}</SelectItem>
                 </SelectContent>
-              </SelectRoot>
+              </SelectField>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">zero_rtt_handshake</label>
               <Switch v-model="form.zero_rtt_handshake" class="mt-1.5" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.enabled</label>
@@ -611,12 +611,12 @@ onMounted(async () => {
               <ChipInput v-model="form.outbounds" :suggestions="groupCandidates" placeholder="选择组成员（回车添加，可多选）" />
               <template v-if="isSelector">
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">default</label>
-                <SelectRoot v-model="form.default_out">
+                <SelectField v-model="form.default_out">
                   <SelectTrigger><SelectValue placeholder="可选，默认选中项" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="t in form.outbounds" :key="t" :value="t">{{ t }}</SelectItem>
                   </SelectContent>
-                </SelectRoot>
+                </SelectField>
               </template>
               <template v-if="isUrlTest">
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">url</label>

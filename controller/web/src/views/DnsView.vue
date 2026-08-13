@@ -6,7 +6,7 @@ import { PlusIcon, RefreshCw } from 'lucide-vue-next'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { SelectRoot, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import { useStatusStore } from '../stores/status'
@@ -698,19 +698,19 @@ onMounted(() => {
           <TabsContent value="options">
             <div class="grid max-w-[560px] gap-x-4 gap-y-5" style="grid-template-columns: 160px minmax(0, 1fr)">
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">final（默认 server）</label>
-              <SelectRoot v-model="optsForm.final">
+              <SelectField v-model="optsForm.final">
                 <SelectTrigger><SelectValue placeholder="选择默认 DNS server（留空则不指定）" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="t in dnsTags" :key="t" :value="t">{{ t }}</SelectItem>
                 </SelectContent>
-              </SelectRoot>
+              </SelectField>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">strategy（解析策略）</label>
-              <SelectRoot v-model="optsForm.strategy">
+              <SelectField v-model="optsForm.strategy">
                 <SelectTrigger><SelectValue placeholder="不指定" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="s in STRATEGY_OPTIONS" :key="s" :value="s">{{ s }}</SelectItem>
                 </SelectContent>
-              </SelectRoot>
+              </SelectField>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">timeout</label>
               <input v-model="optsForm.timeout" type="text" class="input input-bordered input-sm w-full" placeholder="如 5s（留空用默认）" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">disable_cache</label>
@@ -741,12 +741,12 @@ onMounted(() => {
             <TabsContent value="form">
               <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 120px minmax(0, 1fr)">
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">type <span class="text-destructive">*</span></label>
-                <SelectRoot v-model="serverForm.type">
+                <SelectField v-model="serverForm.type">
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="t in DNS_TYPES" :key="t" :value="t">{{ t }}</SelectItem>
                   </SelectContent>
-                </SelectRoot>
+                </SelectField>
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
                 <input v-model="serverForm.tag" type="text" class="input input-bordered input-sm w-full" placeholder="唯一标识，如 local-dns / cf-doh" />
                 <template v-if="serverFieldKeys(serverForm.type).includes('server')">
@@ -776,12 +776,12 @@ onMounted(() => {
                   <input v-model="serverForm.interface" type="text" class="input input-bordered input-sm w-full" placeholder="网卡名" />
                 </template>
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">detour</label>
-                <SelectRoot v-model="serverForm.detour">
+                <SelectField v-model="serverForm.detour">
                   <SelectTrigger><SelectValue placeholder="经出站代理（可选）" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="t in outboundTags" :key="t" :value="t">{{ t }}</SelectItem>
                   </SelectContent>
-                </SelectRoot>
+                </SelectField>
 
                 <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
                   <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />拨号选项（DialerOptions）<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
@@ -797,12 +797,12 @@ onMounted(() => {
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">udp_fragment</label>
                 <Switch v-model="serverForm.udp_fragment" class="mt-1.5" />
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">network_strategy</label>
-                <SelectRoot v-model="serverForm.network_strategy">
+                <SelectField v-model="serverForm.network_strategy">
                   <SelectTrigger><SelectValue placeholder="不指定" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="s in STRATEGY_OPTIONS" :key="s" :value="s">{{ s }}</SelectItem>
                   </SelectContent>
-                </SelectRoot>
+                </SelectField>
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">network_type</label>
                 <ChipInput v-model="serverForm.network_type" :suggestions="['wifi', 'cellular', 'ethernet', 'other']" placeholder="wifi/cellular/ethernet/other" />
 
@@ -811,24 +811,24 @@ onMounted(() => {
                 </div>
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">resolver server</label>
                 <div class="flex flex-col gap-1">
-                  <SelectRoot v-model="serverForm.dr_server">
+                  <SelectField v-model="serverForm.dr_server">
                     <SelectTrigger><SelectValue placeholder="选择 DNS server（如 local/ali）" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="t in dnsTags" :key="t" :value="t">{{ t }}</SelectItem>
                     </SelectContent>
-                  </SelectRoot>
+                  </SelectField>
                   <p class="text-xs text-[#606266] dark:text-[#a6b0bf]">server/url 是域名时，用该 resolver 解析域名的 IP（避免自举）</p>
                 </div>
                 <template v-if="serverForm.dr_server">
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">resolver timeout</label>
                   <input v-model="serverForm.dr_timeout" type="text" class="input input-bordered input-sm w-full" placeholder="如 5s" />
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">resolver strategy</label>
-                  <SelectRoot v-model="serverForm.dr_strategy">
+                  <SelectField v-model="serverForm.dr_strategy">
                     <SelectTrigger><SelectValue placeholder="不指定" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="s in STRATEGY_OPTIONS" :key="s" :value="s">{{ s }}</SelectItem>
                     </SelectContent>
-                  </SelectRoot>
+                  </SelectField>
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">resolver disable_cache</label>
                   <Switch v-model="serverForm.dr_disable_cache" class="mt-1.5" />
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">disable_optimistic_cache</label>
@@ -864,21 +864,21 @@ onMounted(() => {
             <TabsContent value="form">
               <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 150px minmax(0, 1fr)">
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
-                <SelectRoot v-model="ruleForm.ruleType">
+                <SelectField v-model="ruleForm.ruleType">
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="t in DNS_RULE_TYPES" :key="t.value" :value="t.value">{{ t.label }}</SelectItem>
                   </SelectContent>
-                </SelectRoot>
+                </SelectField>
 
                 <template v-if="ruleForm.ruleType === 'logical'">
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">mode <span class="text-destructive">*</span></label>
-                  <SelectRoot v-model="ruleForm.mode">
+                  <SelectField v-model="ruleForm.mode">
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="m in LOGICAL_MODES" :key="m" :value="m">{{ m }}</SelectItem>
                     </SelectContent>
-                  </SelectRoot>
+                  </SelectField>
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">invert</label>
                   <Switch v-model="ruleForm.invert" class="mt-1.5" />
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">子规则 (JSON) <span class="text-destructive">*</span></label>
@@ -904,12 +904,12 @@ onMounted(() => {
                         :placeholder="f.placeholder || '输入后回车添加，可多值'"
                         :suggestions="f.options ?? (f.key === 'inbound' ? inboundTags : [])"
                       />
-                      <SelectRoot v-else-if="f.type === 'select'" v-model="ruleForm[f.key]">
+                      <SelectField v-else-if="f.type === 'select'" v-model="ruleForm[f.key]">
                         <SelectTrigger><SelectValue :placeholder="f.placeholder || '请选择'" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem v-for="o in f.options ?? []" :key="o" :value="o">{{ o }}</SelectItem>
                         </SelectContent>
-                      </SelectRoot>
+                      </SelectField>
                       <Switch v-else-if="f.type === 'bool'" v-model="ruleForm[f.key]" class="mt-1.5" />
                       <input v-else-if="f.type === 'string'" v-model="ruleForm[f.key]" type="text" class="input input-bordered input-sm w-full" :placeholder="f.placeholder || '请输入'" />
                       <textarea v-else v-model="ruleForm[f.key]" rows="3" class="textarea textarea-bordered w-full font-mono text-xs" :placeholder="f.placeholder || '字段 JSON 对象'" />
@@ -921,20 +921,20 @@ onMounted(() => {
                   <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />动作<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
                 </div>
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">action</label>
-                <SelectRoot v-model="ruleForm.action">
+                <SelectField v-model="ruleForm.action">
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem v-for="a in DNS_RULE_ACTIONS" :key="a.value" :value="a.value">{{ a.label }}</SelectItem>
                   </SelectContent>
-                </SelectRoot>
+                </SelectField>
                 <template v-if="ruleForm.action === 'route'">
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server</label>
-                  <SelectRoot v-model="ruleForm.server">
+                  <SelectField v-model="ruleForm.server">
                     <SelectTrigger><SelectValue placeholder="选择 DNS server" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="t in dnsTags" :key="t" :value="t">{{ t }}</SelectItem>
                     </SelectContent>
-                  </SelectRoot>
+                  </SelectField>
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">speculative</label>
                   <div class="flex items-center gap-2">
                     <Switch v-model="ruleForm.speculative" />
@@ -943,12 +943,12 @@ onMounted(() => {
                 </template>
                 <template v-else-if="ruleForm.action === 'evaluate'">
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server</label>
-                  <SelectRoot v-model="ruleForm.server">
+                  <SelectField v-model="ruleForm.server">
                     <SelectTrigger><SelectValue placeholder="选择 DNS server" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="t in dnsTags" :key="t" :value="t">{{ t }}</SelectItem>
                     </SelectContent>
-                  </SelectRoot>
+                  </SelectField>
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag</label>
                   <input v-model="ruleForm.evaluate_tag" type="text" class="input input-bordered input-sm w-full" placeholder="评估结果写入的 tag（可选）" />
                   <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">speculative</label>

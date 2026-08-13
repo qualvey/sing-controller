@@ -10,7 +10,7 @@ import { toTypedSchema, z } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 import { Checkbox } from '@/components/ui/checkbox'
-import { SelectRoot, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { api, type Inbound, type UserMeta } from '../api'
 
 const loading = ref(false)
@@ -269,7 +269,7 @@ onMounted(() => {
         <FormItem class="contents">
           <FormLabel class="pt-2">flow</FormLabel>
           <FormControl>
-            <SelectRoot v-model="flow">
+            <SelectField v-model="flow">
               <SelectTrigger v-bind="flowAttrs">
                 <SelectValue placeholder="vless flow（xtls-rprx-vision 等）" />
               </SelectTrigger>
@@ -278,7 +278,7 @@ onMounted(() => {
                 <SelectItem value="xtls-rprx-vision">xtls-rprx-vision</SelectItem>
                 <SelectItem value="xtls-rprx-vision-udp443">xtls-rprx-vision-udp443</SelectItem>
               </SelectContent>
-            </SelectRoot>
+            </SelectField>
           </FormControl>
         </FormItem>
 

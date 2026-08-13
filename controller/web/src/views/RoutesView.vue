@@ -6,7 +6,7 @@ import { PlusIcon, RefreshCw } from 'lucide-vue-next'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { SelectRoot, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SelectField, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
@@ -330,12 +330,12 @@ onMounted(() => {
       <TabsContent value="form">
         <div class="mb-3.5 flex items-center gap-2.5 rounded-lg border border-[#e4e7ed] bg-white px-4 py-3 dark:border-[#303030] dark:bg-[#1d1e1f]">
           <span class="font-semibold text-[#303133] dark:text-[#e5eaf3]">route.final</span>
-          <SelectRoot v-model="finalTag" class="w-60" :disabled="!outboundTags.length">
+          <SelectField v-model="finalTag" class="w-60" :disabled="!outboundTags.length">
             <SelectTrigger class="w-60"><SelectValue placeholder="选择 final outbound" /></SelectTrigger>
             <SelectContent>
               <SelectItem v-for="t in outboundTags" :key="t" :value="t">{{ t }}</SelectItem>
             </SelectContent>
-          </SelectRoot>
+          </SelectField>
           <button class="btn btn-primary btn-sm" :disabled="savingFinal || !outboundTags.length" @click="saveFinal">保存 final</button>
           <span class="text-xs text-[#909399]">未匹配任何规则时的默认出站（整体读取/回写配置）</span>
         </div>
@@ -405,23 +405,23 @@ onMounted(() => {
         <TabsContent value="form">
           <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 130px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
-            <SelectRoot v-model="ruleForm.ruleType">
+            <SelectField v-model="ruleForm.ruleType">
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="default">普通规则（匹配字段）</SelectItem>
                 <SelectItem value="logical">逻辑组合（and/or 嵌套子规则）</SelectItem>
               </SelectContent>
-            </SelectRoot>
+            </SelectField>
 
             <template v-if="ruleForm.ruleType === 'logical'">
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">mode <span class="text-destructive">*</span></label>
-              <SelectRoot v-model="ruleForm.mode">
+              <SelectField v-model="ruleForm.mode">
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="and">and</SelectItem>
                   <SelectItem value="or">or</SelectItem>
                 </SelectContent>
-              </SelectRoot>
+              </SelectField>
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">invert</label>
               <Switch v-model="ruleForm.invert" class="mt-1.5" />
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">子规则 (JSON) <span class="text-destructive">*</span></label>
@@ -447,12 +447,12 @@ onMounted(() => {
                     :placeholder="f.placeholder || '输入后回车添加，可多值'"
                     :suggestions="fieldOptions(f)"
                   />
-                  <SelectRoot v-else-if="f.type === 'select'" v-model="ruleForm[f.key]">
+                  <SelectField v-else-if="f.type === 'select'" v-model="ruleForm[f.key]">
                     <SelectTrigger><SelectValue :placeholder="f.placeholder || '请选择'" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="o in fieldOptions(f)" :key="o" :value="o">{{ o }}</SelectItem>
                     </SelectContent>
-                  </SelectRoot>
+                  </SelectField>
                   <Switch v-else-if="f.type === 'bool'" v-model="ruleForm[f.key]" class="mt-1.5" />
                   <input v-else v-model="ruleForm[f.key]" type="text" class="input input-bordered input-sm w-full" :placeholder="f.placeholder || '请输入'" />
                 </template>
@@ -463,20 +463,20 @@ onMounted(() => {
               <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />动作<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
             </div>
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">action</label>
-            <SelectRoot v-model="ruleForm.action">
+            <SelectField v-model="ruleForm.action">
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="a in actionOptions" :key="a.value" :value="a.value">{{ a.label }}</SelectItem>
               </SelectContent>
-            </SelectRoot>
+            </SelectField>
             <template v-if="isRouteAction">
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">outbound <span class="text-destructive">*</span></label>
-              <SelectRoot v-model="ruleForm.outbound">
+              <SelectField v-model="ruleForm.outbound">
                 <SelectTrigger><SelectValue placeholder="选择出站" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="t in outboundTags" :key="t" :value="t">{{ t }}</SelectItem>
                 </SelectContent>
-              </SelectRoot>
+              </SelectField>
             </template>
             <template v-else-if="ruleForm.action === 'sniff'">
               <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">sniffer</label>
