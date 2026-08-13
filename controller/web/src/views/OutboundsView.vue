@@ -411,13 +411,8 @@ onMounted(async () => {
     const t = await api.types()
     outboundTypes.value = t.outbounds || []
   } catch {
-    // 后端不可用时用静态兜底列表（与 sing-box 公开枚举对齐），保证离线也能新建
-    outboundTypes.value = [
-      'direct', 'block', 'dns', 'selector', 'urltest',
-      'vless', 'vmess', 'trojan', 'tuic', 'hysteria', 'hysteria2',
-      'shadowsocks', 'shadowtls', 'anytls', 'wireguard', 'ssh', 'socks', 'http'
-    ]
-    showToast('无法连接 controller，已用内置类型列表（功能受限）', 'warning')
+    // 类型依赖后端枚举（跟随 sing-box 版本），后端不可用时保持为空，仅提示
+    showToast('当前没有后端连接，无法使用该功能', 'warning')
   }
   await loadOutbounds()
 })
@@ -494,12 +489,15 @@ onMounted(async () => {
           </div>
           <div class="grid gap-x-4 gap-y-5" style="grid-template-columns: 170px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
-            <SelectField v-model="form.type" :disabled="isEdit">
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem v-for="t in outboundTypes" :key="t" :value="t">{{ t }}</SelectItem>
-              </SelectContent>
-            </SelectField>
+            <template v-if="outboundTypes.length">
+              <SelectField v-model="form.type" :disabled="isEdit">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="t in outboundTypes" :key="t" :value="t">{{ t }}</SelectItem>
+                </SelectContent>
+              </SelectField>
+            </template>
+            <div v-else class="alert alert-warning py-2 text-xs">当前没有后端连接，无法使用该功能</div>
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
             <input v-model="form.tag" type="text" class="input input-bordered input-sm w-full" placeholder="唯一标识，如 vless-out" />
 
