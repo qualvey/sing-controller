@@ -89,6 +89,9 @@ importers:
       reconnectingwebsocket:
         specifier: ^1.0.0
         version: 1.0.0
+      reka-ui:
+        specifier: ^2.10.3
+        version: 2.10.3(vue@3.5.41(typescript@5.4.5))
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
@@ -1095,6 +1098,9 @@ packages:
     engines: {node: ^18 || >=20}
     hasBin: true
 
+  ohash@2.0.11:
+    resolution: {integrity: sha512-RdR9FQrFwNBNXAr4GixM8YaRZRJ5PUWbKYbE5eOsrwAjJW0q2REGcf79oYPsLyskQCZG1PLN+S/K1V00joZAoQ==}
+
   path-browserify@1.0.1:
     resolution: {integrity: sha512-b7uo2UCUOYZcnF/3ID0lulOJi/bafxa1xPe7ZPsammBSpjSWQkjNxlt635YGS2MiR9GjvuXCtz2emr3jbsz98g==}
 
@@ -1132,6 +1138,11 @@ packages:
 
   reconnectingwebsocket@1.0.0:
     resolution: {integrity: sha512-r7H/dwkkfBu9x5eMGIt8td5WLqNbqy675x8Xg0+SoXaUS3xzniVlmfO7t7HSYmN/ZGzYjOKa9G2W4xCgCo7Zlg==}
+
+  reka-ui@2.10.3:
+    resolution: {integrity: sha512-nJGZbwcha8AcP2wbnjodfzsciTKBqp1mIzepC9Pi2xDI/YK3++ej3vpJOSPyxqrkq1Oorj4K+BdJkbVCV6x6ag==}
+    peerDependencies:
+      vue: '>= 3.4.0'
 
   rfdc@1.4.1:
     resolution: {integrity: sha512-q1b3N5QkRUWUl7iyylaaj3kOpIT0N2i9MqIEQXP73GVsN9cw3fdx8X63cEmWhJGi2PPCF23Ijp7ktmd39rawIA==}
@@ -2144,6 +2155,8 @@ snapshots:
 
   nanoid@5.1.16: {}
 
+  ohash@2.0.11: {}
+
   path-browserify@1.0.1: {}
 
   perfect-debounce@1.0.0: {}
@@ -2200,6 +2213,22 @@ snapshots:
       - '@vue/composition-api'
 
   reconnectingwebsocket@1.0.0: {}
+
+  reka-ui@2.10.3(vue@3.5.41(typescript@5.4.5)):
+    dependencies:
+      '@floating-ui/dom': 1.8.0
+      '@floating-ui/vue': 1.1.11(vue@3.5.41(typescript@5.4.5))
+      '@internationalized/date': 3.12.3
+      '@internationalized/number': 3.6.7
+      '@tanstack/vue-virtual': 3.13.35(vue@3.5.41(typescript@5.4.5))
+      '@vueuse/core': 14.4.0(vue@3.5.41(typescript@5.4.5))
+      '@vueuse/shared': 14.4.0(vue@3.5.41(typescript@5.4.5))
+      aria-hidden: 1.2.6
+      defu: 6.1.7
+      ohash: 2.0.11
+      vue: 3.5.41(typescript@5.4.5)
+    transitivePeerDependencies:
+      - '@vue/composition-api'
 
   rfdc@1.4.1: {}
 

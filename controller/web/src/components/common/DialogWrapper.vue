@@ -28,7 +28,6 @@
           class="modal-box bg-base-100 relative flex flex-col overflow-hidden p-0 outline-none max-md:max-h-[85dvh] max-md:min-h-[calc(var(--dialog-viewport-height,100dvh)*0.4)]"
           :class="boxClass"
           tabindex="-1"
-          @click.stop
           @keydown.enter.self="enter"
         >
           <div

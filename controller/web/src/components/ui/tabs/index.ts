@@ -1,4 +1,4 @@
 export { default as TabsList } from './TabsList.vue'
 export { default as TabsTrigger } from './TabsTrigger.vue'
 export { default as TabsContent } from './TabsContent.vue'
-export { TabsRoot } from 'radix-vue'
+export { TabsRoot } from 'reka-ui'

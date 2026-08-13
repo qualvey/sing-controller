@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { SelectItem, SelectItemIndicator, type SelectItemProps, useForwardProps } from 'radix-vue'
+import { SelectItem, SelectItemIndicator, SelectItemText, type SelectItemProps, useForwardProps } from 'reka-ui'
 import { Check } from 'lucide-vue-next'
 import { cn } from '@/lib/utils'
 
@@ -22,6 +22,7 @@ const forwarded = useForwardProps(props)
         <Check class="size-4" />
       </SelectItemIndicator>
     </span>
-    <slot />
+    <!-- SelectItemText 必需：负责把选项注册到 optionsSet（SelectValue 显示选中文本依赖它） -->
+    <SelectItemText><slot /></SelectItemText>
   </SelectItem>
 </template>

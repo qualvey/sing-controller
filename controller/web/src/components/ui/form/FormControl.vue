@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
 import { cn } from '@/lib/utils'
-import { Slot } from 'radix-vue'
+import { Slot } from 'reka-ui'
 
 const props = defineProps<{ class?: HTMLAttributes['class'] }>()
 </script>

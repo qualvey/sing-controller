@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { CheckboxRoot, CheckboxIndicator, useForwardProps, type CheckboxRootProps } from 'radix-vue'
+import { CheckboxRoot, CheckboxIndicator, useForwardProps, type CheckboxRootProps } from 'reka-ui'
 import { Check } from 'lucide-vue-next'
 import { cn } from '@/lib/utils'
 
