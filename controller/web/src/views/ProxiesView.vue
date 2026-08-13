@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { VideoPlay, CaretRight } from '@element-plus/icons-vue'
+import { ChevronRightIcon, PlayIcon } from '@heroicons/vue/24/outline'
 import { subscribeGroups, selectOutbound, uRLTest, setClashMode } from '../api/singbox'
 import { fetchProxyLatency } from '../api/clash'
 import type { Groups, Group } from '@/gen/daemon/started_service_pb'
 import { useRuntimeStore } from '../stores/runtime'
+import { showToast } from '../helper/toast'
 
 const runtime = useRuntimeStore()
 const DEFAULT_TEST_URL = 'http://www.gstatic.com/generate_204'
@@ -118,7 +118,7 @@ const pick = async (group: string, node: string) => {
   try {
     await selectOutbound(group, node)
   } catch (e) {
-    ElMessage.error((e as Error).message || '切换失败')
+    showToast((e as Error).message || '切换失败', 'error')
   }
 }
 
@@ -144,7 +144,7 @@ const testGroup = async (g: Group) => {
   try {
     await uRLTest(g.tag)
   } catch (e) {
-    ElMessage.error((e as Error).message || '测速失败')
+    showToast((e as Error).message || '测速失败', 'error')
   } finally {
     const s = new Set(testing.value)
     s.delete(g.tag)
@@ -160,7 +160,7 @@ const testAll = async () => {
   try {
     await Promise.all(groups.value.map((g) => uRLTest(g.tag)))
   } catch (e) {
-    ElMessage.error((e as Error).message || '测速失败')
+    showToast((e as Error).message || '测速失败', 'error')
   } finally {
     const s2 = new Set(testing.value)
     groups.value.forEach((g) => s2.delete('__all__:' + g.tag))
@@ -177,7 +177,7 @@ const changeMode = async (m: string) => {
   try {
     await setClashMode(m)
   } catch (e) {
-    ElMessage.error((e as Error).message || '切换模式失败')
+    showToast((e as Error).message || '切换模式失败', 'error')
   }
 }
 
@@ -226,15 +226,15 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex flex-col gap-4">
     <!-- 工具栏 -->
-    <div class="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--el-border-color)] bg-[var(--el-bg-color)] px-4 py-3">
-      <el-select size="small" style="width: 120px" placeholder="模式" @change="changeMode">
-        <el-option label="Rule" value="rule" />
-        <el-option label="Global" value="global" />
-        <el-option label="Direct" value="direct" />
-      </el-select>
-      <el-input v-model="testUrl" size="small" placeholder="测速 URL" style="width: 240px" @change="saveTestUrl" />
-      <el-button size="small" :icon="VideoPlay" :loading="testing.size > 0" @click="testAll">全部测速</el-button>
-      <span class="ml-auto flex items-center gap-2 text-xs text-[var(--el-text-color-secondary)]">
+    <div class="flex flex-wrap items-center gap-3 rounded-lg border border-[#e4e7ed] dark:border-[#303030] bg-white dark:bg-[#1d1e1f] px-4 py-3">
+      <select class="select select-bordered select-sm w-[120px]" @change="changeMode(($event.target as HTMLSelectElement).value)">
+        <option value="rule">Rule</option>
+        <option value="global">Global</option>
+        <option value="direct">Direct</option>
+      </select>
+      <input v-model="testUrl" type="text" class="input input-bordered input-sm w-60" placeholder="测速 URL" @change="saveTestUrl" />
+      <button class="btn btn-primary btn-sm" :disabled="testing.size > 0" @click="testAll"><PlayIcon class="h-4 w-4" />全部测速</button>
+      <span class="ml-auto flex items-center gap-2 text-xs text-[#606266] dark:text-[#a6b0bf]">
         <span class="inline-block h-2 w-2 rounded-full" :class="connected ? 'bg-green-500' : (failed ? 'bg-red-500' : 'bg-yellow-500')"></span>
         {{ connected ? `${groups.length} 组 · ${totalNodes} 节点` : (failed ? 'service API 不可用' : '连接中…') }}
       </span>
@@ -246,15 +246,13 @@ onBeforeUnmount(() => {
         v-for="g in groups"
         :key="g.tag"
         :ref="(el) => { if (el) cardRefs.push(el as HTMLElement) }"
-        class="group-card mb-4 break-inside-avoid overflow-hidden rounded-xl border border-[var(--el-border-color)] bg-[var(--el-bg-color)] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+        class="group-card mb-4 break-inside-avoid overflow-hidden rounded-xl border border-[#e4e7ed] dark:border-[#303030] bg-white dark:bg-[#1d1e1f] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
       >
         <!-- 头部：点击折叠 -->
         <div class="flex cursor-pointer items-center gap-2.5 px-4 py-3" @click="toggleGroup(g.tag)">
-          <el-icon class="shrink-0 text-[var(--el-color-primary)] transition-transform duration-300" :class="{ 'rotate-90': isExpanded(g.tag) }">
-            <CaretRight />
-          </el-icon>
+          <ChevronRightIcon class="shrink-0 text-[#409eff] transition-transform duration-300" :class="{ 'rotate-90': isExpanded(g.tag) }" />
           <span class="flex-1 truncate text-sm font-semibold" :title="g.tag">{{ g.tag }}</span>
-          <span class="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-[var(--el-color-primary)]" style="background: color-mix(in srgb, var(--el-color-primary) 12%, transparent)">
+          <span class="shrink-0 rounded px-1.5 py-0.5 text-[11px] text-[#409eff]" style="background: color-mix(in srgb, #409eff 12%, transparent)">
             {{ g.type }} · {{ g.items?.length || 0 }}
           </span>
           <!-- 组实时下载速率 -->
@@ -285,7 +283,7 @@ onBeforeUnmount(() => {
               <div v-for="(w, i) in latencyBands(g)" :key="i" :class="bandColors[i]" :style="{ width: w + '%' }" class="transition-all duration-500" />
             </div>
             <!-- 展开：节点网格 -->
-            <div v-else class="border-t border-[var(--el-border-color)] p-3">
+            <div v-else class="border-t border-[#e4e7ed] dark:border-[#303030] p-3">
               <!-- zashboard 同款：auto-fill minmax(150px,1fr) 列数自适应，卡片不压缩 -->
               <div class="grid gap-2" :style="{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(150px, 100%), 1fr))' }">
                 <div
@@ -294,8 +292,8 @@ onBeforeUnmount(() => {
                   class="group/node flex cursor-pointer flex-col gap-1.5 rounded-md border p-2.5 transition-all duration-150"
                   :class="
                     item.tag === g.selected
-                      ? 'border-transparent bg-[var(--el-color-primary)] text-white shadow-md'
-                      : 'border-[var(--el-border-color)] hover:-translate-y-px hover:border-[var(--el-color-primary)] hover:shadow-sm'
+                      ? 'border-transparent bg-[#409eff] text-white shadow-md'
+                      : 'border-[#e4e7ed] dark:border-[#303030] hover:-translate-y-px hover:border-[#409eff] hover:shadow-sm'
                   "
                   @click="pick(g.tag, item.tag)"
                   @contextmenu.prevent.stop="testOne(g.tag, item.tag)"
@@ -304,7 +302,7 @@ onBeforeUnmount(() => {
                   <div class="flex w-full items-center justify-between gap-1">
                     <span
                       class="truncate text-xs tracking-tight"
-                      :class="item.tag === g.selected ? 'text-white/80' : 'text-[var(--el-text-color-secondary)]'"
+                      :class="item.tag === g.selected ? 'text-white/80' : 'text-[#606266] dark:text-[#a6b0bf]'"
                     >{{ typeLabel(item.type) }}</span>
                     <span
                       class="shrink-0 rounded-full px-2 py-0.5 text-[11px] tabular-nums transition-all"
@@ -324,8 +322,8 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <el-empty v-if="connected && !groups.length" description="无代理组（配置里没有 selector/urltest 等组）" />
-    <el-empty v-else-if="!connected" :description="failed ? 'service API 不可用（检查 sing-box services[type=api] 配置）' : '连接中…'" />
+    <div v-if="connected && !groups.length" class="py-10 text-center text-sm text-[#909399]">暂无代理组（需要 selector/urltest 等组类型出站）</div>
+    <div v-else-if="!connected" class="py-10 text-center text-sm text-[#909399]">{{ failed ? 'service API 不可用（检查 sing-box services[type=api]）' : '连接中…' }}</div>
   </div>
 </template>
 

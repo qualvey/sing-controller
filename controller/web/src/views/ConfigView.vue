@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { showToast } from '../helper/toast'
 import { EditorView, keymap } from '@codemirror/view'
 import { Compartment, EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
@@ -230,7 +230,7 @@ const loadConfig = async () => {
     if (editor.value) updateStats(editor.value)
     dirty.value = false
   } catch (e) {
-    ElMessage.error((e as Error).message || '加载配置失败')
+    showToast((e as Error).message || '加载配置失败', 'error')
   } finally {
     loading.value = false
   }
@@ -241,7 +241,7 @@ const format = () => {
   const ed = editor.value
   if (!ed) return
   if (formatJsoncDoc(ed)) {
-    ElMessage.success('已格式化（保留注释）')
+    showToast('已格式化（保留注释）', 'success')
   }
 }
 
@@ -250,25 +250,25 @@ const save = async () => {
   const text = editor.value?.state.doc.toString() ?? ''
   const parsed = parseJsonc(text)
   if (!parsed.ok) {
-    ElMessage.error(`配置格式错误：${parsed.message}`)
+    showToast(`配置格式错误：${parsed.message}`, 'error')
     return
   }
   if (typeof parsed.value !== 'object' || parsed.value === null || Array.isArray(parsed.value)) {
-    ElMessage.error('配置必须是 JSON 对象')
+    showToast('配置必须是 JSON 对象', 'error')
     return
   }
   saving.value = true
   try {
     const res = (await api.saveConfigRaw(text)) as { load_error?: string; message?: string }
     if (res.load_error) {
-      ElMessage.warning(res.message || `配置已保存，但加载新配置失败：${res.load_error}`)
+    showToast(res.message || `配置已保存，但加载新配置失败：${res.load_error}`, 'warning')
     } else {
-      ElMessage.success('配置已保存（原样写盘，已通过 sing-box 校验）')
+    showToast('配置已保存（原样写盘，已通过 sing-box 校验）', 'success')
     }
     dirty.value = false
     await statusStore.refresh()
   } catch (e) {
-    ElMessage.error((e as Error).message || '保存失败')
+    showToast((e as Error).message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
@@ -329,12 +329,12 @@ onBeforeUnmount(() => {
 
       <!-- 工具栏 -->
       <div class="editor-toolbar">
-        <el-button size="small" :loading="loading" @click="loadConfig">刷新</el-button>
-        <el-button size="small" @click="format">格式化</el-button>
-        <el-button size="small" @click="openSearch">搜索/替换</el-button>
+        <button class="btn btn-ghost btn-xs" :disabled="loading" @click="loadConfig">刷新</button>
+        <button class="btn btn-ghost btn-xs" @click="format">格式化</button>
+        <button class="btn btn-ghost btn-xs" @click="openSearch">查找/替换</button>
         <span class="toolbar-spacer" />
         <span class="hint">原样编辑主配置（JSONC：注释/尾逗号保留；Ctrl+F 搜索、Ctrl+Shift+F 格式化）</span>
-        <el-button size="small" type="primary" :loading="saving" @click="save">保存配置</el-button>
+        <button class="btn btn-primary btn-xs" :disabled="saving" @click="save">保存配置</button>
       </div>
 
       <!-- 编辑器主体 -->

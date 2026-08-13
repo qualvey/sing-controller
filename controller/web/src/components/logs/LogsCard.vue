@@ -26,12 +26,12 @@ const levelClass = computed(() => colorMapForType[props.log.level] || '')
 </script>
 
 <template>
-  <div class="flex flex-col gap-1 px-3 py-1.5 text-[12.5px] transition-colors hover:bg-[var(--el-fill-color-light)]">
+  <div class="flex flex-col gap-1 px-3 py-1.5 text-[12.5px] transition-colors hover:bg-black/5 dark:hover:bg-white/5">
     <div class="flex items-center gap-2">
-      <span class="text-[var(--el-text-color-placeholder)] text-xs tabular-nums">{{ seqWithPadding }}</span>
+      <span class="text-xs text-[#909399] tabular-nums dark:text-[#636d83]">{{ seqWithPadding }}</span>
       <span class="text-[11px] tracking-wide uppercase" :class="levelClass">{{ log.levelLabel }}</span>
       <div class="flex-1" />
-      <span class="text-[var(--el-text-color-placeholder)] text-xs tabular-nums">{{ log.time }}</span>
+      <span class="text-xs text-[#909399] tabular-nums dark:text-[#636d83]">{{ log.time }}</span>
     </div>
     <div class="w-full break-words leading-relaxed">
       <HighlightText :text="log.message" :filter="log.filter" ansi />

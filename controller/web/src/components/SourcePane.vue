@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { ElMessage } from 'element-plus'
 import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
@@ -9,6 +8,7 @@ import { foldGutter } from '@codemirror/language'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
 import { api } from '../api'
 import { useCmTheme } from '../composables/useCmTheme'
+import { showToast } from '../helper/toast'
 
 const { ext: themeExt, watchTheme } = useCmTheme()
 
@@ -58,7 +58,7 @@ const load = async () => {
     const text = seg == null ? 'null' : JSON.stringify(seg, null, 2)
     editor.value?.dispatch({ changes: { from: 0, to: editor.value.state.doc.length, insert: text } })
   } catch (e) {
-    ElMessage.error((e as Error).message || '加载配置段失败')
+    showToast((e as Error).message || '加载配置段失败', 'error')
   } finally {
     loading.value = false
   }
@@ -69,7 +69,7 @@ const save = async () => {
   const text = editor.value?.state.doc.toString() ?? ''
   const parsed = parseJsonc(text)
   if (!parsed.ok) {
-    ElMessage.error(`JSON 格式错误：${parsed.message}`)
+    showToast(`JSON 格式错误：${parsed.message}`, 'error')
     return
   }
   saving.value = true
@@ -83,10 +83,10 @@ const save = async () => {
     }
     setPath(rootObj, props.segment, parsed.value)
     await api.saveConfigRaw(JSON.stringify(rootObj, null, 2))
-    ElMessage.success(`「${props.segment}」已合并保存（其余配置不变）`)
+    showToast(`「${props.segment}」已合并保存（其余配置不变）`, 'success')
     emit('saved')
   } catch (e) {
-    ElMessage.error((e as Error).message || '保存失败')
+    showToast((e as Error).message || '保存失败', 'error')
   } finally {
     saving.value = false
   }
@@ -133,49 +133,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="source-pane">
-    <div class="source-toolbar">
-      <span class="segment-label">{{ segment }} 段</span>
-      <el-button size="small" :loading="loading" @click="load">刷新</el-button>
-      <el-button size="small" @click="format">格式化</el-button>
-      <span class="hint">手动编辑该段 JSON（JSONC，支持注释）；保存时整段替换并入主配置，其余配置不变；写 null 删除该段</span>
-      <span class="spacer" />
-      <el-button size="small" type="primary" :loading="saving" @click="save">保存并合并</el-button>
+  <div class="flex flex-col gap-2">
+    <div class="flex items-center gap-2">
+      <span class="text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]">{{ segment }} 段</span>
+      <button class="btn btn-ghost btn-xs" :disabled="loading" @click="load">刷新</button>
+      <button class="btn btn-ghost btn-xs" @click="format">格式化</button>
+      <span class="text-xs text-[#909399]">手动编辑该段 JSON（JSONC，支持注释）；保存时整段替换并入主配置，其余配置不变；写 null 删除该段</span>
+      <span class="flex-1" />
+      <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">保存并合并</button>
     </div>
-    <div ref="editorHost" class="source-editor" />
+    <div ref="editorHost" class="h-[420px] overflow-hidden rounded-md border border-[#30363d] text-left" />
   </div>
 </template>
 
 <style scoped>
-.source-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.source-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.segment-label {
-  font-weight: 600;
-  font-size: 13px;
-  color: #303133;
-}
-.hint {
-  font-size: 12px;
-  color: #909399;
-}
-.spacer {
-  flex: 1;
-}
-.source-editor {
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  overflow: hidden;
-  height: 420px;
-  text-align: left;
-}
 .source-editor :deep(.cm-editor) {
   height: 100%;
 }
