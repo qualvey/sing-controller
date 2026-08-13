@@ -19,7 +19,8 @@
 | 2 | 通用组件迁移 + daisyUI 启用 + zashboard 基础设施复用 | ✅ 2026-08-12 |
 | 3a | 简单 view 迁移：Settings / Users / Proxies / Config（表单+表格+弹窗样板） | ✅ 2026-08-12 |
 | 3b | **技术方向修正**：老板拍板表单用最先进方案 → shadcn-vue（Reka UI + Tailwind + vee-validate + zod v3），daisyUI 展示层保留 | ✅ 2026-08-12 |
-| 3c | 复杂表单 view（暂缓）：Dns / Inbounds / Outbounds / Routes / Certificate / RuleSets / Connections | ⏳ |
+| 3c | **全部 view 迁移完成**：13/13 脱离 element（7 个复杂 view 迁移 shadcn-vue 表单体系）| ✅ 2026-08-12 |
+| 4 | 收尾：element-plus 依赖已移除（主包 1.24MB→315KB）；tooltip/ESLint/测试待办 | ⏳ |
 | 4 | 表格/弹窗/消息收尾：el-table → tanstack table；tooltip → tippy.js | ⏳ |
 | 5 | 收尾：删除 element-plus 依赖、图标替换、补 ESLint+Prettier、产物瘦身验证 | ⏳ |
 
@@ -62,7 +63,15 @@
 - **样板**：UsersView 表单 → vee-validate + zod（name 必填 / uuid v4 格式 / uuid+password 至少一个 superRefine），实测：弹窗 ✓ 自动密码 ✓ zod 错误显示 ✓ 提交链路 ✓
 - 验证：build ✓；指示条回归 ✓；/users 弹窗全链路无页面错误 ✓
 
-### 阶段 3a：简单 view 迁移（老板指示：复杂表单先不动，2026-08-12）
+### 阶段 3c：全部 view 迁移完成（老板指示「全部迁移，写完提交」，2026-08-12）
+- 7 个复杂 view 全部迁移：Connections / RuleSets / Certificate / Routes / Outbounds / Inbounds / Dns
+- 新增组件：ChipInput（替代 el-select multiple+allow-create，5 个 view 复用）、ui/tabs（radix）
+- 模式：el-table→原生 table、el-form→grid 两列布局、el-dialog→DialogWrapper、el-tabs→radix Tabs、el-select→radix Select、多选→ChipInput、校验→手写 validateForm（动态字段表单场景 vee-validate 不适用）、ElMessageBox→confirmDialog 队列
+- Outbounds/Inbounds 的「从 JSON 填充」（原 ElMessageBox.prompt）→ DialogWrapper + textarea 弹窗；Reality 私钥展示 → confirmDialog（仅展示一次）
+- **element-plus 彻底移除**：main.ts 全局注册删除、style.css 清理、pnpm remove
+- **主包瘦身：1,241KB → 315KB（gzip 408→109KB，-75%）**
+- 验证：build ✓；13/13 页面 el- 引用 = 0、零页面错误；指示条 10 场景回归 ✓
+- git：2 个原子提交（a60eb23 feat 迁移 / 44d4cc8 chore 移除依赖）
 - **SettingsView**：纯表单样板——grid 两列 label 布局（替代 el-form label-width）、daisyUI input/select/toggle、`input+datalist` 替代 el-select allow-create filterable（目标组 tag）、分组标题替代 el-divider
 - **UsersView**：原生 table（简单列表不引 tanstack）+ DialogWrapper 弹窗 + checkbox 多选绑定入站 + showConfirmDialog 删除确认（zashboard 复用件首次实战）
 - **ProxiesView**：el-select/input/button/icon/empty 全换 daisyUI + heroicons；element CSS 变量批量替换为 Tailwind 色值并补 dark: 变体
