@@ -18,6 +18,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"time"
 )
 
 type Defaults struct {
@@ -42,6 +43,7 @@ type LogOptions struct {
 //   - pidfile：读 pid 文件后 kill -HUP
 //   - hook：自定义 shell 命令（最灵活）
 //   - none：不启用
+//
 // clash_api 无 reload 端点（已查源码确认），不走该方案。
 type ReloadOptions struct {
 	Mode      string `json:"mode,omitempty"`
@@ -94,14 +96,18 @@ type ServiceAPIOptions struct {
 }
 
 type Settings struct {
-	Config    string            `json:"config"`
-	Listen    string            `json:"listen,omitempty"`
-	Log       *LogOptions       `json:"log,omitempty"`
-	MinPort   uint16            `json:"min_port,omitempty"`
-	Defaults  Defaults          `json:"defaults,omitempty"`
-	Reload    *ReloadOptions    `json:"reload,omitempty"`
-	ClashAPI  *ClashAPIOptions  `json:"clash_api,omitempty"`
-	ServiceAPI *ServiceAPIOptions `json:"service_api,omitempty"`
+	Config       string             `json:"config"`
+	Listen       string             `json:"listen,omitempty"`
+	Log          *LogOptions        `json:"log,omitempty"`
+	MinPort      uint16             `json:"min_port,omitempty"`
+	Defaults     Defaults           `json:"defaults,omitempty"`
+	Reload       *ReloadOptions     `json:"reload,omitempty"`
+	ClashAPI     *ClashAPIOptions   `json:"clash_api,omitempty"`
+	ServiceAPI   *ServiceAPIOptions `json:"service_api,omitempty"`
+	V2rayAPI     string             `json:"v2ray_api,omitempty"`
+	PollInterval string             `json:"poll_interval"`
+	Pattern      string             `json:"pattern"`
+	ResetOnQuery bool               `json:"reset_on_query"`
 }
 
 type Manager struct {
@@ -114,6 +120,13 @@ func New(path string) *Manager { return &Manager{path: path} }
 
 func (m *Manager) Path() string { return m.path }
 
+func (m *Manager) PollIntervalDuration() time.Duration {
+	d, err := time.ParseDuration(m.values.PollInterval)
+	if err != nil || d <= 0 {
+		return 10 * time.Second
+	}
+	return d
+}
 func defaultSettings() Settings {
 	return Settings{
 		Config:  "./sing-box-config.json",
@@ -122,10 +135,10 @@ func defaultSettings() Settings {
 		MinPort: 8000,
 		Reload:  &ReloadOptions{Mode: "auto"},
 		Defaults: Defaults{
-			InboundType:  "mixed",
-			OutboundType: "vless",
-			Listen:       "127.0.0.1",
-			ListenPort:   2080,
+			InboundType:   "mixed",
+			OutboundType:  "vless",
+			Listen:        "127.0.0.1",
+			ListenPort:    2080,
 			ProxySelector: "Proxy",
 		},
 	}

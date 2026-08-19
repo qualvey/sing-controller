@@ -228,7 +228,7 @@ onMounted(() => {
     </div>
 
     <!-- 新建/编辑弹窗（DialogWrapper + vee-validate 表单） -->
-    <DialogWrapper v-model="dialogVisible" :title="isEdit ? '编辑用户' : '新建用户'" box-class="max-w-[560px]">
+    <DialogWrapper v-model="dialogVisible" :title="isEdit ? '编辑用户' : '新建用户'" box-class="max-w-[560px]"> 
       <form class="grid gap-x-4 gap-y-5" style="grid-template-columns: 120px minmax(0, 1fr)" @submit.prevent="onSubmit">
         <FormItem class="contents">
           <FormLabel class="pt-2">name <span class="text-destructive">*</span></FormLabel>
