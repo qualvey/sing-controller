@@ -19,3 +19,5 @@ dist/
 go.work.sum
 
 !controller/web/dist/.gitkeep
+sing-box.exe
+.vscode/

@@ -1,0 +1,1 @@
+outbound添加，从json解析，如果当前表单选择了tuic,粘贴了vless的信息，第一次会报错。如果选择了vless,粘贴tuic也会报错

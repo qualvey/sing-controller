@@ -108,6 +108,11 @@ type Settings struct {
 	PollInterval string             `json:"poll_interval"`
 	Pattern      string             `json:"pattern"`
 	ResetOnQuery bool               `json:"reset_on_query"`
+	RealTime     struct {
+		Enabled            bool `json:"enabled"`
+		IntervalMS         int  `json:"interval_ms"`
+		OnlineThresholdSec int  `json:"online_threshold_sec"`
+	} `json:"real_time"`
 }
 
 type Manager struct {

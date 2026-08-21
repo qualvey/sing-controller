@@ -51,10 +51,10 @@ func main() {
 
 	values := cfg.Values()
 
-	rt := realtime.NewBroadcaster(cfg.RealTime.IntervalMS, cfg.RealTime.OnlineThresholdSec)
+	rt := realtime.NewBroadcaster(values.RealTime.IntervalMS, values.RealTime.OnlineThresholdSec)
 	rt.Start()
 	defer rt.Stop()
-	go collector.StartCollector(cfg, rt)
+	go collector.StartCollector(values, rt)
 	// 日志级别（复用 sing-box 的 level 枚举/解析）
 	setLogLevel(values.Log.Level)
 
