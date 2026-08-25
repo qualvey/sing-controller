@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/datatypes"
 )
 
 // DefaultCycleDays 用户未单独配置周期天数时的默认值
@@ -72,6 +74,15 @@ type UserInboundBinding struct {
 	ID        uint64 `gorm:"primaryKey" json:"id"`
 	UserID    uint64 `gorm:"uniqueIndex:idx_user_inbound,priority:1" json:"user_id"`
 	InboundID uint64 `gorm:"uniqueIndex:idx_user_inbound,priority:2" json:"inbound_id"`
+}
+
+type OutboundNode struct {
+	ID        uint64         `gorm:"primaryKey;autoIncrement" json:"id"`
+	Tag       string         `gorm:"type:varchar(64);uniqueIndex;not null" json:"tag"`
+	Type      string         `gorm:"type:varchar(32);not null;index" json:"type"`
+	Config    datatypes.JSON `gorm:"type:json" json:"config" `
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 // CycleAnchor 返回周期锚点（未设置时回退创建时间）

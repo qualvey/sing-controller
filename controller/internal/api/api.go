@@ -17,12 +17,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/qualvey/sing-controller/internal/settings"
+	"github.com/qualvey/sing-controller/internal/store"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/schema"
-	"github.com/qualvey/sing-controller/internal/settings"
-	"github.com/qualvey/sing-controller/internal/store"
 )
 
 type HandlerOptions struct {

@@ -1,6 +1,3 @@
-// 复用自 zashboard（MIT）：确认对话框队列（替代 ElMessageBox.confirm）
-// 挂载见 components/common/ConfirmDialogHost.vue；用法：
-//   const { confirmed, checked } = await showConfirmDialog({ message: '确定删除？', checkboxText: '强制删除' })
 import { readonly, ref } from 'vue'
 
 export type ConfirmDialogOptions = {
@@ -9,7 +6,7 @@ export type ConfirmDialogOptions = {
   confirmText?: string
   cancelText?: string
   confirmButtonClass?: string
-  /** 勾选框文案；存在时显示「勾选后不再询问」类选项，结果通过 checked 返回 */
+  /** 传入后在对话框内显示一个复选框，其勾选状态随结果一起返回 */
   checkboxText?: string
 }
 
@@ -27,6 +24,7 @@ const confirmDialogQueue: ConfirmDialogRequest[] = []
 
 const showNextConfirmDialog = () => {
   if (activeConfirmDialog.value || confirmDialogQueue.length === 0) return
+
   activeConfirmDialog.value = confirmDialogQueue.shift()
 }
 
@@ -36,7 +34,7 @@ export const showConfirmDialog = (options: ConfirmDialogOptions) => {
   return new Promise<ConfirmDialogResult>((resolve) => {
     confirmDialogQueue.push({
       ...options,
-      resolve
+      resolve,
     })
     showNextConfirmDialog()
   })

@@ -31,6 +31,7 @@ func InitDB(dsn string) error {
 		&models.TrafficLog{},
 		&models.TrafficTotal{},
 		&models.UserInboundBinding{},
+		&models.OutboundNode{},
 	); err != nil {
 		return err
 	}

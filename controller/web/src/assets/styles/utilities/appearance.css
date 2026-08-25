@@ -1,0 +1,93 @@
+/*
+ * 用户可调外观：背景不透明度与毛玻璃强度 (Tailwind CSS v4 兼容版)
+ * 控制方式：在最外层容器直接设置 CSS 变量：
+ *   --bg-opacity: 0 到 100 之间的数值（例如 80）
+ *   --blur-val: 0 到 40 之间的数值（例如 12）
+ */
+
+/* 1. 自定义背景图开启时，各层容器半透明及下限保护 */
+.custom-background {
+  /* 基础面板与各类容器统一透明度 */
+  .bg-base-100,
+  .bg-primary,
+  .card,
+  .collapse,
+  .input,
+  .select,
+  .toggle,
+  .settings-menu,
+  .ctrls-bar,
+  .settings-grid,
+  .base-container,
+  .btn:not(.btn-ghost, .btn-neutral, .btn-primary),
+  .tabs {
+    background-color: color-mix(in srgb, var(--color-base-100, #ffffff) calc(var(--bg-opacity, 100) * 1%), transparent) !important;
+  }
+
+  .btn.btn-neutral {
+    background-color: color-mix(in srgb, var(--color-neutral, #181a2a) calc(var(--bg-opacity, 100) * 1%), transparent) !important;
+  }
+
+  option,
+  optgroup {
+    backdrop-filter: blur(4px);
+  }
+
+  .bg-base-150,
+  .bg-base-200,
+  .dock {
+    background-color: color-mix(in srgb, var(--color-base-200, #f2f2f2) calc(var(--bg-opacity, 100) * 1%), transparent) !important;
+  }
+
+  /* 弹窗类：最低保留 70% 不透明度以保证可读性 */
+  .modal-box {
+    background-color: color-mix(in srgb, var(--color-base-100, #ffffff) calc(max(var(--bg-opacity, 100), 70) * 1%), transparent) !important;
+  }
+
+  /* 主色块：最低保留 60% 不透明度 */
+  .bg-primary:not(.tab.tab-active) {
+    background-color: color-mix(in srgb, var(--color-primary, #570df8) calc(max(var(--bg-opacity, 100), 60) * 1%), transparent) !important;
+  }
+
+  /* 延迟标签：最低保留 90% 不透明度 */
+  .bg-primary .latency-tag {
+    background-color: color-mix(in srgb, var(--color-base-100, #ffffff) calc(max(var(--bg-opacity, 100), 90) * 1%), transparent) !important;
+  }
+
+  .home-page.bg-base-200 {
+    background-color: transparent !important;
+  }
+}
+
+/* 2. 毛玻璃滤镜强度 */
+.custom-blur {
+  .card,
+  .collapse,
+  .sidebar,
+  .nav-bar,
+  .modal-box,
+  .need-blur,
+  .settings-grid,
+  .base-container,
+  .btn,
+  .table thead {
+    backdrop-filter: blur(calc(var(--blur-val, 0) * 1px));
+  }
+
+  .pinned-td {
+    background-color: transparent !important;
+    backdrop-filter: blur(24px);
+  }
+
+  /* 表格 tbody 使用伪元素铺层 */
+  .table tbody::before {
+    position: absolute;
+    content: '';
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    backdrop-filter: blur(calc(var(--blur-val, 0) * 1px));
+    pointer-events: none;
+  }
+}
