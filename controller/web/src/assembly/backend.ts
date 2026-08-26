@@ -55,7 +55,15 @@ export const channel = computed<Channel>(() =>
 // 后端切换时先重置为未知,避免沿用上一个后端的结论。
 export const core = ref<Core>(Core.Unknown)
 export const apiVersion = ref(0)
-
+// 通道在线状态（由各自通道的探测逻辑/WS心跳/gRPC流维护）
+export const clashAvailable = ref(false)
+export const singboxAvailable = ref(false)
+export const resetChannels = () => {
+  clashAvailable.value = false
+  singboxAvailable.value = false
+  core.value = Core.Unknown
+  apiVersion.value = 0
+}
 export const resetCore = () => {
   core.value = Core.Unknown
   apiVersion.value = 0

@@ -129,6 +129,9 @@ export const hasSmartGroup = computed(() => {
   )
 })
 
+//TODO:
+//后端不再二选一而是互补，sing-box为主,clash为辅
+//clash仅作为群体测速和模式切换
 // ---------- 按后端路由的组装动作 ----------
 
 interface ProxiesBackend {
