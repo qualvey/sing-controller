@@ -43,7 +43,8 @@ export const serverStream = <Req extends DescMessage, Res extends DescMessage>(
 
     const stream = new GrpcWebSocketStream({
       baseUrl,
-      secret: getSingboxSecret(backend),
+      secret: "",
+      // secret: getSingboxSecret(backend),
       service: method.parent.typeName,
       method: method.name,
       requestSchema: method.input,
