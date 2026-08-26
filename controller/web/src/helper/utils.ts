@@ -71,11 +71,15 @@ export const getUrlFromBackend = (end: {
 }
 
 // sing-box 后端复用顶层连接字段作为 gRPC baseUrl(secondaryPath 留空)。
-export const getSingboxUrlFromBackend = (
-  end: Pick<Backend, 'type' | 'protocol' | 'host' | 'port'>,
-) => {
-  if (end.type !== 'singbox' || !end.host) return ''
-  return `${end.protocol}://${end.host}:${end.port}`
+// export const getSingboxUrlFromBackend = (
+//   end: Pick<Backend, 'type' | 'protocol' | 'host' | 'port'>,
+// ) => {
+//   if (end.type !== 'singbox' || !end.host) return ''
+//   return `${end.protocol}://${end.host}:${end.port}`
+// }
+export const getSingboxUrlFromBackend = () => {
+  // 返回带反代前缀的完整地址
+  return `${window.location.origin}/api/grpc`
 }
 
 export const getSingboxSecret = (end: Pick<Backend, 'type' | 'password'>) =>
