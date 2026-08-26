@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/http/httputil"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	errClashAPIUnavailable = errors.New("clash API 不可用：settings 未配置 clash_api 且 sing-box 配置未启用 experimental.clash_api")
+	errClashAPIUnavailable   = errors.New("clash API 不可用：settings 未配置 clash_api 且 sing-box 配置未启用 experimental.clash_api")
 	errServiceAPIUnavailable = errors.New("service API 不可用：settings 未配置 service_api 且 sing-box 配置未启用 services[type=api]")
 )
 
@@ -46,23 +46,33 @@ func (c *proxyCache) get(prefix string, resolve func() (*url.URL, string, string
 	if e, ok := c.items[prefix]; ok && e.lastSig == sig {
 		return e
 	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	director := proxy.Director
-	proxy.Director = func(r *http.Request) {
-		director(r)
-		// 去掉前缀（如 /api/clash、/api/grpc），转发到核心对应路径
-		trimmed := strings.TrimPrefix(r.URL.Path, prefix)
-		if trimmed == "" {
-			trimmed = "/"
-		}
-		r.URL.Path = trimmed
-		if secret != "" {
-			r.Header.Set("Authorization", "Bearer "+secret)
-		}
+
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			// 1. 设置目标地址（内部会自动同步 Scheme、Host，并安全重写 Out.Host）
+			pr.SetURL(target)
+
+			// 2. 去掉路由前缀（如 /api/grpc 或 /api/clash）
+			trimmed := strings.TrimPrefix(pr.Out.URL.Path, prefix)
+			if trimmed == "" {
+				trimmed = "/"
+			}
+			pr.Out.URL.Path = trimmed
+			pr.Out.URL.RawPath = strings.TrimPrefix(pr.Out.URL.RawPath, prefix)
+
+			// 3. 注入认证 Token（Rewrite 会保护添加的头不被客户端篡改）
+			if secret != "" {
+				pr.Out.Header.Set("Authorization", "Bearer "+secret)
+			}
+
+			// 4. 标准化 X-Forwarded-* 头部
+			pr.SetXForwarded()
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			writeError(w, http.StatusBadGateway, err)
+		},
 	}
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		writeError(w, http.StatusBadGateway, err)
-	}
+
 	e := &reverseProxyEntry{target: target, secret: secret, proxy: proxy, lastSig: sig}
 	c.items[prefix] = e
 	return e
