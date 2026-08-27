@@ -62,13 +62,15 @@ export const resetSettings = () => {
   window.location.reload()
 }
 
-export const getUrlFromBackend = (end: {
-  protocol: string
-  host: string
-  port: string
+export const getUrlFromBackend = (end?: {
+  protocol?: string
+  host?: string
+  port?: string
   secondaryPath?: string
 }) => {
-  return `${end.protocol}://${end.host}:${end.port}${end.secondaryPath || ''}`
+  const path = end?.secondaryPath || ''
+  // 确保以 '/' 开头
+  return path.startsWith('/') ? path : `/${path}`
 }
 
 // sing-box 后端复用顶层连接字段作为 gRPC baseUrl(secondaryPath 留空)。
