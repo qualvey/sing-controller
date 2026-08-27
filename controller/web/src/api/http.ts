@@ -11,7 +11,8 @@ import { nextTick } from 'vue'
 axios.interceptors.request.use((config) => {
   if (activeBackend.value) {
     config.baseURL = getUrlFromBackend(activeBackend.value)
-    config.headers['Authorization'] = 'Bearer ' + activeBackend.value.password
+    //暂时先不写header
+    // config.headers['Authorization'] = 'Bearer ' + activeBackend.value.password
   }
   return config
 })
