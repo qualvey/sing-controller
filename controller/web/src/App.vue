@@ -5,7 +5,7 @@ import './assembly/session'
 import { computed, onMounted, ref, type Ref, watch } from 'vue'
 import { RouterView } from 'vue-router'
 import BackendConnectionError from './components/common/BackendConnectionError.vue'
-// import BackendManager from './components/settings/backend/BackendManager.vue'
+import BackendManager from './components/settings/backend/BackendManager.vue'
 import UpdateConfigModal from './components/settings/backend/UpdateConfigModal.vue'
 import UpgradeCoreModal from './components/settings/backend/UpgradeCoreModal.vue'
 import { useAppearanceVars } from './composables/useAppearanceVars'
@@ -159,6 +159,13 @@ const isSameBackend = (b1: Omit<Backend, 'uuid' | 'type'>, b2: Omit<Backend, 'uu
   )
 }
 
+const autoSwitchToURLBackendIfExists = () => {
+  const backend = getBackendFromUrl()
+
+}
+
+autoSwitchToURLBackendIfExists()
+
 onMounted(async () => {
   setThemeColor()
 
@@ -192,7 +199,7 @@ useKeyboard()
   >
     <RouterView />
     <BackendConnectionError />
-    <!-- <BackendManager /> -->
+    <BackendManager />
     <!-- 后端维护动作的弹窗:侧边栏菜单和设置页都会拉起,挂在这里两处入口才都有效。 -->
     <UpgradeCoreModal v-model="showUpgradeCoreModal" />
     <UpdateConfigModal v-model="showUpdateConfigModal" />
