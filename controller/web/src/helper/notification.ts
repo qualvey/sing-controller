@@ -233,6 +233,7 @@ export const showNotification = ({
   type?: NotificationType
   timeout?: number
 }) => {
+  console.trace('[showNotification 触发来源]', { content, type, key }) // 👈 加这行
   const alertKey = key || content
 
   if (alertKey && alertMap.has(alertKey)) {
