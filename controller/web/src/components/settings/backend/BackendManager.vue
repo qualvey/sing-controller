@@ -151,14 +151,10 @@ import { getLabelFromBackend } from '@/helper/utils'
 import router from '@/router'
 import {
   activeUuid,
-  addBackend,
   backendList,
   backendManagerView,
   closeBackendManager,
-  openBackendManager,
-  removeBackend,
-  setActiveBackend,
-  updateBackend,
+  openBackendManager
 } from '@/store/setup'
 import type { Backend, BackendType } from '@/types'
 import { ChevronUpDownIcon, PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/vue/24/outline'
