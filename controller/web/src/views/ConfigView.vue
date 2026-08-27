@@ -11,8 +11,8 @@ import { lintGutter } from '@codemirror/lint'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
 import { foldGutter } from '@codemirror/language'
 import { api } from '../api'
-import { useStatusStore } from '../stores/status'
-import { useThemeStore } from '../stores/theme'
+import { useStatusStore } from '../store/status'
+import { useThemeStore } from '../store/theme'
 
 const statusStore = useStatusStore()
 

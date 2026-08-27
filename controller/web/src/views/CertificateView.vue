@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
 import ResourceSourceTab from '../components/ResourceSourceTab.vue'
-import { useStatusStore } from '../stores/status'
+import { useStatusStore } from '../store/status'
 
 const statusStore = useStatusStore()
 
