@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box/option"
 )
@@ -120,6 +121,29 @@ func (h *Handler) handleClashProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	e.proxy.ServeHTTP(w, r)
 }
+func checkUpstreamReachable(rawTarget string, timeout time.Duration) error {
+	u, err := url.Parse(rawTarget)
+	if err != nil {
+		return err
+	}
+
+	host := u.Host
+	// 如果未显式带端口，补全默认 HTTP/HTTPS 端口
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		if u.Scheme == "https" {
+			host = net.JoinHostPort(host, "443")
+		} else {
+			host = net.JoinHostPort(host, "80")
+		}
+	}
+
+	conn, err := net.DialTimeout("tcp", host, timeout)
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return nil
+}
 
 // ============ service API（顶层 services[type=api]，gRPC-Web / WS） ============
 
@@ -168,9 +192,19 @@ func (h *Handler) serviceAPIConfig() *option.APIServiceOptions {
 
 func (h *Handler) handleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	e := h.proxies.get("/api/grpc", h.serviceAPITarget)
+	// _, _, target := h.serviceAPITarget()
 	if e == nil {
 		writeError(w, http.StatusNotFound, errServiceAPIUnavailable)
 		return
 	}
+	// if err := checkUpstreamReachable(target, 300*time.Millisecond); err != nil {
+	// 	logger.Error("service api upstream is unreachable: target=%s, error=%v, path=%s",
+	// 		target,
+	// 		err,
+	// 		r.URL.Path,
+	// 	)
+	// 	writeError(w, http.StatusBadGateway, errors.New("upstream service unavailable"))
+	// 	return
+	// }
 	e.proxy.ServeHTTP(w, r)
 }

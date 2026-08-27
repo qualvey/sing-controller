@@ -11,8 +11,8 @@ import {
   PROXY_CHAIN_DIRECTION,
 } from '@/constant'
 import { getConnectionChains, getConnectionSmartBlock } from '@/helper'
-import { connectionFilter, connectionTabShow, isClosedConnection } from '@/stores/connections'
-import { connectionCardLines, proxyChainDirection, showFullProxyChain } from '@/stores/settings'
+import { connectionFilter, connectionTabShow, isClosedConnection } from '@/store/connections'
+import { connectionCardLines, proxyChainDirection, showFullProxyChain } from '@/store/settings'
 import type { Connection } from '@/types'
 import {
   ArrowDownCircleIcon,

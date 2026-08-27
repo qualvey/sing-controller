@@ -56,8 +56,8 @@ import { checkTruncation } from '@/helper/tooltip'
 import { scrollIntoCenter } from '@/helper/utils'
 import { proxyLatencyTest } from '@/assembly/proxies'
 import { getIPv6ByName, getTestUrl, proxyMap } from '@/assembly/proxies'
-import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/stores/settings'
-import { smartWeightsMap } from '@/stores/smart'
+import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
+import { smartWeightsMap } from '@/store/smart'
 import { twMerge } from 'tailwind-merge'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -99,7 +99,8 @@ const handlerLatencyTest = async () => {
 
   isLatencyTesting.value = true
   try {
-    await proxyLatencyTest(props.name, getTestUrl(props.groupName), undefined, props.groupName)
+
+    await proxyLatencyTest(props.name, getTestUrl(props.groupName), undefined)
     isLatencyTesting.value = false
   } catch {
     isLatencyTesting.value = false

@@ -77,8 +77,8 @@ import { getConnectionChains, getConnectionRule, getConnectionSourceIP } from '@
 import { backgroundImage } from '@/helper/indexeddb'
 import { getIPLabelFromMap } from '@/helper/sourceip'
 import { isMiddleScreen } from '@/helper/utils'
-import { activeConnections } from '@/stores/connections'
-import { blurIntensity, dashboardTransparent } from '@/stores/settings'
+import { activeConnections } from '@/store/connections'
+import { blurIntensity, dashboardTransparent } from '@/store/settings'
 import {
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,

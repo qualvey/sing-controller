@@ -13,7 +13,7 @@
 
 <script setup lang="ts">
 import { useTooltip } from '@/helper/tooltip'
-import { lowLatency, mediumLatency } from '@/stores/settings'
+import { lowLatency, mediumLatency } from '@/store/settings'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 

@@ -205,8 +205,8 @@ import {
   aggregatedDataMap,
   clearConnectionHistory,
   mergeAggregatedData,
-} from '@/stores/connHistory'
-import { activeConnections } from '@/stores/connections'
+} from '@/store/connHistory'
+import { activeConnections } from '@/store/connections'
 import {
   ArrowDownCircleIcon,
   ArrowUpCircleIcon,

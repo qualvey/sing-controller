@@ -1,5 +1,5 @@
 import { LANG } from '@/constant'
-import { language } from '@/stores/settings'
+import { language } from '@/store/settings'
 import { createI18n } from 'vue-i18n'
 import en from './en'
 import ru from './ru'

@@ -9,7 +9,7 @@
 // 本模块把 GrpcWebSocketStream 适配成 AsyncIterable,与 runStream 的
 // factory 签名对齐,重连退避复用 runStream 原有逻辑。
 import { getSingboxSecret, getSingboxUrlFromBackend } from '@/helper/utils'
-import { activeBackend } from '@/stores/setup'
+import { activeBackend } from '@/store/setup'
 import type { DescMessage, MessageInitShape, MessageShape } from '@bufbuild/protobuf'
 import { GrpcWebSocketStream } from './websocket'
 
@@ -28,7 +28,7 @@ export const serverStream = <Req extends DescMessage, Res extends DescMessage>(
 ): AsyncIterable<MessageShape<Res>> => ({
   [Symbol.asyncIterator]() {
     const backend = activeBackend.value
-    const baseUrl = backend ? getSingboxUrlFromBackend(backend) : ''
+    const baseUrl = backend ? getSingboxUrlFromBackend() : ''
     // 抛出后由 runStream 退避重试,等待后端就绪。
     if (!backend || !baseUrl) throw new Error('sing-box backend unavailable')
 

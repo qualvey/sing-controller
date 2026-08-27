@@ -67,7 +67,7 @@ import {
   youtubeLatency,
 } from '@/composables/overview'
 import { getColorForLatency } from '@/helper'
-import { autoConnectionCheck } from '@/stores/settings'
+import { autoConnectionCheck } from '@/store/settings'
 import { BoltIcon } from '@heroicons/vue/24/outline'
 import { computed, onMounted, ref } from 'vue'
 import LatencyChart from './LatencyChart.vue'

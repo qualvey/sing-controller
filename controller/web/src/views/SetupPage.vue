@@ -155,10 +155,10 @@
       </div>
     </div>
 
-    <EditBackendModal
+    <!-- <EditBackendModal
       v-model="showEditModal"
       :default-backend-uuid="editingBackendUuid"
-    />
+    /> -->
   </div>
 </template>
 
@@ -166,14 +166,14 @@
 import { isBackendAvailable, isSingboxChannelAvailable } from '@/assembly/backend'
 import DashboardSettings from '@/components/common/DashboardSettings.vue'
 import TextInput from '@/components/common/TextInput.vue'
-import EditBackendModal from '@/components/settings/backend/EditBackendModal.vue'
+// import EditBackendModal from '@/components/settings/backend/EditBackendModal.vue'
 import LanguageSelect from '@/components/settings/general/LanguageSelect.vue'
 import { ROUTE_NAME } from '@/constant'
 import { syncSettingsFromCore } from '@/helper/autoImportSettings'
 import { showNotification } from '@/helper/notification'
 import { getBackendFromUrl, getLabelFromBackend } from '@/helper/utils'
 import router from '@/router'
-import { activeUuid, addBackend, backendList, removeBackend } from '@/stores/setup'
+// import { activeUuid, addBackend, backendList, removeBackend } from '@/store/setup'
 import type { Backend, BackendType } from '@/types'
 import {
   ChevronUpDownIcon,

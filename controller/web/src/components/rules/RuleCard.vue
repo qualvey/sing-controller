@@ -105,7 +105,7 @@ import { disconnectByIdAPI } from '@/assembly/connections'
 import { useBounceOnVisible } from '@/composables/bouncein'
 import { getConnectionRulePayload } from '@/helper'
 import { useTooltip } from '@/helper/tooltip'
-import { activeConnections } from '@/stores/connections'
+import { activeConnections } from '@/store/connections'
 import { proxyGroupList } from '@/assembly/proxies'
 import {
   fetchRules,
@@ -118,7 +118,7 @@ import {
   disconnectOnRuleDisable,
   displayLatencyInRule,
   displayNowNodeInRule,
-} from '@/stores/settings'
+} from '@/store/settings'
 import type { Rule } from '@/types'
 import {
   ArrowPathIcon,

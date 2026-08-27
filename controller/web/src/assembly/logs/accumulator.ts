@@ -2,8 +2,8 @@
 // 各后端按各自原生形态产出 Log 批次(clash 一次一条、sing-box 一次一批),
 // 这里统一做与后端无关的加工:source-ip 标签替换、seq 编号、时间、暂停门控、保留上限与节流落表,
 // 维护完整的 logs ref。store 直接引用该 ref,不再参与组装。
-import { logRetentionLimit, sourceIPLabelList } from '@/stores/settings'
-import { activeBackend } from '@/stores/setup'
+import { logRetentionLimit, sourceIPLabelList } from '@/store/settings'
+import { activeBackend } from '@/store/setup'
 import type { Log, LogWithSeq } from '@/types'
 import dayjs from 'dayjs'
 import { throttle } from 'lodash'

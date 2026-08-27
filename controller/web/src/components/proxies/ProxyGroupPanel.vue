@@ -52,7 +52,7 @@
 import { handlerProxySelect, proxyGroupLatencyTest, proxyMap } from '@/assembly/proxies'
 import { groupProxiesByProviderName, useRenderProxyList } from '@/composables/renderProxies'
 import { isMiddleScreen } from '@/helper/utils'
-import { groupProxiesByProvider } from '@/stores/settings'
+import { groupProxiesByProvider } from '@/store/settings'
 import { computed, ref } from 'vue'
 import ProxyGroupHeader from './ProxyGroupHeader.vue'
 import ProxyGroupHeaderForMobile from './ProxyGroupHeaderForMobile.vue'

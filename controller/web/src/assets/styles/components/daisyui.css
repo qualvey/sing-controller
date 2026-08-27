@@ -121,6 +121,28 @@
     @apply border-0;
   }
   @apply border-separate border-spacing-0;
+  --table-stripe: color-mix(in oklab, var(--color-base-content) 3%, transparent);
+}
+
+/*
+ * 斑马纹只做明暗叠加，不上实色：壁纸模式下行本身几乎是透明的，磨好的背景能透上来，
+ * 不会「容器 + 行」两层半透明底色叠成接近不透明。
+ */
+@utility table-row-stripe {
+  background-color: var(--table-stripe);
+}
+
+/*
+ * 行不再是实色之后，横向固定列得自己不透明，否则滚到它下面的单元格会透出来。
+ * 底色跟容器一致，斑马纹用一层等色渐变叠上去 —— 壁纸模式下 appearance.css 会把
+ * background-color 清成透明、换成一层玻璃，渐变不受影响，斑马纹依然在。
+ */
+.pinned-td {
+  background-color: var(--color-base-100);
+}
+
+tr.table-row-stripe > .pinned-td {
+  background-image: linear-gradient(var(--table-stripe), var(--table-stripe));
 }
 
 /*
@@ -131,12 +153,12 @@
  * 循环（调到 0 就等于关掉了模态语义）。顺带去掉了整屏的 backdrop-blur：.modal-box
  * 自己已经有一层 backdrop-filter，在压暗层之上再模糊一次是零收益的 GPU 开销。
  *
- * 高度绑到 --dialog-viewport-height（由 composables/dialog.ts 在弹窗打开时发布）而不是
- * dvh：iOS Safari 键盘弹起时不收缩 layout viewport，dvh 也不变，贴底的抽屉会被键盘整个
- * 盖住。daisyUI 的 .modal 是 inset: 0，必须先把 bottom 解绑，否则 height 不生效。
+ * 高度直接吃 daisyUI 的 inset: 0：viewport meta 上的 interactive-widget=resizes-content
+ * 让软键盘弹起时 layout viewport（连带 dvh）一起收缩，抽屉自然停在键盘上方，不再需要
+ * 用 JS 把 visualViewport.height 镜像成 CSS 变量。
  */
 @utility modal {
-  @apply max-md:bottom-auto max-md:h-[var(--dialog-viewport-height,100dvh)] max-md:place-items-end;
+  @apply max-md:place-items-end;
 }
 
 /* 圆角走 daisyUI 的 --modal-* 变量，底部归零、顶部继续跟随主题的 --radius-box。 */

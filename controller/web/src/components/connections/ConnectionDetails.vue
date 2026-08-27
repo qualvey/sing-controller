@@ -153,7 +153,7 @@ import { useConnections } from '@/composables/connections'
 import { CONNECTIONS_TABLE_ACCESSOR_KEY } from '@/constant'
 import { getConnectionChains, getConnectionSourceIP, getDestinationFromConnection } from '@/helper'
 import { PROXIES_PARENT_CLASS } from '@/helper/utils'
-import { proxyChainDirection, showFullProxyChain } from '@/stores/settings'
+import { proxyChainDirection, showFullProxyChain } from '@/store/settings'
 import {
   ArrowRightCircleIcon,
   MapPinIcon,

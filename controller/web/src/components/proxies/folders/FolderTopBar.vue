@@ -61,7 +61,7 @@ import {
   folders,
   VIRTUAL_ALL,
   VIRTUAL_UNCAT,
-} from '@/stores/proxyFolders'
+} from '@/store/proxyFolders'
 import { Cog6ToothIcon } from '@heroicons/vue/24/outline'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import FolderItem from './FolderItem.vue'

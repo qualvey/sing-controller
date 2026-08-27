@@ -23,7 +23,7 @@ import ProviderTrafficOverview from '@/components/overview/ProviderTrafficOvervi
 import RuleHitCountCard from '@/components/overview/RuleHitCountCard.vue'
 import TopologyCharts from '@/components/overview/TopologyCharts.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
-import { overviewCardOrder } from '@/stores/settings'
+import { overviewCardOrder } from '@/store/settings'
 import type { Component } from 'vue'
 import { computed, defineAsyncComponent } from 'vue'
 

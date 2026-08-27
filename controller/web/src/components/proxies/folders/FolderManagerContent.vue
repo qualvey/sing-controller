@@ -84,7 +84,7 @@ import {
   folders,
   reorderFolders,
   type Folder,
-} from '@/stores/proxyFolders'
+} from '@/store/proxyFolders'
 import {
   Bars3Icon,
   FolderIcon,

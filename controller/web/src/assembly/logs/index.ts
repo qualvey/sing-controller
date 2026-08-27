@@ -3,7 +3,7 @@
 // store 直接引用这里导出的 logs / initLogs,不再参与组装。
 import { can, Channel, channel, core, Core } from '@/assembly/backend'
 import { LOG_LEVEL } from '@/constant'
-import { activeBackend } from '@/stores/setup'
+import { activeBackend } from '@/store/setup'
 import type { LogWithSeq } from '@/types'
 import { useStorage } from '@vueuse/core'
 import { computed, ref, shallowRef, watch } from 'vue'

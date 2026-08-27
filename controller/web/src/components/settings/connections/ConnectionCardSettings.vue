@@ -106,7 +106,7 @@
 
 <script setup lang="ts">
 import { CONNECTIONS_TABLE_ACCESSOR_KEY, DETAILED_CARD_STYLE, SIMPLE_CARD_STYLE } from '@/constant'
-import { connectionCardLines } from '@/stores/settings'
+import { connectionCardLines } from '@/store/settings'
 import { Bars2Icon, PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { ref } from 'vue'
 import Draggable from 'vuedraggable'

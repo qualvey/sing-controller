@@ -1,5 +1,5 @@
 import { IP_INFO_API, LANG } from '@/constant'
-import { geoipASNDatabaseURL, geoipCountryDatabaseURL, IPInfoAPI, language } from '@/stores/settings'
+import { geoipASNDatabaseURL, geoipCountryDatabaseURL, IPInfoAPI, language } from '@/store/settings'
 import { watchDebounced } from '@vueuse/core'
 import { Buffer } from 'buffer'
 import * as ipaddr from 'ipaddr.js'

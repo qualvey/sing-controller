@@ -13,7 +13,7 @@ import TimeSeriesChart from '@/components/charts/TimeSeriesChart.vue'
 import { formatHistoryTooltipParam } from '@/components/charts/chartTooltip'
 import type { ChartTooltipParam } from '@/components/charts/chartTypes'
 import { prettyBytesHelper } from '@/helper/utils'
-import { downloadSpeedHistory, timeSaved, uploadSpeedHistory } from '@/stores/overview'
+import { downloadSpeedHistory, timeSaved, uploadSpeedHistory } from '@/store/overview'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 

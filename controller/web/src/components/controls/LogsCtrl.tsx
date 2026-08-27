@@ -12,8 +12,8 @@ import {
   logTypeFilter,
   logs,
   supportedLogLevels,
-} from '@/stores/logs'
-import { logRetentionLimit, logSearchHistory } from '@/stores/settings'
+} from '@/store/logs'
+import { logRetentionLimit, logSearchHistory } from '@/store/settings'
 import {
   ArrowDownTrayIcon,
   LinkIcon,

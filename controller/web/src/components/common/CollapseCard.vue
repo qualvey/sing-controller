@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import { PROXIES_PARENT_CLASS } from '@/helper/utils'
-import { collapseGroupMap } from '@/stores/settings'
+import { collapseGroupMap } from '@/store/settings'
 import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{

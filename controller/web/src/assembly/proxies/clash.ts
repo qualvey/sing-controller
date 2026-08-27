@@ -13,7 +13,7 @@ import { disconnectByIdAPI } from '@/assembly/connections'
 import { GLOBAL, IPV6_TEST_URL, NOT_CONNECTED, PROXY_TYPE, SPEEDTEST_MODE } from '@/constant'
 import { getConnectionChains, isProxyGroup } from '@/helper'
 import { showNotification } from '@/helper/notification'
-import { activeConnections } from '@/stores/connections'
+import { activeConnections } from '@/store/connections'
 import {
   automaticDisconnection,
   iconReflectList,
@@ -21,8 +21,8 @@ import {
   IPv6test,
   speedtestMode,
   speedtestTimeout,
-} from '@/stores/settings'
-import { initSmartWeights } from '@/stores/smart'
+} from '@/store/settings'
+import { initSmartWeights } from '@/store/smart'
 import type { Proxy } from '@/types'
 import { last } from 'lodash'
 import pLimit from 'p-limit'
@@ -151,11 +151,6 @@ const getProviderNameByProxy = (proxyName: string) => {
 // provider 节点走 provider 作用域的 healthcheck 端点,避免节点不在
 // 全局 /proxies 映射(或同名冲突)导致测速失败
 const fetchNodeLatency = (proxyName: string, url: string, timeout: number) => {
-  const providerName = getProviderNameByProxy(proxyName)
-
-  if (providerName) {
-    return fetchProxyProviderLatencyAPI(providerName, proxyName, url, timeout)
-  }
 
   return fetchProxyLatencyAPI(proxyName, url, timeout)
 }
@@ -189,10 +184,12 @@ export const proxyLatencyTest = async (
   url = speedtestUrlWithDefault.value,
   timeout = speedtestTimeout.value,
 ) => {
-  const res = await latencyTestForSingle(proxyName, url, timeout)
-  await fetchProxies()
+  // 测速失败就是「这个节点不通」,用统一的 testFailedTip 说明,比抛出 HTTP 报文有用。
+  try {
 
-  if (res.status !== 200) {
+    await latencyTestForSingle(proxyName, url, timeout)
+  } catch(err) {
+    console.error('>>> 单节点测速真实报错信息:', err) // <--- 加这行打印
     showNotification({
       content: 'testFailedTip',
       params: {
@@ -200,6 +197,8 @@ export const proxyLatencyTest = async (
       },
       type: 'alert-error',
     })
+  } finally {
+    await fetchProxies()
   }
 }
 

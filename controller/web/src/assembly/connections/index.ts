@@ -9,7 +9,10 @@ import * as singbox from './singbox'
 
 export type { ConnectionsSnapshot }
 
-const backend = () => (channel.value === Channel.Singbox ? singbox : clash)
+// 加上显式返回类型（使用 typeof 或对应的类型/接口）
+const backend = (): typeof singbox | typeof clash => {
+  return channel.value === Channel.Singbox ? singbox : clash
+}
 
 export const disconnectByIdAPI = (id: string) => backend().disconnectByIdAPI(id)
 

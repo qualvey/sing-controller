@@ -11,8 +11,8 @@ import {
   quickFilterEnabled,
   quickFilterRegex,
   renderConnections,
-} from '@/stores/connections'
-import { isConnectionCard } from '@/stores/settings'
+} from '@/store/connections'
+import { isConnectionCard } from '@/store/settings'
 import {
   BarsArrowDownIcon,
   BarsArrowUpIcon,

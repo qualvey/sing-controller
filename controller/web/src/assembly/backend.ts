@@ -25,8 +25,8 @@
 
 import { probeClashChannel } from '@/api/clash'
 import { getSingboxUrlFromBackend } from '@/helper/utils'
-import { displayAllFeatures } from '@/stores/settings'
-import { activeBackend } from '@/stores/setup'
+import { displayAllFeatures } from '@/store/settings'
+import { activeBackend } from '@/store/setup'
 import type { Backend } from '@/types'
 import { computed, ref } from 'vue'
 
@@ -47,9 +47,9 @@ export enum Core {
   Unknown = 'unknown',
 }
 
-export const channel = computed<Channel>(() =>
-  activeBackend.value?.type === 'singbox' ? Channel.Singbox : Channel.Clash,
-)
+export const channel = computed<Channel>(() => {
+  return activeBackend.value?.type === 'singbox' ? Channel.Singbox : Channel.Clash
+})
 
 // core / apiVersion 由 assembly/version.ts 在探测 /version 后写入,
 // 后端切换时先重置为未知,避免沿用上一个后端的结论。
@@ -166,13 +166,14 @@ export const can = (cap: Cap): boolean => {
   return soft.value[cap as SoftCap]
 }
 
-// 后端连通性探测(供 Setup / EditBackend 测试连接使用)。
-export const isSingboxChannelAvailable = (backend: Backend, timeout: number = 10000) => {
-  if (!getSingboxUrlFromBackend(backend)) return Promise.resolve(false)
-  return import('@/api/singbox/client').then((m) => m.probeSingboxChannel(backend, timeout))
-}
+// 后端连通性探测(供 Setup / EditBackend / 连接失败页使用)。
+// 结果形状统一成 ProbeResult:成功带耗时,失败带可诊断的分类,
+// 由 helper/connectivity 的 describeProbeFailure 翻译成给用户看的一句话。
+export const probeBackend = async (
+  backend: Backend,
+  timeout: number = 10000,
+  signal?: AbortSignal,
+): Promise<ProbeResult> => probeClashChannel(backend, timeout, signal)
 
 export const isBackendAvailable = (backend: Backend, timeout: number = 10000) =>
-  backend.type === 'singbox'
-    ? isSingboxChannelAvailable(backend, timeout)
-    : probeClashChannel(backend, timeout)
+  probeBackend(backend, timeout).then((result) => result.ok)

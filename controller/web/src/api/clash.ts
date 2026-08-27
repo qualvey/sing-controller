@@ -188,7 +188,7 @@ export const subscribeTraffic = () => createClashStream<TrafficSnapshot>('traffi
 // 新增端点时请放进对应分区。是否向用户暴露由 assembly/backend.ts 的能力表决定,
 // 本层不做任何后端判断。
 import { getUrlFromBackend } from '@/helper/utils'
-import { activeBackend } from '@/stores/setup'
+import { activeBackend } from '@/store/setup'
 import type {
   Backend,
   Config,
@@ -200,6 +200,7 @@ import type {
   RuleProvider,
 } from '@/types'
 import { debounce } from 'lodash'
+import { debug } from 'three/tsl'
 
 
 // ==========================================================================
@@ -220,12 +221,19 @@ export const deleteFixedProxyAPI = (proxyGroup: string) => {
   return axios.delete(`/proxies/${encodeURIComponent(proxyGroup)}`)
 }
 
-export const fetchProxyLatencyAPI = (proxyName: string, url: string, timeout: number) => {
-  return axios.get<{ delay: number }>(`/proxies/${encodeURIComponent(proxyName)}/delay`, {
-    params: {
-      url,
-      timeout,
-    },
+// export const fetchProxyLatencyAPI = (proxyName: string, url: string, timeout: number) => {
+//   debugger
+//   return axios.get<{ delay: number }>(`/proxies/${encodeURIComponent(proxyName)}/delay`, {
+//     params: {
+//       url,
+//       timeout,
+//     },
+//   })
+// }
+export const fetchProxyLatencyAPI = (name: string, url: string, timeout: number) => {
+
+  return http.get<{ delay: number }>(`/proxies/${encodeURIComponent(name)}/delay`, {
+    params: { url, timeout }
   })
 }
 
@@ -233,13 +241,13 @@ export const fetchProxyLatencyAPI = (proxyName: string, url: string, timeout: nu
 // 已知所属 provider 时用该端点测指定节点;与 /proxies/{name}/delay 共用内核的
 // getProxyDelay,同样返回 { delay }
 export const fetchProxyProviderLatencyAPI = (
-  providerName: string,
   proxyName: string,
   url: string,
   timeout: number,
 ) => {
+
   return axios.get<{ delay: number }>(
-    `/providers/proxies/${encodeURIComponent(providerName)}/${encodeURIComponent(proxyName)}/healthcheck`,
+    `/proxies/${encodeURIComponent(proxyName)}/delay`,
     {
       params: {
         url,

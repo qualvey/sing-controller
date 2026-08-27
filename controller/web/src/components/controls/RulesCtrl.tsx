@@ -13,7 +13,7 @@ import {
   disconnectOnRuleDisable,
   displayLatencyInRule,
   displayNowNodeInRule,
-} from '@/stores/settings'
+} from '@/store/settings'
 import { ArrowPathIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/outline'
 import { computed, defineComponent, ref } from 'vue'
 import { useI18n } from 'vue-i18n'

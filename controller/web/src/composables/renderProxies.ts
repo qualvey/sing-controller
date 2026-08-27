@@ -6,8 +6,8 @@ import {
   proxyGroupFilterMap,
   proxySortType,
   useSmartGroupSort,
-} from '@/stores/settings'
-import { smartOrderMap } from '@/stores/smart'
+} from '@/store/settings'
+import { smartOrderMap } from '@/store/smart'
 import { computed, type ComputedRef } from 'vue'
 import { isProxyNodeSearchMode, matchProxySearchKeyword, proxySearchKeyword } from './proxySearch'
 

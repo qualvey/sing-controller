@@ -34,8 +34,8 @@
 // import BackendSettings from '@/components/settings/backend/BackendSettings.vue'
 import { useTooltip } from '@/helper/tooltip'
 import { getLabelFromBackend } from '@/helper/utils'
-import { isSidebarCollapsed } from '@/stores/settings'
-// import { activeBackend, showBackendSettingsDialog } from '@/stores/setup'
+import { isSidebarCollapsed } from '@/store/settings'
+// import { activeBackend, showBackendSettingsDialog } from '@/store/setup'
 import { ArrowLeftCircleIcon, ArrowRightCircleIcon, ServerIcon } from '@heroicons/vue/24/outline'
 import { computed } from 'vue'
 

@@ -2,10 +2,10 @@ import { can, type Cap } from '@/assembly/backend'
 import { ROUTE_NAME } from '@/constant'
 import { renderRoutes } from '@/helper'
 import { i18n } from '@/i18n'
-import { language } from '@/stores/settings'
+import { language } from '@/store/settings'
 
 
-import { activeBackend } from '@/stores/setup'
+import { activeBackend } from '@/store/setup'
 import ConnectionsPage from '@/views/ConnectionsPage.vue'
 import HomePage from '@/views/HomePage.vue'
 import InboundsView from '@/views/InboundsView.vue'
@@ -14,7 +14,7 @@ import OverviewPage from '@/views/OverviewPage.vue'
 import ProxiesPage from '@/views/ProxiesPage.vue'
 import RulesPage from '@/views/RulesPage.vue'
 import SettingsPage from '@/views/SettingsPage.vue'
-import SetupPage from '@/views/SetupPage.vue'
+// import SetupPage from '@/views/SetupPage.vue'
 import UsersView from '@/views/UsersView.vue'
 import { useTitle } from '@vueuse/core'
 import { Component } from 'lucide-vue-next'
@@ -95,11 +95,11 @@ const router = createRouter({
       component: HomePage,
       children: childrenRouter,
     },
-    {
-      path: '/setup',
-      name: ROUTE_NAME.setup,
-      component: SetupPage,
-    },
+    // {
+    //   path: '/setup',
+    //   name: ROUTE_NAME.setup,
+    //   component: SetupPage,
+    // },
     {
       path: '/:catchAll(.*)',
       redirect: ROUTE_NAME.proxies,

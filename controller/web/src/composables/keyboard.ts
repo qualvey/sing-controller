@@ -1,8 +1,8 @@
 import { renderRoutes } from '@/helper'
 import { showNotification } from '@/helper/notification'
 import { getLabelFromBackend } from '@/helper/utils'
-import { isSidebarCollapsed, keyboardShortcuts, manageHiddenGroup } from '@/stores/settings'
-import { activeBackend, switchActiveBackend, toggleBackendSettingsDialog } from '@/stores/setup'
+import { isSidebarCollapsed, keyboardShortcuts, manageHiddenGroup } from '@/store/settings'
+import { activeBackend,  toggleBackendSettingsDialog } from '@/store/setup'
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -234,16 +234,16 @@ export const useKeyboard = () => {
 
       event.preventDefault()
       const direction = action === KEYBOARD_SHORTCUT_ACTION.BACKEND_NEXT ? 1 : -1
-      const backend = switchActiveBackend(direction)
-      if (backend) {
-        showNotification({
-          content: 'backendSwitchTo',
-          params: {
-            backend: getLabelFromBackend(backend),
-          },
-          type: 'alert-success',
-        })
-      }
+      // const backend = switchActiveBackend(direction)
+      // if (backend) {
+      //   showNotification({
+      //     content: 'backendSwitchTo',
+      //     params: {
+      //       backend: getLabelFromBackend(backend),
+      //     },
+      //     type: 'alert-success',
+      //   })
+      // }
       return
     }
 

@@ -13,8 +13,8 @@
 </template>
 
 <script setup lang="ts">
-import { renderConnections } from '@/stores/connections'
-import { connectionCardLines } from '@/stores/settings'
+import { renderConnections } from '@/store/connections'
+import { connectionCardLines } from '@/store/settings'
 import type { Connection } from '@/types'
 import { computed } from 'vue'
 import VirtualScroller from '../common/VirtualScroller.vue'

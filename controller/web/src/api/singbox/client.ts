@@ -1,6 +1,6 @@
 import { StartedService } from '@/gen/daemon/started_service_pb'
 import { getSingboxSecret, getSingboxUrlFromBackend } from '@/helper/utils'
-import { activeBackend } from '@/stores/setup'
+import { activeBackend } from '@/store/setup'
 import type { Backend } from '@/types'
 import { createClient, type Client, type Interceptor } from '@connectrpc/connect'
 import { createGrpcWebTransport } from '@connectrpc/connect-web'

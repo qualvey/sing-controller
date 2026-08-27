@@ -36,8 +36,8 @@
 
 <script setup lang="ts">
 import { prettyBytesHelper } from '@/helper/utils'
-import { activeConnections, downloadTotal, uploadTotal } from '@/stores/connections'
-import { downloadSpeed, memory, uploadSpeed } from '@/stores/overview'
+import { activeConnections, downloadTotal, uploadTotal } from '@/store/connections'
+import { downloadSpeed, memory, uploadSpeed } from '@/store/overview'
 import {
   ArrowDownCircleIcon,
   ArrowsRightLeftIcon,

@@ -8,7 +8,7 @@
 
 <script setup lang="ts">
 import { CONNECTION_TAB_TYPE } from '@/constant'
-import { connections, connectionTabShow, renderConnections } from '@/stores/connections'
+import { connections, connectionTabShow, renderConnections } from '@/store/connections'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SegmentedControl from '@/components/common/SegmentedControl.vue'

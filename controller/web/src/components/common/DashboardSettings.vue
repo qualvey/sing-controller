@@ -225,7 +225,7 @@ import {
   getDashboardSettingsFromStorage,
   resetSettings,
 } from '@/helper/utils'
-import { customBackgroundURL } from '@/stores/settings'
+import { customBackgroundURL } from '@/store/settings'
 import {
   ArrowDownCircleIcon,
   ArrowDownTrayIcon,

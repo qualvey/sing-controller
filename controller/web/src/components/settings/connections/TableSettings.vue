@@ -83,7 +83,7 @@
 
 <script setup lang="ts">
 import { CONNECTIONS_TABLE_ACCESSOR_KEY } from '@/constant'
-import { connectionTableColumns, showFullProxyChain } from '@/stores/settings'
+import { connectionTableColumns, showFullProxyChain } from '@/store/settings'
 import { Bars2Icon, PlusIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { ref } from 'vue'
 import Draggable from 'vuedraggable'

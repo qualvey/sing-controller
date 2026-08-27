@@ -308,8 +308,8 @@
 import { getIPFromIpipnetAPI, getIPFromIpsbAPI } from '@/api/geoip'
 import { ipForChina, ipForGlobal } from '@/composables/overview'
 import { prettyBytesHelper } from '@/helper/utils'
-import { activeConnections } from '@/stores/connections'
-import { earthOriginSource, earthVisualMode, language, theme } from '@/stores/settings'
+import { activeConnections } from '@/store/connections'
+import { earthOriginSource, earthVisualMode, language, theme } from '@/store/settings'
 import {
   ArrowPathIcon,
   ArrowsPointingInIcon,

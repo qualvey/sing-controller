@@ -20,6 +20,7 @@ export const prettyBytesHelper = (bytes: number, opts?: Options) => {
 export const fromNow = (timestamp: string | number) => {
   return dayjs(timestamp).fromNow()
 }
+export const getBackendProbeUrl = (end: Omit<Backend, 'uuid'>) => getUrlFromBackend(end)
 
 export const getDashboardSettingsFromStorage = () => {
   const settings: Record<string, string> = {}

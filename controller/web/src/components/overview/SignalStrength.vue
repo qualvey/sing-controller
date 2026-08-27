@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 import { NOT_CONNECTED } from '@/constant'
-import { lowLatency, mediumLatency } from '@/stores/settings'
+import { lowLatency, mediumLatency } from '@/store/settings'
 import { computed } from 'vue'
 
 const props = defineProps<{

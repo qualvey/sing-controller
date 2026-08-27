@@ -4,7 +4,7 @@ import { ChevronRightIcon, PlayIcon } from '@heroicons/vue/24/outline'
 import { subscribeGroups, selectOutbound, uRLTest, setClashMode } from '../api/singbox'
 import { fetchProxyLatency } from '../api/clash'
 import type { Groups, Group } from '@/gen/daemon/started_service_pb'
-import { useRuntimeStore } from '../stores/runtime'
+import { useRuntimeStore } from '../store/runtime'
 import { showToast } from '../helper/toast'
 
 const runtime = useRuntimeStore()

@@ -21,5 +21,5 @@
  * 2. 过渡类作用在插槽子元素(ProxyNodeCard 根)上,带的是调用方的 scope id,
  *    所以 .proxy-node-* 定义在全局 motion.css 里而不是这里的 scoped block。
  */
-import { minProxyCardWidth } from '@/stores/settings'
+import { minProxyCardWidth } from '@/store/settings'
 </script>

@@ -2,7 +2,7 @@ import { Compartment } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import type { EditorView } from '@codemirror/view'
 import { watch } from 'vue'
-import { useThemeStore } from '../stores/theme'
+import { useThemeStore } from '@/store/theme'
 
 // CodeMirror 语法高亮主题：跟随全局日/夜模式（dark → oneDark，light → 默认亮色）
 export function useCmTheme() {

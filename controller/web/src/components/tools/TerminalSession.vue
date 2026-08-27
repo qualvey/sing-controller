@@ -41,7 +41,7 @@ import {
   TailscaleSSHServerMessageSchema,
 } from '@/gen/daemon/started_service_pb'
 import { getSingboxSecret, getSingboxUrlFromBackend } from '@/helper/utils'
-import { activeBackend } from '@/stores/setup'
+import { activeBackend } from '@/store/setup'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal, type ITheme } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'

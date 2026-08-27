@@ -4,7 +4,7 @@
 import { ROUTE_NAME } from '@/constant'
 import { showNotification } from '@/helper/notification'
 import { getUrlFromBackend } from '@/helper/utils'
-import { activeBackend, activeUuid } from '@/stores/setup'
+import { activeBackend, activeUuid } from '@/store/setup'
 import axios, { AxiosError } from 'axios'
 import { nextTick } from 'vue'
 

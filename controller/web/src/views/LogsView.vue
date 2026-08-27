@@ -12,7 +12,7 @@ import {
 import SegmentedControl from '@/components/common/SegmentedControl.vue'
 import VirtualScroller from '@/components/common/VirtualScroller.vue'
 import LogsCard from '@/components/logs/LogsCard.vue'
-import { useLogsStore } from '@/stores/logs'
+import { useLogsStore } from '@/store/logs'
 import { LogLevel } from '@/gen/daemon/started_service_pb'
 
 const logsStore = useLogsStore()

@@ -88,7 +88,7 @@ import {
 import type { ChartTooltipParam } from '@/components/charts/chartTypes'
 import { can } from '@/assembly/backend'
 import { prettyBytesHelper } from '@/helper/utils'
-import { activeConnections, downloadTotal, uploadTotal } from '@/stores/connections'
+import { activeConnections, downloadTotal, uploadTotal } from '@/store/connections'
 import {
   connectionsHistory,
   downloadSpeed,
@@ -98,7 +98,7 @@ import {
   timeSaved,
   uploadSpeed,
   uploadSpeedHistory,
-} from '@/stores/overview'
+} from '@/store/overview'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 

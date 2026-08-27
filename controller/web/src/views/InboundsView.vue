@@ -12,7 +12,7 @@ import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
 import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import type { Inbound, UserMeta } from '../api'
-import { useStatusStore } from '../stores/status'
+import { useStatusStore } from '../store/status'
 
 const statusStore = useStatusStore()
 

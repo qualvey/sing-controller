@@ -16,8 +16,8 @@ import { isProxyNodeSearchMode, toggleProxySearchMode } from '@/composables/prox
 import { useCtrlsBar } from '@/composables/useCtrlsBar'
 import { PROXY_SORT_TYPE, PROXY_TAB_TYPE, ROUTE_NAME, SETTINGS_MENU_KEY } from '@/constant'
 import { getMinCardWidth } from '@/helper/utils'
-import { activeConnections } from '@/stores/connections'
-import { isProxyFolderModeActive } from '@/stores/proxyFolders'
+import { activeConnections } from '@/store/connections'
+import { isProxyFolderModeActive } from '@/store/proxyFolders'
 import {
   automaticDisconnection,
   collapseGroupMap,
@@ -31,7 +31,7 @@ import {
   proxySortType,
   twoColumnProxyGroup,
   useSmartGroupSort,
-} from '@/stores/settings'
+} from '@/store/settings'
 import {
   ArrowPathIcon,
   BoltIcon,

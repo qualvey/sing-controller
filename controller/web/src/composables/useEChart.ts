@@ -1,5 +1,5 @@
 import { isMiddleScreen } from '@/helper/utils'
-import { emoji, font, theme } from '@/stores/settings'
+import { emoji, font, theme } from '@/store/settings'
 import { useElementSize } from '@vueuse/core'
 import { BarChart, LineChart, SankeyChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'

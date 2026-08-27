@@ -19,7 +19,7 @@ import {
   webusbStatus,
   type WebUsbUnavailableReason,
 } from '@/helper/webusb'
-import { activeBackend } from '@/stores/setup'
+import { activeBackend } from '@/store/setup'
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 

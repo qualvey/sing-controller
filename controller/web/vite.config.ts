@@ -40,6 +40,10 @@ export default defineConfig({
     __COMMIT_ID__: JSON.stringify(getGitCommitId()),
     __FONT__: JSON.stringify(font),
   },
+  esbuild: {
+    // 生产环境打包时自动丢弃所有 debugger 和 console.log
+    drop: process.env.NODE_ENV === 'production' ? ['debugger', 'console'] : []
+  },
   base: resolveBase(),
   plugins: [vue(), lezer(), tailwindcss(), vueJsx()],
   resolve: {

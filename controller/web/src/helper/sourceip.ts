@@ -1,5 +1,5 @@
-import { sourceIPLabelList } from '@/stores/settings'
-import { activeBackend } from '@/stores/setup'
+import { sourceIPLabelList } from '@/store/settings'
+import { activeBackend } from '@/store/setup'
 import * as ipaddr from 'ipaddr.js'
 import { watch } from 'vue'
 

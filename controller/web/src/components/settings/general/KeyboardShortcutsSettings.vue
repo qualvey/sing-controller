@@ -78,7 +78,7 @@ import SettingItem from '@/components/settings/SettingItem.vue'
 import { GENERAL_ITEM_KEYS } from '@/config/settingsItems'
 import { renderRoutes } from '@/helper'
 import { isMiddleScreen } from '@/helper/utils'
-import { keyboardShortcuts } from '@/stores/settings'
+import { keyboardShortcuts } from '@/store/settings'
 import { PencilSquareIcon } from '@heroicons/vue/24/outline'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -113,12 +113,6 @@ const shortcuts = computed(() => {
       defaultKey: getDefaultShortcutKey(KEYBOARD_SHORTCUT_ACTION.BACKEND_NEXT),
       key: getShortcutKey(KEYBOARD_SHORTCUT_ACTION.BACKEND_NEXT),
       label: KEYBOARD_SHORTCUTS[KEYBOARD_SHORTCUT_ACTION.BACKEND_NEXT].label,
-    },
-    {
-      action: KEYBOARD_SHORTCUT_ACTION.BACKEND_OPEN_SETTINGS,
-      defaultKey: getDefaultShortcutKey(KEYBOARD_SHORTCUT_ACTION.BACKEND_OPEN_SETTINGS),
-      key: getShortcutKey(KEYBOARD_SHORTCUT_ACTION.BACKEND_OPEN_SETTINGS),
-      label: KEYBOARD_SHORTCUTS[KEYBOARD_SHORTCUT_ACTION.BACKEND_OPEN_SETTINGS].label,
     },
     ...PAGE_SHORTCUT_ACTIONS.filter(
       (action) => !!renderRoutes.value[PAGE_SHORTCUT_ACTION_INDEX_MAP[action]!],

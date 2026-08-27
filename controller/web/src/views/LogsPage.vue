@@ -1,6 +1,18 @@
 <template>
-  <div class="relative size-full overflow-x-hidden">
+  <div
+    :class="
+      isLogTable
+        ? 'relative flex size-full flex-col overflow-hidden'
+        : 'relative size-full overflow-x-hidden'
+    "
+    :style="isLogTable ? padding : undefined"
+  >
+    <template v-if="isLogTable">
+      <LogsCtrl />
+      <LogsTable :logs="renderLogs" />
+    </template>
     <VirtualScroller
+      v-else
       :data="renderLogs"
       :size="44"
     >
@@ -8,48 +20,30 @@
         <LogsCtrl />
       </template>
       <template v-slot="{ item }: { item: LogWithSeq }">
-        <LogsCard
-          :log="item"
-          @connection-click="handlerConnectionClick"
-        />
+        <LogsCard :log="item" />
       </template>
     </VirtualScroller>
-    <DialogWrapper
-      v-model="connectionLogsDialogVisible"
-      no-padding
-      :title="`${t('sameConnectionLogs')} (${connectionLogID})`"
-    >
-      <div class="flex flex-col">
-        <LogsCard
-          v-for="log in connectionLogs"
-          :key="log.seq"
-          :log="log"
-          connection-detail-disabled
-        />
-      </div>
-    </DialogWrapper>
   </div>
 </template>
 
 <script setup lang="ts">
-import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import VirtualScroller from '@/components/common/VirtualScroller.vue'
 import LogsCtrl from '@/components/controls/LogsCtrl.tsx'
 import LogsCard from '@/components/logs/LogsCard.vue'
+import LogsTable from '@/components/logs/LogsTable.vue'
+import { usePaddingForViews } from '@/composables/paddingViews'
+import { LIST_DISPLAY_STYLE } from '@/constant'
 import { toSearchRegex } from '@/helper/search'
-import {
-  getLogConnectionID,
-  logFilter,
-  logFilterEnabled,
-  logFilterRegex,
-  logTypeFilter,
-  logs,
-} from '@/stores/logs'
+import { logFilter, logFilterEnabled, logFilterRegex, logTypeFilter, logs } from '@/store/logs'
+import { logDisplayStyle } from '@/store/settings'
 import type { LogWithSeq } from '@/types'
-import { computed, ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed } from 'vue'
 
-const { t } = useI18n()
+const isLogTable = computed(() => logDisplayStyle.value === LIST_DISPLAY_STYLE.TABLE)
+const { padding } = usePaddingForViews({
+  offsetTop: 0,
+  offsetBottom: 0,
+})
 
 const renderLogs = computed(() => {
   let renderLogs = logs.value
@@ -84,19 +78,4 @@ const renderLogs = computed(() => {
 
   return renderLogs
 })
-
-const connectionLogID = ref('')
-const connectionLogsDialogVisible = ref(false)
-const connectionLogs = computed(() => {
-  if (!connectionLogID.value) return []
-
-  return logs.value
-    .filter((log) => getLogConnectionID(log.payload) === connectionLogID.value)
-    .reverse()
-})
-
-const handlerConnectionClick = (connectionID: string) => {
-  connectionLogID.value = connectionID
-  connectionLogsDialogVisible.value = true
-}
 </script>

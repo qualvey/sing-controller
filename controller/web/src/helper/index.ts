@@ -9,7 +9,7 @@ import {
   mediumLatency,
   proxyChainDirection,
   splitOverviewPage,
-} from '@/stores/settings'
+} from '@/store/settings'
 import type { Connection } from '@/types'
 import * as ipaddr from 'ipaddr.js'
 import { computed } from 'vue'

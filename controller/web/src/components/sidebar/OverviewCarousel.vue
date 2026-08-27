@@ -13,7 +13,7 @@
 import ConnectionsCharts from '@/components/overview/ConnectionsCharts.vue'
 import MemoryCharts from '@/components/overview/MemoryCharts.vue'
 import SpeedCharts from '@/components/overview/SpeedCharts.vue'
-import { numberOfChartsInSidebar } from '@/stores/settings'
+import { numberOfChartsInSidebar } from '@/store/settings'
 
 const classNameMap = {
   1: 'max-h-28',

@@ -33,7 +33,7 @@
 <script setup lang="ts">
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { OVERVIEW_CARD } from '@/constant'
-import { overviewCardOrder } from '@/stores/settings'
+import { overviewCardOrder } from '@/store/settings'
 import { Bars3Icon } from '@heroicons/vue/24/outline'
 import { computed } from 'vue'
 import Draggable from 'vuedraggable'

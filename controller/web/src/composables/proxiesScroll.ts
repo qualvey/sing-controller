@@ -1,6 +1,6 @@
 import { PROXY_CARD_SIZE } from '@/constant'
 import { findScrollableParent } from '@/helper/utils'
-import { minProxyCardWidth, proxyCardSize } from '@/stores/settings'
+import { minProxyCardWidth, proxyCardSize } from '@/store/settings'
 import { useCurrentElement, useElementSize, useInfiniteScroll } from '@vueuse/core'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
