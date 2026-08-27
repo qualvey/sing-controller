@@ -12,7 +12,7 @@ import { api } from '../api'
 import SourcePane from '../components/SourcePane.vue'
 import ResourceSourceTab from '../components/ResourceSourceTab.vue'
 import type { RouteInfo, RouteRule } from '../api'
-import { useStatusStore } from '../stores/status'
+import { useStatusStore } from '../store/status'
 import { RULE_FIELDS, RULE_GROUPS, RULE_SUMMARY_ORDER } from './routeFields'
 
 const statusStore = useStatusStore()
