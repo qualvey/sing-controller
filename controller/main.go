@@ -9,6 +9,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/qualvey/sing-controller/internal/api"
 	"github.com/qualvey/sing-controller/internal/collector"
@@ -28,6 +33,8 @@ func main() {
 		secret       string
 		showVersion  bool
 	)
+
+	var wg sync.WaitGroup
 	flag.StringVar(&listenAddr, "listen", "", "HTTP listen address (override config.json listen)")
 	flag.StringVar(&settingsPath, "config", "config.json", "controller config file path")
 	flag.StringVar(&secret, "secret", "", "optional API secret (X-Secret header)")
@@ -40,21 +47,22 @@ func main() {
 		return
 	}
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	// controller 自身配置
 	cfg := settings.New(settingsPath)
 	if err := cfg.Load(); err != nil {
 		slog.Error("load controller config", "path", settingsPath, "error", err)
-		return
+		os.Exit(1)
 	}
 
 	values := cfg.Values()
 
 	rt := realtime.NewBroadcaster(values.RealTime.IntervalMS, values.RealTime.OnlineThresholdSec)
 	rt.Start()
-	defer rt.Stop()
-	go collector.StartCollector(cfg, rt)
+	wg.Add(1)
+	go collector.StartCollector(ctx, &wg, cfg, rt)
 	// 日志级别（复用 sing-box 的 level 枚举/解析）
 	setLogLevel(values.Log.Level)
 
@@ -72,7 +80,8 @@ func main() {
 	}
 	if err := cfgStore.Load(ctx, defaults); err != nil {
 		slog.Error("load sing-box config", "path", values.Config, "error", err)
-		return
+		os.Exit(1)
+
 	}
 
 	// 嵌入 webui（web/dist 已构建时）；构建失败仅影响页面，API 照常
@@ -95,9 +104,30 @@ func main() {
 		"sing_box_config", cfgStore.Path(),
 		"log_level", values.Log.Level,
 	)
-	if err := http.ListenAndServe(listenAddr, handler); err != nil {
-		slog.Error("http server", "error", err)
+	srv := &http.Server{Addr: listenAddr, Handler: handler}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("http server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// 等待中断信号
+	<-ctx.Done()
+	slog.Info("shutting down server...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server forced to shutdown", "error", err)
+	} else {
+		slog.Info("server exited cleanly")
 	}
+	// 5. 等待后台 Collector 执行完手头最后一次写入并安全退出
+	slog.Info("waiting for background tasks to exit...")
+	wg.Wait()
+	rt.Stop()
+	slog.Info("controller stopped cleanly")
 }
 
 // setLogLevel 将 sing-box 的日志级别映射到 slog 并设置全局级别。
