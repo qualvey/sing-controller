@@ -3,7 +3,7 @@ import {
   fetchConnectionsAPI,
   getConnectionVisibleSearchValues,
 } from '@/assembly/connections'
-import { CONNECTION_TAB_TYPE, SORT_DIRECTION, SORT_TYPE } from '@/constant'
+import { CONNECTION_TAB_TYPE, SORT_DIRECTION, SORT_TYPE, type ConnectionGroupableKey, } from '@/constant'
 import {
   getChainsStringFromConnection,
   getConnectionDownload,
@@ -47,6 +47,10 @@ export const quickFilterEnabled = useStorage<boolean>('config/quick-filter-enabl
 export const connectionFilter = ref('')
 export const sourceIPFilter = ref<string[] | null>(null)
 
+export const connectionCardGroupKey = useStorage<ConnectionGroupableKey | null>(
+  'config/connection-card-group-key',
+  null,
+)
 // 每拍整体换引用、元素不可变的管道:深 ref 会为每拍数千个一次性对象建 Proxy 与依赖记录,
 // shallowRef 才是与该数据流语义吻合的粒度。
 export const activeConnections = shallowRef<Connection[]>([])

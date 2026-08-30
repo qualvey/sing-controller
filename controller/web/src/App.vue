@@ -23,7 +23,6 @@ import { backgroundImage } from './helper/indexeddb'
 import { initNotification } from './helper/notification'
 import { getBackendFromUrl, isPreferredDark } from './helper/utils'
 import { disablePullToRefresh, emoji, font, theme } from './store/settings'
-import { backendList } from './store/setup'
 import type { Backend } from './types'
 
 const app = ref<HTMLElement>()

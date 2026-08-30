@@ -25,7 +25,9 @@ import {
   TABLE_WIDTH_MODE,
   TEST_URL,
   type THEME,
+  type ConnectionGroupableKey,
 } from '@/constant'
+
 import { useStorage } from '@/helper/storage'
 import { getMinCardWidth, isMiddleScreen, isPreferredDark } from '@/helper/utils'
 import type { SourceIPLabel } from '@/types'
@@ -52,6 +54,10 @@ migrateLegacyStorageKey('config/ipv6-map', 'cache/ipv6-map')
 migrateLegacyStorageKey('config/collapse-group-map', 'cache/collapse-group-map')
 migrateLegacyStorageKey('config/log-search-history', 'cache/log-search-history')
 
+export const connectionCardGroupKey = useStorage<ConnectionGroupableKey | null>(
+  'config/connection-card-group-key',
+  null,
+)
 const migrateLegacyConnectionDisplayStyle = () => {
   if (typeof window === 'undefined') {
     return
@@ -298,6 +304,7 @@ if (missingCards.length > 0) {
   overviewCardOrder.value = nextOrder
 }
 
+export const earthOriginSource = useStorage<'china' | 'global'>('config/earth-origin-source', 'china')
 export const earthIPInfoAPI = useStorage<IP_INFO_API>('config/earth-ip-info-api', IP_INFO_API.IPIP)
 export const earthVisualMode = useStorage<'flat' | 'space'>('config/earth-visual-mode', 'flat')
 export const earthProjection = useStorage<'3d' | '2d'>('config/earth-projection', '3d')

@@ -31,10 +31,6 @@ const migrateBackendList = (list: LegacyBackend[]): Backend[] => {
       migrated.push({
         type: 'singbox',
         protocol: channel.protocol || 'http',
-        host: channel.host,
-        port: channel.port || '9090',
-        secondaryPath: '',
-        password: channel.secret || '',
         uuid: uuid(),
         label: base.label ? `${base.label} (sing-box)` : undefined,
       })

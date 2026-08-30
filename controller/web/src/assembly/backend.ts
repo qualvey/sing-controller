@@ -24,8 +24,9 @@
 // 字符串可靠,不该被降级成全局猜测。
 
 import { probeClashChannel } from '@/api/clash'
-import { getSingboxUrlFromBackend } from '@/helper/utils'
 import { displayAllFeatures } from '@/store/settings'
+import type { ProbeResult } from '@/helper/connectivity'
+
 import { activeBackend } from '@/store/setup'
 import type { Backend } from '@/types'
 import { computed, ref } from 'vue'
