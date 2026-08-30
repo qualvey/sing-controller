@@ -48,11 +48,11 @@ const childrenRouter = [
     name: ROUTE_NAME.rules,
     component: RulesPage,
   },
-  {
-    path: 'tools',
-    name: ROUTE_NAME.tools,
-    component: () => import('@/views/ToolsPage.vue'),
-  },
+  //{
+  //  path: 'tools',
+  //  name: ROUTE_NAME.tools,
+  //  component: () => import('@/views/ToolsPage.vue'),
+  //},
   {
     path: 'settings',
     name: ROUTE_NAME.settings,
@@ -63,7 +63,7 @@ const childrenRouter = [
     name: ROUTE_NAME.inbounds,
     component: InboundsView
   },
-    {
+  {
     path: 'users',
     name: ROUTE_NAME.users,
     component: UsersView
@@ -71,7 +71,7 @@ const childrenRouter = [
   {
     path: 'routes',
     name: ROUTE_NAME.routes,
-    component: () => import('@/views/RoutesView.vue')
+    component: () => import('@/views/RulesPage.vue')
   },
   {
     path: 'dns',

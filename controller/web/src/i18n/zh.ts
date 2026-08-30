@@ -601,6 +601,22 @@ const zh: LANG_MESSAGE = {
   folder_preview: '自动匹配的代理组',
   folder_no_matches: '没有匹配的代理组',
   folder_delete_confirm: '确认删除文件夹「{name}」？',
+
+  // Proxy & Rule Context Menu
+  testLatency: '节点测速',
+  editNode: '编辑节点',
+  copyNodeName: '复制节点名',
+  deleteNode: '删除节点',
+  subscriptionNodeTip: '订阅节点不可直接编辑',
+  specialNodeTip: '内置节点不可编辑',
+
+  createRule: '新建规则',
+  editRule: '编辑规则',
+  deleteRule: '删除规则',
+  copyRule: '复制规则内容',
+  enableRule: '启用规则',
+  disableRule: '禁用规则',
+  confirmDeleteRule: '确定删除第 {index} 条路由规则？该操作不可恢复。',
 }
 
 export default zh

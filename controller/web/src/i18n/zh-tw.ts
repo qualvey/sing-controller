@@ -601,6 +601,22 @@ const zhTW: LANG_MESSAGE = {
   folder_preview: '自動匹配的代理組',
   folder_no_matches: '沒有符合的代理組',
   folder_delete_confirm: '確認刪除資料夾「{name}」？',
+
+  // Proxy & Rule Context Menu
+  testLatency: '節點測速',
+  editNode: '編輯節點',
+  copyNodeName: '複製節點名',
+  deleteNode: '刪除節點',
+  subscriptionNodeTip: '訂閱節點不可直接編輯',
+  specialNodeTip: '內置節點不可編輯',
+
+  createRule: '新建規則',
+  editRule: '編輯規則',
+  deleteRule: '刪除規則',
+  copyRule: '複製規則內容',
+  enableRule: '啟用規則',
+  disableRule: '禁用規則',
+  confirmDeleteRule: '確定刪除第 {index} 條路由規則？該操作不可恢復。',
 }
 
 export default zhTW

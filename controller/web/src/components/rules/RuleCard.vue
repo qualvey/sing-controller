@@ -1,5 +1,8 @@
 <template>
-  <div :class="{ 'opacity-50': isDisabled, 'scroller-item': 1 }">
+  <div
+    :class="{ 'opacity-50': isDisabled, 'scroller-item': 1 }"
+    @contextmenu.prevent="handleContextMenu"
+  >
     <div
       class="transparent-collapse collapse rounded-none!"
       :class="isExpanded ? 'collapse-open' : 'collapse-close'"
@@ -133,11 +136,19 @@ import { useI18n } from 'vue-i18n'
 import HighlightText from '../common/HighlightText.vue'
 import ProxyChainPath from '../common/ProxyChainPath.vue'
 import ProxyGroup from '../proxies/ProxyGroup.vue'
+import { openRuleContextMenu } from '@/composables/ruleContextMenu'
 
 const props = defineProps<{
   rule: Rule
   index: number
 }>()
+
+const handleContextMenu = (e: MouseEvent) => {
+  openRuleContextMenu(e, {
+    rule: props.rule,
+    index: props.index
+  })
+}
 
 const expandedRule = inject<Ref<string | null>>('expandedRule', ref(null))
 const ruleKey = computed(() => `${props.index}-${props.rule.payload}`)

@@ -615,6 +615,22 @@ const ru: LANG_MESSAGE = {
   folder_preview: 'Автоматически подобранные группы',
   folder_no_matches: 'Нет подходящих групп',
   folder_delete_confirm: 'Удалить папку «{name}»?',
+
+  // Proxy & Rule Context Menu
+  testLatency: 'Тест задержки',
+  editNode: 'Редактировать узел',
+  copyNodeName: 'Скопировать имя узла',
+  deleteNode: 'Удалить узел',
+  subscriptionNodeTip: 'Узлы подписки нельзя редактировать напрямую',
+  specialNodeTip: 'Встроенные узлы нельзя редактировать',
+
+  createRule: 'Создать правило',
+  editRule: 'Редактировать правило',
+  deleteRule: 'Удалить правило',
+  copyRule: 'Копировать правило',
+  enableRule: 'Включить правило',
+  disableRule: 'Отключить правило',
+  confirmDeleteRule: 'Удалить правило #{index}? Это действие нельзя отменить.',
 }
 
 export default ru

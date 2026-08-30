@@ -44,6 +44,15 @@
         />
       </template>
     </VirtualScroller>
+
+    <!-- 规则右键菜单与编辑弹窗 -->
+    <RuleContextMenu />
+    <RouteEditDialog
+      v-model="isRouteEditModalOpen"
+      :id="routeEditTargetId"
+      :is-edit="isRouteEditMode"
+      @saved="fetchRules"
+    />
   </div>
 </template>
 
@@ -52,6 +61,13 @@ import VirtualScroller from '@/components/common/VirtualScroller.vue'
 import RulesCtrl from '@/components/controls/RulesCtrl'
 import RuleCard from '@/components/rules/RuleCard.vue'
 import RuleProvider from '@/components/rules/RuleProvider.vue'
+import RuleContextMenu from '@/components/rules/RuleContextMenu.vue'
+import RouteEditDialog from '@/components/routes/RouteEditDialog.vue'
+import {
+  isRouteEditModalOpen,
+  isRouteEditMode,
+  routeEditTargetId,
+} from '@/composables/ruleContextMenu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { RULE_TAB_TYPE } from '@/constant'
 import { fetchRules, renderRules, renderRulesProvider, rules, rulesTabShow } from '@/assembly/rules'

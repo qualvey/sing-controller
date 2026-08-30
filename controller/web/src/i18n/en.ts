@@ -612,6 +612,22 @@ const en = {
   folder_preview: 'Auto-matched groups',
   folder_no_matches: 'No matched groups',
   folder_delete_confirm: 'Delete folder "{name}"?',
+
+  // Proxy & Rule Context Menu
+  testLatency: 'Test Latency',
+  editNode: 'Edit Node',
+  copyNodeName: 'Copy Node Name',
+  deleteNode: 'Delete Node',
+  subscriptionNodeTip: 'Subscription nodes cannot be edited directly',
+  specialNodeTip: 'Built-in nodes cannot be edited',
+
+  createRule: 'Create Rule',
+  editRule: 'Edit Rule',
+  deleteRule: 'Delete Rule',
+  copyRule: 'Copy Rule Content',
+  enableRule: 'Enable Rule',
+  disableRule: 'Disable Rule',
+  confirmDeleteRule: 'Are you sure you want to delete rule #{index}? This cannot be undone.',
 }
 
 export type LANG_MESSAGE = typeof en

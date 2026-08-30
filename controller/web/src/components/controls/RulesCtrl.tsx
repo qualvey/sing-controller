@@ -7,28 +7,84 @@ import {
   updateRuleProviderAPI,
 } from '@/assembly/rules'
 import { useCtrlsBar } from '@/composables/useCtrlsBar'
+import { openCreateRouteModal } from '@/composables/ruleContextMenu'
 import { RULE_TAB_TYPE } from '@/constant'
 import { showNotification } from '@/helper/notification'
+import { showToast } from '@/helper/toast'
+import { api } from '@/api'
+import { useStatusStore } from '@/store/status'
 import {
   disconnectOnRuleDisable,
   displayLatencyInRule,
   displayNowNodeInRule,
 } from '@/store/settings'
-import { ArrowPathIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/outline'
-import { computed, defineComponent, ref } from 'vue'
+import { ArrowPathIcon, PlusIcon, WrenchScrewdriverIcon } from '@heroicons/vue/24/outline'
+import { computed, defineComponent, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CtrlsBar from '../common/CtrlsBar.vue'
 import DialogWrapper from '../common/DialogWrapper.vue'
 import SegmentedControl from '@/components/common/SegmentedControl.vue'
+import SelectInput from '../common/SelectInput.vue'
 import TextInput from '../common/TextInput.vue'
 
 export default defineComponent({
   name: 'RulesCtrl',
   setup() {
     const { t } = useI18n()
+    const statusStore = useStatusStore()
     const settingsModel = ref(false)
     const isUpgrading = ref(false)
     const { isLargeCtrlsBar } = useCtrlsBar()
+
+    const finalTag = ref('')
+    const outboundTags = ref<string[]>([])
+    const savingFinal = ref(false)
+
+    const loadRouteMeta = async () => {
+      try {
+        const [routesData, outboundsData] = await Promise.all([api.routes(), api.outbounds()])
+        finalTag.value = routesData.final || ''
+        outboundTags.value = outboundsData.map((o) => String(o.tag)).filter(Boolean)
+      } catch {
+        // silently ignore if unauthenticated
+      }
+    }
+
+    const saveFinal = async (newFinal: string) => {
+      if (!newFinal) return
+      finalTag.value = newFinal
+      savingFinal.value = true
+      try {
+        const cfg = (await api.config()) as Record<string, any>
+        if (typeof cfg.route !== 'object' || cfg.route === null || Array.isArray(cfg.route)) {
+          cfg.route = {}
+        }
+        cfg.route.final = newFinal
+        const res = await api.saveConfig(cfg)
+        const r = (res ?? {}) as { reload_error?: string; message?: string }
+        if (r.reload_error) {
+          showToast(`配置已保存，但实例重载失败：${r.reload_error}`, 'warning')
+        } else {
+          showToast(t('saveSuccess') || '保存成功', 'success')
+        }
+        await Promise.all([fetchRules(), statusStore.refresh()])
+      } catch (e) {
+        showToast((e as Error).message || '保存 final 失败', 'error')
+      } finally {
+        savingFinal.value = false
+      }
+    }
+
+    watch(settingsModel, (open) => {
+      if (open) {
+        void loadRouteMeta()
+      }
+    })
+
+    onMounted(() => {
+      void loadRouteMeta()
+    })
+
     const hasProviders = computed(() => {
       return ruleProviderList.value.length > 0
     })
@@ -96,6 +152,16 @@ export default defineComponent({
         </button>
       )
 
+      const createRuleButton = (
+        <button
+          class="btn btn-circle btn-sm"
+          title={t('createRule') || '新建规则'}
+          onClick={openCreateRouteModal}
+        >
+          <PlusIcon class="h-4 w-4" />
+        </button>
+      )
+
       const searchInput = (
         <TextInput
           class={isLargeCtrlsBar.value ? 'w-80' : 'w-32 flex-1'}
@@ -119,6 +185,20 @@ export default defineComponent({
           >
             <div class="flex flex-col gap-3 text-sm">
               <div class="settings-grid">
+                {outboundTags.value.length > 0 && (
+                  <div class="setting-item">
+                    <div class="setting-item-label">route.final</div>
+                    <SelectInput
+                      class="select select-sm min-w-32 flex-1"
+                      modelValue={finalTag.value}
+                      onUpdate:modelValue={(val) => saveFinal(val as string)}
+                      options={outboundTags.value.map((tag) => ({
+                        value: tag,
+                        label: tag,
+                      }))}
+                    />
+                  </div>
+                )}
                 <div class="setting-item">
                   <div class="setting-item-label">{t('displaySelectedNode')}</div>
                   <input
@@ -159,6 +239,7 @@ export default defineComponent({
           )}
           <div class="flex w-full items-center gap-2">
             {searchInput}
+            {createRuleButton}
             {settingsModal}
           </div>
         </div>
@@ -167,6 +248,7 @@ export default defineComponent({
           {hasProviders.value && tabs}
           {searchInput}
           <div class="flex-1"></div>
+          {createRuleButton}
           {upgradeAllIcon}
           {settingsModal}
         </div>

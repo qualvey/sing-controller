@@ -15,6 +15,7 @@ import { roundArrow } from 'tippy.js'
 
 export const IS_APPLE_DEVICE = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 
+
 export const GLOBAL = 'GLOBAL'
 export const TEST_URL = 'https://www.gstatic.com/generate_204'
 export const IPV6_TEST_URL = 'https://ipv6.google.com/generate_204'
@@ -63,7 +64,8 @@ export enum CONNECTIONS_TABLE_ACCESSOR_KEY {
   Protocol = 'protocol',
   OutboundType = 'outboundType',
   FromOutbound = 'fromOutbound',
-}// 桌面表格与卡片列表共享同一份分组能力清单。分组字段必须有稳定、可读的离散值；
+}
+// 桌面表格与卡片列表共享同一份分组能力清单。分组字段必须有稳定、可读的离散值；
 // 操作列、时间、流量与瞬时速率只用于展示/排序，不参与分组。
 export const CONNECTION_GROUPABLE_KEYS = [
   CONNECTIONS_TABLE_ACCESSOR_KEY.Type,
@@ -252,7 +254,7 @@ export enum ROUTE_NAME {
   connections = 'connections',
   logs = 'logs',
   rules = 'rules',
-  tools = 'tools',
+  //tools = 'tools',
   settings = 'settings',
   setup = 'setup',
   inbounds = 'inbounds',
