@@ -1,25 +1,34 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue'
-import { SwitchRoot, SwitchThumb, useForwardProps, type SwitchRootProps } from 'reka-ui'
-import { cn } from '@/lib/utils'
+import { computed } from 'vue'
 
-const props = defineProps<SwitchRootProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps<{
+  modelValue?: boolean
+  checked?: boolean
+  disabled?: boolean
+  class?: string
+}>()
 
-const forwarded = useForwardProps(props)
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: boolean): void
+  (e: 'update:checked', value: boolean): void
+  (e: 'change', value: Event): void
+}>()
+
+const isChecked = computed({
+  get: () => (props.modelValue !== undefined ? props.modelValue : !!props.checked),
+  set: (val: boolean) => {
+    emit('update:modelValue', val)
+    emit('update:checked', val)
+  }
+})
 </script>
 
 <template>
-  <SwitchRoot
-    v-bind="forwarded"
-    :class="cn(
-      'peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-transparent shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input',
-      props.class
-    )"
-  >
-    <SwitchThumb
-      :class="cn(
-        'pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0'
-      )"
-    />
-  </SwitchRoot>
+  <input
+    v-model="isChecked"
+    type="checkbox"
+    :disabled="props.disabled"
+    class="toggle toggle-primary toggle-sm"
+    :class="props.class"
+  />
 </template>
