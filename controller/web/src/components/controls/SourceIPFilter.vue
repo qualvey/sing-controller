@@ -1,17 +1,9 @@
 <template>
-  <select
-    class="select select-sm"
+  <SelectInput
     v-model="sourceIPFilter"
-  >
-    <option :value="null">{{ $t('all') }}</option>
-    <option
-      v-for="opt in sourceIPOpts"
-      :key="opt.value.join(',')"
-      :value="opt.value"
-    >
-      {{ opt.label }}
-    </option>
-  </select>
+    :options="selectOptions"
+    class="select select-sm"
+  />
 </template>
 
 <script setup lang="ts">
@@ -21,6 +13,10 @@ import { connections, sourceIPFilter } from '@/store/connections'
 import * as ipaddr from 'ipaddr.js'
 import { isEqual, uniq } from 'lodash'
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import SelectInput from '../common/SelectInput.vue'
+
+const { t } = useI18n()
 
 const sourceIPs = computed(() => {
   return uniq(connections.value.map(getConnectionSourceIP)).sort((a, b) => {
@@ -48,6 +44,14 @@ const sourceIPs = computed(() => {
   })
 })
 const sourceIPOpts = ref<{ label: string; value: string[] }[]>([])
+
+const selectOptions = computed(() => [
+  { value: null as string[] | null, label: t('all') },
+  ...sourceIPOpts.value.map((opt) => ({
+    value: opt.value as string[] | null,
+    label: opt.label,
+  })),
+])
 
 // do not use computed here for firefox
 watch(
