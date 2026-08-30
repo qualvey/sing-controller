@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { showToast } from '@/helper/toast'
 import { showConfirmDialog } from '@/helper/confirmDialog'
 import { PlusIcon, RefreshCw, ClipboardPasteIcon, KeyRoundIcon, WandIcon, UserPlusIcon, TrashIcon } from 'lucide-vue-next'
+import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -47,6 +48,9 @@ const suppressTypeWatch = ref(false)
 const allocating = ref(false)
 const generating = ref(false)
 const validateMsg = ref('')
+const showSsPassword = ref(false)
+const showUserPasswords = reactive<Record<number, boolean>>({})
+const showTuicPasswords = reactive<Record<number, boolean>>({})
 
 interface InboundForm {
   type: string
@@ -595,7 +599,23 @@ onMounted(async () => {
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">用户 {{ i + 1 }}</label>
                 <div class="flex items-center gap-2">
                   <input v-model="u.username" type="text" class="input input-bordered input-sm flex-1" placeholder="用户名" />
-                  <input v-model="u.password" type="password" class="input input-bordered input-sm flex-1" placeholder="密码" />
+                  <div class="flex flex-1 items-center gap-1">
+                    <input
+                      v-model="u.password"
+                      :type="showUserPasswords[i] ? 'text' : 'password'"
+                      class="input input-bordered input-sm flex-1"
+                      placeholder="密码"
+                    />
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs shrink-0"
+                      :title="showUserPasswords[i] ? '隐藏密码' : '显示明文'"
+                      @click="showUserPasswords[i] = !showUserPasswords[i]"
+                    >
+                      <EyeSlashIcon v-if="showUserPasswords[i]" class="h-3.5 w-3.5" />
+                      <EyeIcon v-else class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <button class="btn btn-ghost btn-xs text-error shrink-0" title="删除用户" @click="form.users.splice(i, 1)">
                     <TrashIcon class="h-3.5 w-3.5" />
                   </button>
@@ -634,7 +654,21 @@ onMounted(async () => {
                 <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">password <span class="text-destructive">*</span></label>
                 <div class="flex flex-col gap-1">
                   <div class="flex gap-2">
-                    <input v-model="form.ssPassword" type="password" class="input input-bordered input-sm w-full" placeholder="新建时自动生成" />
+                    <input
+                      v-model="form.ssPassword"
+                      :type="showSsPassword ? 'text' : 'password'"
+                      class="input input-bordered input-sm w-full"
+                      placeholder="新建时自动生成"
+                    />
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm shrink-0"
+                      :title="showSsPassword ? '隐藏密码' : '显示明文'"
+                      @click="showSsPassword = !showSsPassword"
+                    >
+                      <EyeSlashIcon v-if="showSsPassword" class="h-4 w-4" />
+                      <EyeIcon v-else class="h-4 w-4" />
+                    </button>
                     <button class="btn btn-ghost btn-sm shrink-0" :disabled="generating" @click="generateSsPassword()">
                       <KeyRoundIcon class="h-4 w-4" />
                       重新生成
@@ -643,6 +677,7 @@ onMounted(async () => {
                   <p class="text-xs text-[#606266] dark:text-[#a6b0bf]">默认自动生成 16 字节随机密码（base64，如 8JCsPssfgS8tiRwiMlhARg==）</p>
                 </div>
               </template>
+
               <p v-else class="text-xs text-[#606266] dark:text-[#a6b0bf]" style="grid-column: 2">method 为 none（无加密）时不需要密码</p>
 
               <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">

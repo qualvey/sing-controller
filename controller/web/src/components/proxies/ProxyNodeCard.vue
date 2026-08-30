@@ -9,7 +9,7 @@
         latencyTipAnimationClass,
       )
     "
-    @contextmenu.stop.prevent="handlerLatencyTest"
+    @contextmenu.stop.prevent="handleContextMenu"
   >
     <div
       class="w-full flex-1 text-sm"
@@ -56,6 +56,7 @@ import { checkTruncation } from '@/helper/tooltip'
 import { scrollIntoCenter } from '@/helper/utils'
 import { proxyLatencyTest } from '@/assembly/proxies'
 import { getIPv6ByName, getTestUrl, proxyMap } from '@/assembly/proxies'
+import { openProxyContextMenu } from '@/composables/proxyContextMenu'
 import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
 import { smartWeightsMap } from '@/store/smart'
 import { twMerge } from 'tailwind-merge'
@@ -70,6 +71,13 @@ const props = defineProps<{
   active?: boolean
   groupName?: string
 }>()
+
+const handleContextMenu = (e: MouseEvent) => {
+  openProxyContextMenu(e, {
+    name: props.name,
+    groupName: props.groupName
+  })
+}
 
 const cardRef = ref()
 const node = computed(() => proxyMap.value[props.name])
