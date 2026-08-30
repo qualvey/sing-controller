@@ -150,9 +150,13 @@ export const api = {
 
   // Route 规则 CRUD
   routes: () => http.get<RouteInfo>('/routes').then((r) => r.data),
+  getRoute: (id: string) =>
+    http.get<{ id: string; rule: RouteRule; disabled?: boolean }>(`/routes/${encodeURIComponent(id)}`).then((r) => r.data),
   createRoute: (rule: RouteRule) => http.post('/routes', rule).then((r) => r.data),
   updateRoute: (id: string, rule: RouteRule) => http.put(`/routes/${encodeURIComponent(id)}`, rule).then((r) => r.data),
   deleteRoute: (id: string) => http.delete(`/routes/${encodeURIComponent(id)}`).then((r) => r.data),
+  toggleRouteDisabled: (id: string, disabled?: boolean) =>
+    http.put(`/routes/${encodeURIComponent(id)}/toggle`, { disabled }).then((r) => r.data),
 
   // DNS 管理
   dns: () => http.get('/dns').then((r) => r.data),

@@ -131,8 +131,17 @@ const loadRuleData = async (ruleId: string) => {
     return
   }
   try {
-    const row = await api.getRoute(ruleId)
-    const rowRec = (row || {}) as Record<string, unknown>
+    let rowRec: Record<string, unknown> = {}
+    try {
+      const res = await api.getRoute(ruleId)
+      rowRec = (res.rule || {}) as Record<string, unknown>
+    } catch {
+      const all = await api.routes()
+      const matched = all.routes.find((item) => item.id === ruleId)
+      if (matched) {
+        rowRec = (matched.rule || {}) as Record<string, unknown>
+      }
+    }
     const { id: _omit, ...ruleBody } = rowRec
     sourceJson.value = JSON.stringify(ruleBody, null, 2)
     if (rowRec.type === 'logical') {
@@ -145,6 +154,8 @@ const loadRuleData = async (ruleId: string) => {
       fillAction(rowRec)
       return
     }
+    ruleForm.ruleType = 'default'
+    ruleForm.invert = rowRec.invert === true
     for (const f of RULE_FIELDS) {
       const v = rowRec[f.key]
       if (f.type === 'bool') ruleForm[f.key] = v === true

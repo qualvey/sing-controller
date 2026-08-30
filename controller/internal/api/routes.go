@@ -43,12 +43,33 @@ func (h *Handler) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
+		id := newRuleID(&h.store.Meta, i)
 		items = append(items, map[string]any{
-			"id":   newRuleID(&h.store.Meta, i),
-			"rule": json.RawMessage(content),
+			"id":       id,
+			"rule":     json.RawMessage(content),
+			"disabled": h.store.Meta.IsRuleDisabled(id),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"routes": items, "final": h.store.Options.Route.Final})
+}
+
+func (h *Handler) handleGetRoute(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	index := h.findRuleIndexByID(id)
+	if index < 0 || index >= len(h.store.Options.Route.Rules) {
+		writeError(w, http.StatusNotFound, errors.New("route 规则不存在: "+id))
+		return
+	}
+	content, err := json.MarshalContext(h.ctx(r), &h.store.Options.Route.Rules[index])
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":       id,
+		"rule":     json.RawMessage(content),
+		"disabled": h.store.Meta.IsRuleDisabled(id),
+	})
 }
 
 func (h *Handler) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +121,35 @@ func (h *Handler) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 		}
 		options.Route.Rules = append(options.Route.Rules[:index], options.Route.Rules[index+1:]...)
 		meta.RuleIDs = append(meta.RuleIDs[:index], meta.RuleIDs[index+1:]...)
+		meta.SetRuleDisabled(id, false)
+		return nil
+	})
+}
+
+func (h *Handler) handleToggleRoute(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, errors.New("missing route id"))
+		return
+	}
+	var req struct {
+		Disabled *bool `json:"disabled"`
+	}
+	body, _ := readRawBody(r)
+	if len(body) > 0 {
+		_ = json.Unmarshal(body, &req)
+	}
+
+	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+		index := h.findRuleIndexByID(id)
+		if index < 0 {
+			return errors.New("route 规则不存在: " + id)
+		}
+		if req.Disabled != nil {
+			meta.SetRuleDisabled(id, *req.Disabled)
+		} else {
+			meta.ToggleRuleDisabled(id)
+		}
 		return nil
 	})
 }

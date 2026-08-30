@@ -29,6 +29,38 @@ type Meta struct {
 	RuleSetIDs            []string    `json:"rule_sets,omitempty"`
 	CertificateProviderIDs []string   `json:"certificate_providers,omitempty"`
 	Users                 []UserMeta  `json:"users,omitempty"`
+	DisabledRuleIDs       []string    `json:"disabled_rules,omitempty"`
+}
+
+func (m *Meta) IsRuleDisabled(id string) bool {
+	for _, did := range m.DisabledRuleIDs {
+		if did == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Meta) SetRuleDisabled(id string, disabled bool) {
+	newIDs := make([]string, 0, len(m.DisabledRuleIDs))
+	for _, did := range m.DisabledRuleIDs {
+		if did != id {
+			newIDs = append(newIDs, did)
+		}
+	}
+	if disabled {
+		newIDs = append(newIDs, id)
+	}
+	m.DisabledRuleIDs = newIDs
+}
+
+func (m *Meta) ToggleRuleDisabled(id string) bool {
+	if m.IsRuleDisabled(id) {
+		m.SetRuleDisabled(id, false)
+		return false
+	}
+	m.SetRuleDisabled(id, true)
+	return true
 }
 
 // UserMeta 全局用户池：一个用户可绑定多个入站实例（多对多）

@@ -130,6 +130,7 @@ export const fetchRules = async () => {
           size: -1,
           uuid: item.id || String(idx),
           index: idx + 1,
+          disabled: item.disabled === true,
         } as Rule
       })
     } else {

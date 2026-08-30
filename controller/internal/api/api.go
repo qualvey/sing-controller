@@ -118,8 +118,11 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	// route rule CRUD（简单规则，id 存于 meta 旁车）
 	mux.HandleFunc("GET /api/routes", h.handleListRoutes)
 	mux.HandleFunc("POST /api/routes", h.handleCreateRoute)
+	mux.HandleFunc("GET /api/routes/{id}", h.handleGetRoute)
 	mux.HandleFunc("PUT /api/routes/{id}", h.handleUpdateRoute)
 	mux.HandleFunc("DELETE /api/routes/{id}", h.handleDeleteRoute)
+	mux.HandleFunc("PUT /api/routes/{id}/toggle", h.handleToggleRoute)
+	mux.HandleFunc("PUT /rules/{id}", h.handleToggleRoute)
 
 	// DNS 管理
 	mux.HandleFunc("GET /api/dns", h.handleGetDNS)
