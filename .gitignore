@@ -22,3 +22,4 @@ go.work.sum
 sing-box.exe
 .vscode/
 zashboard/
+controller/__debug*
