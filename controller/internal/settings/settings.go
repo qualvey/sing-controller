@@ -16,6 +16,7 @@ package settings
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -121,6 +122,16 @@ type Manager struct {
 	values Settings
 }
 
+// singBoxServiceConfig 用于提取 sing-box 主配置中 services 数组的最小结构
+type singBoxServiceConfig struct {
+	Services []struct {
+		Type       string `json:"type"`
+		Listen     string `json:"listen"`
+		ListenPort uint16 `json:"listen_port"`
+		Secret     string `json:"secret"`
+	} `json:"services"`
+}
+
 func New(path string) *Manager { return &Manager{path: path} }
 
 func (m *Manager) Path() string { return m.path }
@@ -134,7 +145,7 @@ func (m *Manager) PollIntervalDuration() time.Duration {
 }
 func defaultSettings() Settings {
 	return Settings{
-		Config:  "./sing-box-config.json",
+		Config:  "/etc/sing-box/config.json",
 		Listen:  "127.0.0.1:8080",
 		Log:     &LogOptions{Level: "info"},
 		MinPort: 8000,
@@ -161,19 +172,18 @@ func (m *Manager) Load() error {
 	if err != nil {
 		return err
 	}
-	var values Settings
+	// 场景 2：文件存在，先用 defaultSettings() 填底
+	values := defaultSettings()
+	// Unmarshal 只会覆盖 JSON 文件里明确写了的字段，缺省字段直接继承默认值
 	if err := json.Unmarshal(content, &values); err != nil {
 		return err
 	}
-	if values.Config == "" {
-		values.Config = "./sing-box-config.json"
+	if values.ServiceAPI == nil || values.ServiceAPI.Address == "" {
+		if detected := m.autoDetectServiceAPI(values.Config); detected != nil {
+			values.ServiceAPI = detected
+		}
 	}
-	if values.Listen == "" {
-		values.Listen = "127.0.0.1:8080"
-	}
-	if values.Log == nil {
-		values.Log = &LogOptions{Level: "info"}
-	}
+
 	// 旧配置迁移：attach_to_selector 字段缺失时默认开启
 	if values.Defaults.AttachToSelector == nil {
 		attached := true
@@ -219,4 +229,31 @@ func (m *Manager) saveLocked() error {
 		return err
 	}
 	return os.Rename(tmp, m.path)
+}
+
+func (m *Manager) autoDetectServiceAPI(singBoxConfigPath string) *ServiceAPIOptions {
+	data, err := os.ReadFile(singBoxConfigPath)
+	if err != nil {
+		return nil
+	}
+
+	var sbCfg singBoxServiceConfig
+	if err := json.Unmarshal(data, &sbCfg); err != nil {
+		return nil
+	}
+
+	for _, s := range sbCfg.Services {
+		if s.Type == "api" && s.ListenPort > 0 {
+			listenHost := s.Listen
+			// 处理通配地址，controller 在本机访问需转为 loopback
+			if listenHost == "" || listenHost == "::" || listenHost == "0.0.0.0" {
+				listenHost = "127.0.0.1"
+			}
+			return &ServiceAPIOptions{
+				Address: fmt.Sprintf("http://%s:%d", listenHost, s.ListenPort),
+				Secret:  s.Secret,
+			}
+		}
+	}
+	return nil
 }

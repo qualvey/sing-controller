@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/qualvey/sing-controller/internal/logger"
+
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
@@ -48,11 +50,18 @@ func (h *Handler) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 	}
 	h.commit(w, r, func(options *option.Options, meta *metaType) error {
 		if h.findInboundIndex(inbound.Tag) >= 0 {
+			logger.Warn("创建 inbound 失败: tag 已存在 [%s]", inbound.Tag)
 			return errors.New("inbound tag 已存在: " + inbound.Tag)
 		}
 		options.Inbounds = append(options.Inbounds, inbound)
+
 		// 用户池绑定投影：把绑定到该入站的池用户注入 users[]
-		return syncUsersToInbounds(h.ctx(r), options, meta.Users)
+		if err := syncUsersToInbounds(h.ctx(r), options, meta.Users); err != nil {
+			logger.Error("同步用户到 inbound 失败, tag=%s: %v", inbound.Tag, err)
+			return err
+		}
+		logger.Info("成功创建 inbound [tag: %s, type: %s]", inbound.Tag, inbound.Type)
+		return nil
 	})
 }
 

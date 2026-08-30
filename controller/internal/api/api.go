@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
 	"github.com/sagernet/sing-box/include"
@@ -52,6 +53,7 @@ type Handler struct {
 type metaType = store.Meta
 
 func NewHandler(opts HandlerOptions) http.Handler {
+	logger.Debug("New handler initing")
 	h := &Handler{
 		store:    opts.Store,
 		settings: opts.Settings,
@@ -220,6 +222,7 @@ func (h *Handler) schema() ([]byte, error) {
 // commit 执行"内存修改 → 全量校验 → 原子写盘"管线。
 func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*option.Options, *store.Meta) error) {
 	if err := h.store.Update(h.ctx(r), mutate); err != nil {
+		logger.Error("store.Update 失败: %v", err) // 👈 加这行，控制台会直接打印出具体的错误信息
 		var refErr *GroupReferenceError
 		if errors.As(err, &refErr) {
 			writeJSON(w, http.StatusConflict, map[string]any{
