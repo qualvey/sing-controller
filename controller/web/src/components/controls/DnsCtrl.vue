@@ -13,7 +13,7 @@
         <button
           v-if="dnsTabShow === 'servers'"
           class="btn btn-circle btn-sm btn-primary"
-          title="新建 Server"
+          :title="$t('createServer')"
           @click="openCreateServerModal"
         >
           <PlusIcon class="h-4 w-4" />
@@ -21,7 +21,7 @@
         <button
           v-else-if="dnsTabShow === 'rules'"
           class="btn btn-circle btn-sm btn-primary"
-          title="新建规则"
+          :title="$t('createRule')"
           @click="openCreateRuleModal"
         >
           <PlusIcon class="h-4 w-4" />
@@ -29,7 +29,7 @@
         <button
           class="btn btn-circle btn-sm"
           :disabled="loading"
-          title="刷新"
+          :title="$t('refresh')"
           @click="fetchDns"
         >
           <ArrowPathIcon
@@ -46,7 +46,7 @@
         <TextInput
           v-model="dnsFilter"
           class="w-full flex-1"
-          :placeholder="dnsTabShow === 'servers' ? '搜索 DNS Server / tag / 地址 | Regex' : '搜索 DNS 规则 / 域名 / tag | Regex'"
+          :placeholder="dnsTabShow === 'servers' ? $t('searchDnsServers') : $t('searchDnsRules')"
           :clearable="true"
         />
       </div>
@@ -64,7 +64,7 @@
         v-if="dnsTabShow === 'servers' || dnsTabShow === 'rules'"
         v-model="dnsFilter"
         class="w-80"
-        :placeholder="dnsTabShow === 'servers' ? '搜索 DNS Server / tag / 地址 | Regex' : '搜索 DNS 规则 / 域名 / tag | Regex'"
+        :placeholder="dnsTabShow === 'servers' ? $t('searchDnsServers') : $t('searchDnsRules')"
         :clearable="true"
       />
       <button
@@ -73,7 +73,7 @@
         @click="openCreateServerModal"
       >
         <PlusIcon class="h-4 w-4" />
-        新建 Server
+        {{ $t('createServer') }}
       </button>
       <button
         v-else-if="dnsTabShow === 'rules'"
@@ -81,7 +81,7 @@
         @click="openCreateRuleModal"
       >
         <PlusIcon class="h-4 w-4" />
-        新建规则
+        {{ $t('createRule') }}
       </button>
       <button
         class="btn btn-ghost btn-sm gap-1.5"
@@ -92,20 +92,20 @@
           class="h-4 w-4"
           :class="{ 'animate-spin': loading }"
         />
-        刷新
+        {{ $t('refresh') }}
       </button>
       <div class="flex-1"></div>
       <div
         v-if="dnsTabShow === 'servers'"
         class="text-base-content/60 flex items-center gap-2 text-xs"
       >
-        <span>{{ servers.length }} 个 Server</span>
+        <span>{{ servers.length }} {{ $t('servers') }}</span>
       </div>
       <div
         v-else-if="dnsTabShow === 'rules'"
         class="text-base-content/60 flex items-center gap-2 text-xs"
       >
-        <span>{{ rules.length }} 条规则</span>
+        <span>{{ rules.length }} {{ $t('rules') }}</span>
       </div>
     </div>
   </CtrlsBar>
@@ -127,13 +127,15 @@ import { useCtrlsBar } from '@/composables/useCtrlsBar'
 import { openCreateRuleModal, openCreateServerModal } from '@/composables/dnsManagement'
 import { ArrowPathIcon, PlusIcon } from '@heroicons/vue/24/outline'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const { isLargeCtrlsBar } = useCtrlsBar()
 
 const tabOptions = computed<SegmentOption[]>(() => [
-  { value: 'servers', label: 'Servers', count: servers.value.length },
-  { value: 'rules', label: '规则', count: rules.value.length },
-  { value: 'options', label: '选项' },
-  { value: 'source', label: '源码' },
+  { value: 'servers', label: t('servers'), count: servers.value.length },
+  { value: 'rules', label: t('rules'), count: rules.value.length },
+  { value: 'options', label: t('options') },
+  { value: 'source', label: t('source') },
 ])
 </script>
