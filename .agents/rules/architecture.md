@@ -68,12 +68,20 @@
 ### 2.5 Components 层 (`src/components/`) —— 表现组件
 - **按领域分包 (Domain Separation)**：
   - 业务组件必须放置于对应的领域子目录（如 `proxies/`, `connections/`, `rules/`, `outbounds/`, `settings/`）。
-  - 通用复合组件放入 `common/`（如 `CollapseCard.vue`, `VirtualTable.vue`, `DialogWrapper.vue`）。
+  - 通用复合组件放入 `common/`（如 `CollapseCard.vue`, `VirtualTable.vue`, `DialogWrapper.vue`, `SelectInput.vue`）。
   - 原子 UI 放入 `ui/`（基于 Radix / Tailwind 封装）。
 - **解耦与单文件精炼**：
   - **严禁**创建上千行的单文件巨大组件。复杂弹窗（如编辑表单）必须抽离为独立的 `*Dialog.vue` 或 `*Modal.vue`。
-  - **Teleport 规范**：浮层、右键菜单、全局 Modal 统一使用 `<Teleport to="body">` 渲染，防止受到父容器 `overflow: hidden`、`z-index` 或 CSS `transform`（如 `TransitionGroup`）的层级裁切与定位偏移。
+  - **Teleport 规范**：浮层、右键菜单、全局 Modal 统一使用 `<Teleport to="body">` 或 `<Teleport to="#app-content">` 渲染，防止受到父容器 `overflow: hidden`、`z-index` 或 CSS `transform`（如 `TransitionGroup`）的层级裁切与定位偏移。
   - **FLIP 动画友好**：在 `TransitionGroup` 容器下的卡片组件（如 `ProxyNodeCard.vue`），根元素必须保持为单一真实 DOM 元素，防止 `ResizeObserver` 报错或动画撕裂。
+- **下拉菜单与选择器规范（强约束）**：
+  - **所有下拉菜单/选择器类组件必须对齐 `src/components/common/SelectInput.vue` 的交互体验与视觉效果**。
+  - 优先直接使用 `SelectInput.vue`，若需特殊扩展或定制，必须严格遵循以下实现：
+    1. **Teleport 浮层**：必须通过 `<Teleport to="#app-content">` 挂载，杜绝父容器滚动/裁剪污染；
+    2. **过渡动画**：统一使用 `<Transition name="floating-menu">` 动画；
+    3. **面板样式**：浮层必须带有 `class="floating-menu-panel"` 与动态坐标样式；
+    4. **分组渲染**：支持 `option.group` 区分分组，分组标题采用 `text-base-content/45 px-2 pt-2 pb-1 text-xs font-medium` 统一风格；
+    5. **无障碍与交互**：具备 `role="listbox"` / `role="option"`、`:aria-selected`、`:aria-disabled`，支持键盘导航与外部点击自动关闭。
 
 ### 2.6 Views 层 (`src/views/`) —— 页面组合
 - **轻量组合器**：View 仅负责组合顶层 Controls 栏、Header、Tab 切换以及挂载全局 Modal。
