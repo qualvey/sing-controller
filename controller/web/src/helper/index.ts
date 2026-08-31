@@ -126,7 +126,7 @@ export const renderRoutes = computed(() => {
   // capability gate per route; routes not listed here are always shown
   const routeCapable: Partial<Record<ROUTE_NAME, boolean>> = {
     [ROUTE_NAME.rules]: can('rules'),
-    [ROUTE_NAME.tools]: can('tools'),
+    //[ROUTE_NAME.tools]: can('tools'),
   }
   return Object.values(ROUTE_NAME).filter((r) => {
     if (r === ROUTE_NAME.setup) return false

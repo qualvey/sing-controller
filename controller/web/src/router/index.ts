@@ -18,8 +18,6 @@ import SettingsPage from '@/views/SettingsPage.vue'
 // import SetupPage from '@/views/SetupPage.vue'
 import UsersPage from '@/views/UsersPage.vue'
 import { useTitle } from '@vueuse/core'
-import { Component } from 'lucide-vue-next'
-import { roundArrow } from 'tippy.js'
 import { watch } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 
@@ -44,21 +42,11 @@ const childrenRouter = [
     name: ROUTE_NAME.logs,
     component: LogsPage,
   },
-  {
-    path: 'rules',
-    name: ROUTE_NAME.rules,
-    component: RulesPage,
-  },
   //{
   //  path: 'tools',
   //  name: ROUTE_NAME.tools,
   //  component: () => import('@/views/ToolsPage.vue'),
   //},
-  {
-    path: 'settings',
-    name: ROUTE_NAME.settings,
-    component: SettingsPage,
-  },
   {
     path: 'inbounds',
     name: ROUTE_NAME.inbounds,
@@ -78,6 +66,11 @@ const childrenRouter = [
     path: 'dns',
     name: ROUTE_NAME.dns,
     component: DnsPage
+  },
+  {
+    path: 'settings',
+    name: ROUTE_NAME.settings,
+    component: SettingsPage,
   }
 ]
 
