@@ -53,6 +53,15 @@
       :is-edit="isRouteEditMode"
       @saved="fetchRules"
     />
+
+    <!-- 规则集 (RuleSet) 右键菜单与编辑弹窗 -->
+    <RuleProviderContextMenu />
+    <RuleSetEditDialog
+      v-model="isRuleSetModalOpen"
+      :is-edit="isRuleSetEditMode"
+      :rule-set-data="editingRuleSetData"
+      @saved="fetchRules"
+    />
   </div>
 </template>
 
@@ -62,12 +71,19 @@ import RulesCtrl from '@/components/controls/RulesCtrl'
 import RuleCard from '@/components/rules/RuleCard.vue'
 import RuleProvider from '@/components/rules/RuleProvider.vue'
 import RuleContextMenu from '@/components/rules/RuleContextMenu.vue'
+import RuleProviderContextMenu from '@/components/rules/RuleProviderContextMenu.vue'
 import RouteEditDialog from '@/components/routes/RouteEditDialog.vue'
+import RuleSetEditDialog from '@/components/rules/RuleSetEditDialog.vue'
 import {
   isRouteEditModalOpen,
   isRouteEditMode,
   routeEditTargetId,
 } from '@/composables/ruleContextMenu'
+import {
+  editingRuleSetData,
+  isRuleSetEditMode,
+  isRuleSetModalOpen,
+} from '@/composables/ruleSetManagement'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { RULE_TAB_TYPE } from '@/constant'
 import { fetchRules, renderRules, renderRulesProvider, rules, rulesTabShow } from '@/assembly/rules'

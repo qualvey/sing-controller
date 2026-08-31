@@ -8,6 +8,7 @@ import {
 } from '@/assembly/rules'
 import { useCtrlsBar } from '@/composables/useCtrlsBar'
 import { openCreateRouteModal } from '@/composables/ruleContextMenu'
+import { openCreateRuleSetModal } from '@/composables/ruleSetManagement'
 import { RULE_TAB_TYPE } from '@/constant'
 import { showNotification } from '@/helper/notification'
 import { showToast } from '@/helper/toast'
@@ -146,17 +147,19 @@ export default defineComponent({
       const upgradeAllIcon = rulesTabShow.value === RULE_TAB_TYPE.PROVIDER && (
         <button
           class="btn btn-circle btn-sm"
+          title="全部更新"
           onClick={handlerClickUpgradeAllProviders}
         >
           <ArrowPathIcon class={['h-4 w-4', isUpgrading.value && 'animate-spin']} />
         </button>
       )
 
-      const createRuleButton = (
+      const isProviderTab = rulesTabShow.value === RULE_TAB_TYPE.PROVIDER
+      const createButton = (
         <button
           class="btn btn-circle btn-sm"
-          title={t('createRule') || '新建规则'}
-          onClick={openCreateRouteModal}
+          title={isProviderTab ? '新建规则集' : (t('createRule') || '新建规则')}
+          onClick={isProviderTab ? openCreateRuleSetModal : openCreateRouteModal}
         >
           <PlusIcon class="h-4 w-4" />
         </button>
@@ -239,7 +242,7 @@ export default defineComponent({
           )}
           <div class="flex w-full items-center gap-2">
             {searchInput}
-            {createRuleButton}
+            {createButton}
             {settingsModal}
           </div>
         </div>
@@ -248,7 +251,7 @@ export default defineComponent({
           {hasProviders.value && tabs}
           {searchInput}
           <div class="flex-1"></div>
-          {createRuleButton}
+          {createButton}
           {upgradeAllIcon}
           {settingsModal}
         </div>

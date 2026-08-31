@@ -292,8 +292,8 @@ onMounted(() => {
       </TabsList>
 
       <TabsContent value="form">
-        <div class="grid gap-x-4 gap-y-5 pt-2" style="grid-template-columns: 130px minmax(0, 1fr)">
-          <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
+        <div class="grid gap-x-4 gap-y-5 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
+          <label class="pt-2 text-base-content/70">类型</label>
           <SelectField
             v-model="ruleForm.ruleType"
             :options="[
@@ -305,12 +305,12 @@ onMounted(() => {
           <!-- 逻辑组合区域 -->
           <div class="col-span-2 collapse-row" :class="{ 'is-open': ruleForm.ruleType === 'logical' }">
             <div class="collapse-inner">
-              <div class="grid gap-x-4 gap-y-4 pt-2" style="grid-template-columns: 130px minmax(0, 1fr)">
-                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">mode <span class="text-destructive">*</span></label>
+              <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
+                <label class="pt-2 text-base-content/70">mode <span class="text-destructive">*</span></label>
                 <SelectField v-model="ruleForm.mode" :options="['and', 'or']" />
-                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">invert</label>
+                <label class="pt-2 text-base-content/70">invert</label>
                 <Switch v-model="ruleForm.invert" class="self-center" />
-                <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">子规则 (JSON) <span class="text-destructive">*</span></label>
+                <label class="pt-2 text-base-content/70">子规则 (JSON) <span class="text-destructive">*</span></label>
                 <div class="flex flex-col gap-1">
                   <textarea
                     v-model="ruleForm.rulesJson"
@@ -318,7 +318,7 @@ onMounted(() => {
                     class="textarea textarea-bordered w-full font-mono text-xs"
                     placeholder='[{"rule_set": "gfw"}, {"clash_mode": "direct"}]'
                   />
-                  <p class="text-xs text-[#909399]">嵌套子规则为 Rule 数组（可再嵌套 logical）；每个子规则也可带 action</p>
+                  <p class="text-xs text-base-content/50">嵌套子规则为 Rule 数组（可再嵌套 logical）；每个子规则也可带 action</p>
                 </div>
               </div>
             </div>
@@ -327,22 +327,22 @@ onMounted(() => {
           <!-- 普通规则匹配字段区域 -->
           <div class="col-span-2 collapse-row" :class="{ 'is-open': ruleForm.ruleType === 'default' }">
             <div class="collapse-inner">
-              <div class="grid gap-x-4 gap-y-4 pt-2" style="grid-template-columns: 130px minmax(0, 1fr)">
+              <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
                 <div
-                  class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]"
+                  class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
                   style="grid-column: 1 / -1"
                 >
-                  <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />匹配条件<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+                  <span class="border-base-content/10 h-px flex-1 border-t" />匹配条件<span class="border-base-content/10 h-px flex-1 border-t" />
                 </div>
                 <template v-for="g in RULE_GROUPS" :key="g">
                   <div
-                    class="flex items-center gap-2 text-xs font-semibold text-[#909399]"
+                    class="flex items-center gap-2 text-xs font-semibold text-base-content/50"
                     style="grid-column: 1 / -1"
                   >
-                    <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />{{ g }}<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+                    <span class="border-base-content/10 h-px flex-1 border-t" />{{ g }}<span class="border-base-content/10 h-px flex-1 border-t" />
                   </div>
                   <template v-for="f in RULE_FIELDS.filter((x) => x.group === g)" :key="f.key">
-                    <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">{{ f.label }}</label>
+                    <label class="pt-2 text-base-content/70">{{ f.label }}</label>
                     <ChipInput
                       v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
                       v-model="ruleForm[f.key] as string[]"
@@ -375,20 +375,20 @@ onMounted(() => {
 
           <!-- 动作配置区域 -->
           <div
-            class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]"
+            class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
             style="grid-column: 1 / -1"
           >
-            <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />动作<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+            <span class="border-base-content/10 h-px flex-1 border-t" />动作<span class="border-base-content/10 h-px flex-1 border-t" />
           </div>
-          <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">action</label>
+          <label class="pt-2 text-base-content/70">action</label>
           <SelectField v-model="ruleForm.action" :options="actionOptions" />
 
           <template v-if="isRouteAction">
-            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">outbound <span class="text-destructive">*</span></label>
+            <label class="pt-2 text-base-content/70">outbound <span class="text-destructive">*</span></label>
             <SelectField v-model="ruleForm.outbound" :options="outboundTags" placeholder="选择出站" />
           </template>
           <template v-else-if="ruleForm.action === 'sniff'">
-            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">sniffer</label>
+            <label class="pt-2 text-base-content/70">sniffer</label>
             <ChipInput
               v-model="ruleForm.sniffers as string[]"
               placeholder="嗅探协议（可多选）"
@@ -396,7 +396,7 @@ onMounted(() => {
             />
           </template>
           <template v-else-if="ruleForm.action === 'resolve'">
-            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">DNS server</label>
+            <label class="pt-2 text-base-content/70">DNS server</label>
             <input
               v-model="ruleForm.resolve_server"
               type="text"
@@ -406,7 +406,7 @@ onMounted(() => {
           </template>
 
           <div
-            class="rounded-md border border-[#409eff]/30 bg-[#e8f3ff] p-3 text-xs leading-relaxed text-[#1890ff] dark:bg-[rgba(64,158,255,0.16)] dark:text-[#66b1ff]"
+            class="alert alert-info py-2 text-xs leading-relaxed"
             style="grid-column: 1 / -1"
           >
             route=默认出站（选 outbound）；direct=直连；bypass=绕过；reject=拒绝；hijack-dns=DNS 劫持；sniff=协议嗅探；resolve=DNS 解析；route-options=路由选项（参数写在附加字段）

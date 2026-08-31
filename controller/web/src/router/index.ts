@@ -7,6 +7,7 @@ import { language } from '@/store/settings'
 
 import { activeBackend } from '@/store/setup'
 import ConnectionsPage from '@/views/ConnectionsPage.vue'
+import DnsPage from '@/views/DnsPage.vue'
 import HomePage from '@/views/HomePage.vue'
 import InboundsPage from '@/views/InboundsPage.vue'
 import LogsPage from '@/views/LogsPage.vue'
@@ -76,7 +77,7 @@ const childrenRouter = [
   {
     path: 'dns',
     name: ROUTE_NAME.dns,
-    component: () => import('@/views/DnsView.vue')
+    component: DnsPage
   }
 ]
 
