@@ -8,14 +8,14 @@ import { language } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
 import ConnectionsPage from '@/views/ConnectionsPage.vue'
 import HomePage from '@/views/HomePage.vue'
-import InboundsView from '@/views/InboundsView.vue'
+import InboundsPage from '@/views/InboundsPage.vue'
 import LogsPage from '@/views/LogsPage.vue'
 import OverviewPage from '@/views/OverviewPage.vue'
 import ProxiesPage from '@/views/ProxiesPage.vue'
 import RulesPage from '@/views/RulesPage.vue'
 import SettingsPage from '@/views/SettingsPage.vue'
 // import SetupPage from '@/views/SetupPage.vue'
-import UsersView from '@/views/UsersView.vue'
+import UsersPage from '@/views/UsersPage.vue'
 import { useTitle } from '@vueuse/core'
 import { Component } from 'lucide-vue-next'
 import { roundArrow } from 'tippy.js'
@@ -61,12 +61,12 @@ const childrenRouter = [
   {
     path: 'inbounds',
     name: ROUTE_NAME.inbounds,
-    component: InboundsView
+    component: InboundsPage
   },
   {
     path: 'users',
     name: ROUTE_NAME.users,
-    component: UsersView
+    component: UsersPage
   },
   {
     path: 'routes',
