@@ -70,7 +70,7 @@ import { useDialogOpenState } from '@/composables/dialog'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { ref, watch } from 'vue'
 
-const isOpen = defineModel<boolean>()
+const isOpen = defineModel<boolean>({ default: false })
 defineProps<{ noPadding?: boolean; boxClass?: string; title?: string }>()
 const emits = defineEmits<{
   (e: 'enter'): void

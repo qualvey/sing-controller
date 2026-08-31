@@ -419,7 +419,7 @@ onMounted(() => {
       :model-value="modelValue"
       :title="isEdit ? '编辑 Outbound' : '新建 Outbound'"
       box-class="max-w-[720px]"
-      @update:model-value="(val) => emit('update:modelValue', val)"
+      @update:model-value="(val) => emit('update:modelValue', !!val)"
     >
       <TabsRoot v-model="activeTab">
         <TabsList>
