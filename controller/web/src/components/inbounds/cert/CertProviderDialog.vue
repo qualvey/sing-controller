@@ -1,14 +1,14 @@
 <template>
   <DialogWrapper
     :model-value="modelValue"
-    :title="isEdit ? '编辑 Certificate Provider' : '新建 Certificate Provider'"
+    :title="isEdit ? $t('editCertProvider') : $t('createCertProvider')"
     box-class="max-w-[680px]"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <TabsRoot v-model="activeTab">
       <TabsList>
-        <TabsTrigger value="form">表单</TabsTrigger>
-        <TabsTrigger value="source">源码</TabsTrigger>
+        <TabsTrigger value="form">{{ $t('form') }}</TabsTrigger>
+        <TabsTrigger value="source">{{ $t('source') }}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="form">
@@ -22,15 +22,19 @@
             :options="['acme']"
           />
 
-          <label class="text-base-content/70 pt-2">tag <span class="text-destructive">*</span></label>
+          <label class="text-base-content/70 pt-2">
+            {{ $t('certProviderTag') }} <span class="text-destructive">*</span>
+          </label>
           <input
             v-model="providerForm.tag"
             type="text"
             class="input input-bordered input-sm w-full"
-            placeholder="provider 唯一标识（如 letsencrypt）"
+            :placeholder="$t('certProviderTagPlaceholder')"
           />
 
-          <label class="text-base-content/70 pt-2">域名 (domain)</label>
+          <label class="text-base-content/70 pt-2">
+            {{ $t('certDomain') }} <span class="text-destructive">*</span>
+          </label>
           <div class="flex flex-col gap-1.5">
             <div class="flex flex-wrap gap-1.5">
               <span
@@ -52,33 +56,33 @@
               v-model="domainInput"
               type="text"
               class="input input-bordered input-sm w-full"
-              placeholder="输入域名后回车或失焦添加，可多值"
+              :placeholder="$t('certDomainPlaceholder')"
               @keydown.enter.prevent="addDomain"
               @blur="addDomain"
             />
           </div>
 
-          <label class="text-base-content/70 pt-2">email</label>
+          <label class="text-base-content/70 pt-2">{{ $t('certEmail') }}</label>
           <input
             v-model="providerForm.email"
             type="email"
             class="input input-bordered input-sm w-full"
-            placeholder="ACME 注册邮箱"
+            :placeholder="$t('certEmailPlaceholder')"
           />
 
-          <label class="text-base-content/70 pt-2">data_directory</label>
+          <label class="text-base-content/70 pt-2">{{ $t('certDataDir') }}</label>
           <input
             v-model="providerForm.data_directory"
             type="text"
             class="input input-bordered input-sm w-full"
-            placeholder="证书存储目录（可选）"
+            :placeholder="$t('certDataDirPlaceholder')"
           />
 
-          <label class="text-base-content/70 pt-2">key_type</label>
+          <label class="text-base-content/70 pt-2">{{ $t('certKeyType') }}</label>
           <SelectField
             v-model="providerForm.key_type"
             :options="['', 'ed25519', 'p256', 'p384']"
-            placeholder="私钥算法（默认 p256）"
+            :placeholder="$t('certKeyTypePlaceholder')"
           />
 
           <div
@@ -86,46 +90,152 @@
             style="grid-column: 1 / -1"
           >
             <span class="border-base-content/10 h-px flex-1 border-t" />
-            验证方式（Challenge）
+            {{ $t('certChallengeTitle') }}
             <span class="border-base-content/10 h-px flex-1 border-t" />
           </div>
 
-          <label class="text-base-content/70 pt-2">禁用 HTTP 验证</label>
+          <label class="text-base-content/70 pt-2">{{ $t('disableHttpChallenge') }}</label>
           <Switch
             v-model="providerForm.disable_http_challenge"
             class="self-center"
           />
 
-          <label class="text-base-content/70 pt-2">禁用 TLS-ALPN 验证</label>
+          <label class="text-base-content/70 pt-2">{{ $t('disableTlsAlpnChallenge') }}</label>
           <Switch
             v-model="providerForm.disable_tls_alpn_challenge"
             class="self-center"
           />
 
-          <label class="text-base-content/70 pt-2">DNS01 Provider</label>
+          <label class="text-base-content/70 pt-2">{{ $t('dns01Provider') }}</label>
           <div class="flex flex-col gap-1">
             <SelectField
               v-model="providerForm.provider"
-              :options="['cloudflare', 'alidns', 'acmedns']"
-              placeholder="选择 DNS01 服务商（默认 cloudflare）"
+              :options="['cloudflare', 'alidns', 'acmedns', 'custom']"
+              :placeholder="$t('dns01ProviderPlaceholder')"
             />
             <p class="text-base-content/50 text-xs">
-              配置 DNS01 验证以支持通配符证书申请
+              {{ $t('dns01ProviderTip') }}
             </p>
           </div>
 
-          <label class="text-base-content/70 pt-2">DNS01 凭证 (JSON)</label>
-          <div class="flex flex-col gap-1">
-            <textarea
-              v-model="providerForm.dns01_challenge_json"
-              rows="4"
-              class="textarea textarea-bordered font-mono text-xs w-full"
-              placeholder='{"api_token": "your_cloudflare_api_token"}'
+          <!-- Cloudflare 表单 -->
+          <template v-if="providerForm.provider === 'cloudflare'">
+            <label class="text-base-content/70 pt-2">
+              {{ $t('cfApiToken') }} <span class="text-destructive">*</span>
+            </label>
+            <input
+              v-model="providerForm.cf_api_token"
+              type="password"
+              class="input input-bordered input-sm w-full font-mono"
+              :placeholder="$t('cfApiTokenPlaceholder')"
             />
-            <p class="text-base-content/50 text-xs">
-              填入 DNS01 接口对应 API Token / 凭证参数（JSON 格式）
-            </p>
-          </div>
+
+            <label class="text-base-content/70 pt-2">{{ $t('cfZoneToken') }}</label>
+            <input
+              v-model="providerForm.cf_zone_token"
+              type="password"
+              class="input input-bordered input-sm w-full font-mono"
+              :placeholder="$t('cfZoneTokenPlaceholder')"
+            />
+          </template>
+
+          <!-- Alibaba Cloud DNS 表单 -->
+          <template v-else-if="providerForm.provider === 'alidns'">
+            <label class="text-base-content/70 pt-2">
+              {{ $t('aliAccessKeyId') }} <span class="text-destructive">*</span>
+            </label>
+            <input
+              v-model="providerForm.ali_access_key_id"
+              type="text"
+              class="input input-bordered input-sm w-full font-mono"
+              placeholder="AccessKey ID"
+            />
+
+            <label class="text-base-content/70 pt-2">
+              {{ $t('aliAccessKeySecret') }} <span class="text-destructive">*</span>
+            </label>
+            <input
+              v-model="providerForm.ali_access_key_secret"
+              type="password"
+              class="input input-bordered input-sm w-full font-mono"
+              placeholder="AccessKey Secret"
+            />
+
+            <label class="text-base-content/70 pt-2">{{ $t('aliRegionId') }}</label>
+            <input
+              v-model="providerForm.ali_region_id"
+              type="text"
+              class="input input-bordered input-sm w-full"
+              :placeholder="$t('aliRegionIdPlaceholder')"
+            />
+
+            <label class="text-base-content/70 pt-2">{{ $t('aliSecurityToken') }}</label>
+            <input
+              v-model="providerForm.ali_security_token"
+              type="password"
+              class="input input-bordered input-sm w-full font-mono"
+              :placeholder="$t('aliSecurityTokenPlaceholder')"
+            />
+          </template>
+
+          <!-- ACME-DNS 表单 -->
+          <template v-else-if="providerForm.provider === 'acmedns'">
+            <label class="text-base-content/70 pt-2">
+              {{ $t('acmeSubdomain') }} <span class="text-destructive">*</span>
+            </label>
+            <input
+              v-model="providerForm.acme_subdomain"
+              type="text"
+              class="input input-bordered input-sm w-full font-mono"
+              placeholder="Subdomain"
+            />
+
+            <label class="text-base-content/70 pt-2">
+              {{ $t('acmeUsername') }} <span class="text-destructive">*</span>
+            </label>
+            <input
+              v-model="providerForm.acme_username"
+              type="text"
+              class="input input-bordered input-sm w-full font-mono"
+              placeholder="Username"
+            />
+
+            <label class="text-base-content/70 pt-2">
+              {{ $t('acmePassword') }} <span class="text-destructive">*</span>
+            </label>
+            <input
+              v-model="providerForm.acme_password"
+              type="password"
+              class="input input-bordered input-sm w-full font-mono"
+              placeholder="Password"
+            />
+
+            <label class="text-base-content/70 pt-2">{{ $t('acmeServerUrl') }}</label>
+            <input
+              v-model="providerForm.acme_server_url"
+              type="text"
+              class="input input-bordered input-sm w-full"
+              :placeholder="$t('acmeServerUrlPlaceholder')"
+            />
+          </template>
+
+          <!-- 自定义 / JSON 兜底 -->
+          <template v-else>
+            <label class="text-base-content/70 pt-2">
+              {{ $t('dns01Credentials') }} <span class="text-destructive">*</span>
+            </label>
+            <div class="flex flex-col gap-1">
+              <textarea
+                v-model="providerForm.dns01_challenge_json"
+                rows="4"
+                class="textarea textarea-bordered font-mono text-xs w-full"
+                placeholder='{"provider": "cloudflare", "api_token": "your_token"}'
+              />
+              <p class="text-base-content/50 text-xs">
+                {{ $t('dns01CredentialsTip') }}
+              </p>
+            </div>
+          </template>
         </div>
       </TabsContent>
 
@@ -143,7 +253,7 @@
         class="btn btn-ghost btn-sm"
         @click="emit('update:modelValue', false)"
       >
-        取消
+        {{ $t('cancel') }}
       </button>
       <button
         type="button"
@@ -151,7 +261,7 @@
         :disabled="saving"
         @click="save"
       >
-        保存
+        {{ $t('save') }}
       </button>
     </div>
   </DialogWrapper>
@@ -167,6 +277,9 @@ import { TabsContent, TabsList, TabsRoot, TabsTrigger } from '@/components/ui/ta
 import { showToast } from '@/helper/toast'
 import { useStatusStore } from '@/store/status'
 import { reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   modelValue: boolean
@@ -200,6 +313,20 @@ const providerForm = reactive({
   alternative_tls_port: 0,
   key_type: '',
   provider: 'cloudflare',
+  // Cloudflare
+  cf_api_token: '',
+  cf_zone_token: '',
+  // AliDNS
+  ali_access_key_id: '',
+  ali_access_key_secret: '',
+  ali_region_id: '',
+  ali_security_token: '',
+  // ACME-DNS
+  acme_username: '',
+  acme_password: '',
+  acme_subdomain: '',
+  acme_server_url: '',
+  // Custom JSON
   dns01_challenge_json: '',
 })
 
@@ -217,6 +344,16 @@ const resetForm = () => {
   providerForm.alternative_tls_port = 0
   providerForm.key_type = ''
   providerForm.provider = 'cloudflare'
+  providerForm.cf_api_token = ''
+  providerForm.cf_zone_token = ''
+  providerForm.ali_access_key_id = ''
+  providerForm.ali_access_key_secret = ''
+  providerForm.ali_region_id = ''
+  providerForm.ali_security_token = ''
+  providerForm.acme_username = ''
+  providerForm.acme_password = ''
+  providerForm.acme_subdomain = ''
+  providerForm.acme_server_url = ''
   providerForm.dns01_challenge_json = ''
   domainInput.value = ''
 }
@@ -224,6 +361,26 @@ const resetForm = () => {
 const toList = (v: unknown): string[] => {
   if (v == null) return []
   return Array.isArray(v) ? v.map(String) : [String(v)]
+}
+
+function isValidDomain(domain: string): boolean {
+  const d = domain.trim()
+  if (!d) return false
+  const toCheck = d.startsWith('*.') ? d.slice(2) : d
+  if (
+    !toCheck ||
+    toCheck.includes('*') ||
+    toCheck.includes('/') ||
+    toCheck.includes(':') ||
+    toCheck.includes(' ') ||
+    toCheck.startsWith('.') ||
+    toCheck.endsWith('.')
+  ) {
+    return false
+  }
+  const labels = toCheck.split('.')
+  if (labels.length < 2) return false
+  return labels.every((label) => /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label))
 }
 
 watch(
@@ -248,17 +405,30 @@ watch(
       providerForm.alternative_http_port = Number(p.alternative_http_port || 0)
       providerForm.alternative_tls_port = Number(p.alternative_tls_port || 0)
       providerForm.key_type = typeof p.key_type === 'string' ? p.key_type : ''
+
       const d01 = p.dns01_challenge
       if (d01 && typeof d01 === 'object') {
-        providerForm.provider = typeof d01.provider === 'string' ? d01.provider : ''
-        const rest: Record<string, any> = { ...d01 }
-        delete rest.provider
-        providerForm.dns01_challenge_json = Object.keys(rest).length
-          ? JSON.stringify(rest, null, 2)
-          : ''
+        const prov = typeof d01.provider === 'string' ? d01.provider : 'cloudflare'
+        providerForm.provider = ['cloudflare', 'alidns', 'acmedns'].includes(prov) ? prov : 'custom'
+
+        if (prov === 'cloudflare') {
+          providerForm.cf_api_token = typeof d01.api_token === 'string' ? d01.api_token : ''
+          providerForm.cf_zone_token = typeof d01.zone_token === 'string' ? d01.zone_token : ''
+        } else if (prov === 'alidns') {
+          providerForm.ali_access_key_id = typeof d01.access_key_id === 'string' ? d01.access_key_id : ''
+          providerForm.ali_access_key_secret = typeof d01.access_key_secret === 'string' ? d01.access_key_secret : ''
+          providerForm.ali_region_id = typeof d01.region_id === 'string' ? d01.region_id : ''
+          providerForm.ali_security_token = typeof d01.security_token === 'string' ? d01.security_token : ''
+        } else if (prov === 'acmedns') {
+          providerForm.acme_username = typeof d01.username === 'string' ? d01.username : ''
+          providerForm.acme_password = typeof d01.password === 'string' ? d01.password : ''
+          providerForm.acme_subdomain = typeof d01.subdomain === 'string' ? d01.subdomain : ''
+          providerForm.acme_server_url = typeof d01.server_url === 'string' ? d01.server_url : ''
+        } else {
+          providerForm.dns01_challenge_json = JSON.stringify(d01, null, 2)
+        }
       } else {
         providerForm.provider = 'cloudflare'
-        providerForm.dns01_challenge_json = ''
       }
     } else {
       sourceJson.value = '{}'
@@ -268,12 +438,19 @@ watch(
 )
 
 const addDomain = () => {
+  if (!domainInput.value.trim()) return
   const parts = domainInput.value
     .split(/[,，\s]+/)
     .map((s) => s.trim())
     .filter(Boolean)
   for (const p of parts) {
-    if (!providerForm.domain.includes(p)) providerForm.domain.push(p)
+    if (!isValidDomain(p)) {
+      showToast(t('invalidDomain', { domain: p }), 'error')
+      continue
+    }
+    if (!providerForm.domain.includes(p)) {
+      providerForm.domain.push(p)
+    }
   }
   domainInput.value = ''
 }
@@ -284,11 +461,95 @@ const removeDomain = (d: string) => {
 }
 
 function buildProvider(): Record<string, any> {
-  if (!providerForm.tag.trim()) {
-    throw new Error('tag 必填')
+  if (domainInput.value.trim()) {
+    addDomain()
   }
-  const p: Record<string, any> = { type: providerForm.type, tag: providerForm.tag.trim() }
-  if (providerForm.domain.length) p.domain = [...providerForm.domain]
+
+  const tag = providerForm.tag.trim()
+  if (!tag) {
+    throw new Error(t('tagRequired'))
+  }
+
+  if (!providerForm.domain.length) {
+    throw new Error(t('domainRequired'))
+  }
+
+  for (const d of providerForm.domain) {
+    if (!isValidDomain(d)) {
+      throw new Error(t('invalidDomain', { domain: d }))
+    }
+  }
+
+  let d01: Record<string, any> | undefined
+
+  if (providerForm.provider === 'cloudflare') {
+    const apiToken = providerForm.cf_api_token.trim()
+    if (!apiToken) {
+      throw new Error(t('cfApiTokenRequired'))
+    }
+    d01 = {
+      provider: 'cloudflare',
+      api_token: apiToken,
+    }
+    if (providerForm.cf_zone_token.trim()) {
+      d01.zone_token = providerForm.cf_zone_token.trim()
+    }
+  } else if (providerForm.provider === 'alidns') {
+    const keyId = providerForm.ali_access_key_id.trim()
+    const keySecret = providerForm.ali_access_key_secret.trim()
+    if (!keyId || !keySecret) {
+      throw new Error(t('aliKeyRequired'))
+    }
+    d01 = {
+      provider: 'alidns',
+      access_key_id: keyId,
+      access_key_secret: keySecret,
+    }
+    if (providerForm.ali_region_id.trim()) d01.region_id = providerForm.ali_region_id.trim()
+    if (providerForm.ali_security_token.trim()) d01.security_token = providerForm.ali_security_token.trim()
+  } else if (providerForm.provider === 'acmedns') {
+    const u = providerForm.acme_username.trim()
+    const p = providerForm.acme_password.trim()
+    const sub = providerForm.acme_subdomain.trim()
+    if (!u || !p || !sub) {
+      throw new Error(t('acmeFieldsRequired'))
+    }
+    d01 = {
+      provider: 'acmedns',
+      username: u,
+      password: p,
+      subdomain: sub,
+    }
+    if (providerForm.acme_server_url.trim()) d01.server_url = providerForm.acme_server_url.trim()
+  } else if (providerForm.provider === 'custom') {
+    const rawJson = providerForm.dns01_challenge_json.trim()
+    if (!rawJson) {
+      throw new Error(t('dns01CredentialsRequired'))
+    }
+    try {
+      const parsed = JSON.parse(rawJson)
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
+        throw new Error(t('dns01CredentialsRequired'))
+      }
+      d01 = { ...parsed }
+    } catch (e) {
+      if ((e as Error).message === t('dns01CredentialsRequired')) {
+        throw e
+      }
+      throw new Error(t('dns01CredentialsInvalidJson', { error: (e as Error).message }))
+    }
+  }
+
+  const p: Record<string, any> = {
+    type: providerForm.type || 'acme',
+    tag,
+    domain: [...providerForm.domain],
+  }
+
+  if (d01) {
+    p.dns01_challenge = d01
+  }
+
   if (providerForm.data_directory.trim()) p.data_directory = providerForm.data_directory.trim()
   if (providerForm.default_server_name.trim())
     p.default_server_name = providerForm.default_server_name.trim()
@@ -302,44 +563,31 @@ function buildProvider(): Record<string, any> {
     p.alternative_tls_port = Number(providerForm.alternative_tls_port)
   if (providerForm.key_type) p.key_type = providerForm.key_type
 
-  let d01: Record<string, any> | undefined
-  if (providerForm.dns01_challenge_json.trim()) {
-    try {
-      const parsed = JSON.parse(providerForm.dns01_challenge_json.trim())
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        throw new Error('dns01_challenge 必须为 JSON 对象')
-      }
-      d01 = { ...parsed }
-    } catch (e) {
-      throw new Error(`dns01_challenge JSON 格式错误：${(e as Error).message}`)
-    }
-  }
-  if (providerForm.provider) {
-    d01 = d01 || {}
-    d01.provider = providerForm.provider
-  }
-  if (d01) p.dns01_challenge = d01
   return p
 }
 
 const save = async () => {
   saving.value = true
   try {
-    const payload = srcTab.value?.isDirty()
-      ? JSON.parse(srcTab.value.getText())
-      : buildProvider()
+    const payload =
+      activeTab.value === 'source' && srcTab.value?.isDirty()
+        ? JSON.parse(srcTab.value.getText())
+        : buildProvider()
+
+    console.log('[CertProviderDialog] Sending payload:', payload)
 
     if (props.isEdit && props.providerData?.id) {
       await api.updateCertProvider(props.providerData.id, payload)
     } else {
       await api.createCertProvider(payload)
     }
-    showToast('保存成功', 'success')
+    showToast(t('saveSuccess'), 'success')
     emit('update:modelValue', false)
     emit('saved')
     await statusStore.refresh()
   } catch (e) {
-    showToast((e as Error).message || '保存失败', 'error')
+    console.error('[CertProviderDialog] Save error:', e)
+    showToast((e as Error).message || t('saveFailed'), 'error')
   } finally {
     saving.value = false
   }
