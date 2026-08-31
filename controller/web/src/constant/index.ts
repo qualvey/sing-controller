@@ -13,6 +13,10 @@ import {
 } from '@heroicons/vue/24/outline'
 import { roundArrow } from 'tippy.js'
 
+import {
+  DatabaseSearch,
+}  from 'lucide-vue-next'
+
 export const IS_APPLE_DEVICE = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 
 
@@ -270,13 +274,16 @@ export const ROUTE_ICON_MAP = {
   [ROUTE_NAME.proxies]: GlobeAltIcon,
   [ROUTE_NAME.connections]: ArrowsRightLeftIcon,
   [ROUTE_NAME.rules]: SwatchIcon,
+  [ROUTE_NAME.routes]: SwatchIcon,
   [ROUTE_NAME.logs]: DocumentTextIcon,
+  [ROUTE_NAME.dns]: DatabaseSearch,
   // [ROUTE_NAME.tools]: WrenchScrewdriverIcon,
   [ROUTE_NAME.settings]: Cog6ToothIcon,
   [ROUTE_NAME.setup]: CubeTransparentIcon,
   [ROUTE_NAME.inbounds]: InboxIcon,
   [ROUTE_NAME.users]: UserIcon,
-  [ROUTE_NAME.cert]: KeyIcon
+  [ROUTE_NAME.cert]: KeyIcon,
+  [ROUTE_NAME.config]: DocumentTextIcon,
 }
 
 export enum TABLE_SIZE {
@@ -431,6 +438,7 @@ export enum OVERVIEW_CARD {
   EarthGlobeCard = 'EarthGlobeCard',
   ConnectionHistory = 'ConnectionHistory',
   RuleHitCountCard = 'RuleHitCountCard',
+  HonkStatsCard = 'HonkStatsCard',
 }
 
 export enum MIHOMO {
