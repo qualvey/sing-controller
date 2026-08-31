@@ -265,8 +265,6 @@ export enum ROUTE_NAME {
   users = 'users',
   routes = 'routes',
   dns = 'dns',
-  cert = 'cert',
-  config = 'config'
 }
 
 export const ROUTE_ICON_MAP = {
@@ -282,8 +280,6 @@ export const ROUTE_ICON_MAP = {
   [ROUTE_NAME.setup]: CubeTransparentIcon,
   [ROUTE_NAME.inbounds]: InboxIcon,
   [ROUTE_NAME.users]: UserIcon,
-  [ROUTE_NAME.cert]: KeyIcon,
-  [ROUTE_NAME.config]: DocumentTextIcon,
 }
 
 export enum TABLE_SIZE {
@@ -428,6 +424,7 @@ export enum SETTINGS_MENU_KEY {
   proxies = 'proxySettings',
   connections = 'connectionSettings',
   overview = 'overviewSettings',
+  config = 'configSettings',
 }
 
 export enum OVERVIEW_CARD {

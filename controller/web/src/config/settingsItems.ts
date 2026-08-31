@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS_MENU_ORDER = [
   SETTINGS_MENU_KEY.overview,
   SETTINGS_MENU_KEY.proxies,
   SETTINGS_MENU_KEY.connections,
+  SETTINGS_MENU_KEY.config,
 ]
 
 export const SETTINGS_MENU_LABELS: Record<SETTINGS_MENU_KEY, string> = {
@@ -29,9 +30,22 @@ export const SETTINGS_MENU_LABELS: Record<SETTINGS_MENU_KEY, string> = {
   [SETTINGS_MENU_KEY.proxies]: 'settingsMenuProxies',
   [SETTINGS_MENU_KEY.connections]: 'settingsMenuConnections',
   [SETTINGS_MENU_KEY.overview]: 'settingsMenuOverview',
+  [SETTINGS_MENU_KEY.config]: 'settingsMenuConfig',
 }
 
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
+  {
+    key: SETTINGS_MENU_KEY.config,
+    label: 'configSettings',
+    description: 'settingsDescriptionConfig',
+    items: [
+      {
+        key: `${SETTINGS_MENU_KEY.config}.editor`,
+        label: 'configEditor',
+        section: 'settingsSectionConfigEditor',
+      },
+    ],
+  },
   {
     key: SETTINGS_MENU_KEY.backend,
     label: 'backendSettings',
