@@ -3,7 +3,11 @@ package api
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/store"
@@ -398,6 +402,131 @@ func (h *Handler) handlePutDNSOptions(w http.ResponseWriter, r *http.Request) {
 		}
 		logger.Info("成功更新 DNS 基础选项")
 		return nil
+	})
+}
+
+type dnsCacheEntry struct {
+	ip        string
+	expiresAt time.Time
+}
+
+var (
+	dnsLookupCache   = make(map[string]dnsCacheEntry)
+	dnsLookupCacheMu sync.RWMutex
+)
+
+func getCachedDNS(domain string) (string, bool) {
+	dnsLookupCacheMu.RLock()
+	defer dnsLookupCacheMu.RUnlock()
+	entry, ok := dnsLookupCache[domain]
+	if ok && time.Now().Before(entry.expiresAt) {
+		return entry.ip, true
+	}
+	return "", false
+}
+
+func setCachedDNS(domain, ip string, ttl time.Duration) {
+	dnsLookupCacheMu.Lock()
+	defer dnsLookupCacheMu.Unlock()
+	dnsLookupCache[domain] = dnsCacheEntry{
+		ip:        ip,
+		expiresAt: time.Now().Add(ttl),
+	}
+}
+
+// handleDNSLookup 并发批量解析域名（前端地球仪/工具查询用）
+// POST /api/dns/lookup { "domains": ["google.com", "example.com"] }
+// 返回: { "results": { "google.com": "142.250.190.46", ... } }
+func (h *Handler) handleDNSLookup(w http.ResponseWriter, r *http.Request) {
+	body, err := readRawBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		Domains []string `json:"domains"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	if len(req.Domains) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"results": map[string]string{}})
+		return
+	}
+
+	// 限制单次批量查询数量，避免超大包
+	if len(req.Domains) > 100 {
+		req.Domains = req.Domains[:100]
+	}
+
+	results := make(map[string]string)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+
+	for _, rawDomain := range req.Domains {
+		domain := strings.TrimSpace(rawDomain)
+		if domain == "" {
+			continue
+		}
+		// 去掉末尾的点，如 google.com. -> google.com
+		domain = strings.TrimSuffix(domain, ".")
+
+		// 如果已经是 IP，直接返回
+		if ip := net.ParseIP(domain); ip != nil {
+			mu.Lock()
+			results[rawDomain] = domain
+			mu.Unlock()
+			continue
+		}
+
+		// 查缓存
+		if ip, ok := getCachedDNS(domain); ok {
+			mu.Lock()
+			results[rawDomain] = ip
+			mu.Unlock()
+			continue
+		}
+
+		wg.Add(1)
+		go func(d, original string) {
+			defer wg.Done()
+
+			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, d)
+			if err != nil || len(addrs) == 0 {
+				return
+			}
+
+			// 优先选 IPv4
+			var chosen string
+			for _, addr := range addrs {
+				if addr.IP.To4() != nil {
+					chosen = addr.IP.String()
+					break
+				}
+			}
+			if chosen == "" && len(addrs) > 0 {
+				chosen = addrs[0].IP.String()
+			}
+
+			if chosen != "" {
+				setCachedDNS(d, chosen, 10*time.Minute)
+				mu.Lock()
+				results[original] = chosen
+				mu.Unlock()
+			}
+		}(domain, rawDomain)
+	}
+
+	wg.Wait()
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"results": results,
 	})
 }
 

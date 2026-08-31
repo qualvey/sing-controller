@@ -94,8 +94,13 @@
 1. **样式与设计系统**：
    - 使用 Tailwind CSS + DaisyUI 语义化类名（如 `bg-base-200`, `text-primary`, `bg-base-300/50`），保持暗色/亮色主题与全局变量一致。
    - 避免使用非标准的硬编码颜色值（如 `#1a1a1a`），必须使用语义化色彩 token。
-2. **国际化 (i18n)**：
-   - 所有用户可见文本**严禁硬编码**，必须在 `src/i18n/` 中配置中英文对应翻译，并在组件中使用 `t('key')` 调用。
+2. **国际化 (i18n) 强规范**：
+   - **全面覆盖**：所有用户可见文本（页面标题、按钮文案、输入框 placeholder、Tab 标签、提示 tooltip、toast/notification 提示语、确认弹窗等）**严禁硬编码在组件或模板中**。
+   - **语言优先支持**：**英文 (`src/i18n/en.ts`) 为第一优先支持语言**，新增 key 必须第一时间在 `en.ts` 中声明；中文 (`src/i18n/zh.ts` / `zh-tw.ts`) 必须配置对应词条，若中文语义不确定或有歧义，可先留空或由用户指定补充。
+   - **调用方式**：
+     - Vue Template: `{{ $t('key') }}` / `:placeholder="$t('key')"`
+     - `<script setup>`: `const { t } = useI18n()` ➔ `t('key')`
+     - 非组件 TS/TSX 文件: `import { i18n } from '@/i18n'` ➔ `i18n.global.t('key')`
 3. **反馈与提示机制**：
    - 文本截断使用 `src/helper/tooltip.ts` 的 `checkTruncation` / `showTip` 机制。
    - 用户操作提示统一走 `showToast()` 或 `showNotification()`，危险操作二次确认统一走 `showConfirmDialog()`。

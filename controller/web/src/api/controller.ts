@@ -225,6 +225,10 @@ export const api = {
     http.delete(`/dns/rules/${encodeURIComponent(id)}`).then((r) => r.data),
   updateDnsOptions: (opts: Record<string, unknown>) =>
     http.put('/dns/options', opts).then((r) => r.data),
+  dnsLookup: (domains: string[]) =>
+    http
+      .post<{ results: Record<string, string> }>('/dns/lookup', { domains })
+      .then((r) => r.data.results),
 
   // 配置诊断
   diagnostics: () =>

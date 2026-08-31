@@ -7,7 +7,7 @@
       class="bg-base-200/80 fixed inset-0 z-[100000] flex items-center justify-center overflow-auto p-4 backdrop-blur-sm"
     >
       <div
-        class="border-base-border bg-base-100 flex w-96 max-w-full flex-col gap-3 rounded-xl border px-6 py-5 shadow-lg"
+        class="border-base-border bg-base-100 flex w-[420px] max-w-full flex-col gap-3 rounded-xl border px-6 py-5 shadow-xl"
       >
         <div class="flex items-start gap-3">
           <span
@@ -16,8 +16,10 @@
             <ExclamationTriangleIcon class="h-5 w-5" />
           </span>
           <div class="min-w-0 flex-1">
-            <h1 class="text-base font-medium">{{ $t('backendUnreachable') }}</h1>
-            <div class="text-base-content/60 truncate text-sm">{{ label }}</div>
+            <h1 class="text-base font-semibold leading-tight">
+              {{ isCoreOffline ? 'sing-box 核心未运行' : $t('backendUnreachable') }}
+            </h1>
+            <div class="text-base-content/60 mt-0.5 truncate text-sm">{{ label }}</div>
             <div
               v-if="url !== label"
               class="text-base-content/40 truncate text-xs"
@@ -27,47 +29,107 @@
           </div>
         </div>
 
-        <div class="bg-error/10 text-error rounded-lg px-3 py-2 text-xs leading-5 break-all">
-          {{ detail || $t('backendConnectionFailed') }}
+        <!-- 状态状态指示栏 -->
+        <div
+          v-if="isCoreOffline"
+          class="bg-base-200/60 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs"
+        >
+          <span class="inline-flex items-center gap-1 text-success">
+            <span class="inline-block h-2 w-2 rounded-full bg-success"></span>
+            Controller: 在线
+          </span>
+          <span class="text-base-content/20">|</span>
+          <span class="inline-flex items-center gap-1 text-error">
+            <span class="inline-block h-2 w-2 rounded-full bg-error"></span>
+            sing-box 核心: 离线
+          </span>
         </div>
 
-        <div class="flex gap-2">
+        <div class="bg-error/10 text-error rounded-lg px-3 py-2 text-xs leading-5 break-all">
+          {{ displayErrorDetail }}
+        </div>
+
+        <div class="flex flex-col gap-2">
+          <div class="flex gap-2">
+            <!-- 核心离线时提供一键重启/重载核心 -->
+            <button
+              v-if="isCoreOffline"
+              class="btn btn-primary btn-sm flex-1"
+              :disabled="isReloading || isRetrying"
+              @click="reloadCore"
+            >
+              <span
+                v-if="isReloading"
+                class="loading loading-spinner loading-xs"
+              ></span>
+              <ArrowPathIcon
+                v-else
+                class="h-4 w-4"
+              />
+              {{ isReloading ? '正在重载核心...' : '重载核心' }}
+            </button>
+
+            <button
+              class="btn btn-sm flex-1"
+              :class="{ 'btn-primary': !isCoreOffline, 'btn-outline': isCoreOffline }"
+              :disabled="isRetrying || isReloading"
+              @click="retry"
+            >
+              <span
+                v-if="isRetrying"
+                class="loading loading-spinner loading-xs"
+              ></span>
+              {{ isRetrying ? $t('backendConnecting') : $t('retry') }}
+            </button>
+            <button
+              class="btn btn-sm flex-1"
+              @click="editActiveBackend"
+            >
+              {{ $t('editBackendTitle') }}
+            </button>
+          </div>
+
           <button
-            class="btn btn-primary btn-sm flex-1"
-            :disabled="isRetrying"
-            @click="retry"
+            class="btn btn-ghost btn-xs w-full text-base-content/70"
+            @click="openBackendManager()"
           >
-            <span
-              v-if="isRetrying"
-              class="loading loading-spinner loading-xs"
-            ></span>
-            {{ isRetrying ? $t('backendConnecting') : $t('retry') }}
-          </button>
-          <button
-            class="btn btn-sm flex-1"
-            @click="editActiveBackend"
-          >
-            {{ $t('editBackendTitle') }}
+            {{ $t('manageBackends') }}
           </button>
         </div>
-        <button
-          class="btn btn-ghost btn-sm"
-          @click="openBackendManager()"
+
+        <!-- 快速切换到其他后端 -->
+        <div
+          v-if="otherBackends.length > 0"
+          class="border-base-border border-t pt-2.5"
         >
-          {{ $t('manageBackends') }}
-        </button>
+          <div class="text-base-content/60 mb-1.5 text-xs font-medium">快速切换到其他后端：</div>
+          <div class="flex max-h-32 flex-col gap-1 overflow-y-auto">
+            <button
+              v-for="backend in otherBackends"
+              :key="backend.uuid"
+              class="hover:bg-base-200 flex items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors"
+              @click="switchBackend(backend.uuid)"
+            >
+              <span class="flex items-center gap-1.5 truncate">
+                <ServerIcon class="h-3.5 w-3.5 opacity-60 flex-none" />
+                <span class="truncate">{{ getLabelFromBackend(backend) }}</span>
+              </span>
+              <ChevronRightIcon class="h-3 w-3 opacity-40 flex-none" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </Transition>
 </template>
 
 <script setup lang="ts">
-import { probeBackend } from '@/assembly/backend'
+import { api } from '@/api'
 import { startBackendSession } from '@/assembly/session'
 import { backendProbe } from '@/assembly/version'
 import { ROUTE_NAME } from '@/constant'
 import { describeConnectionError } from '@/helper/connectivity'
-import { showNotification } from '@/helper/notification'
+import { showToast } from '@/helper/toast'
 import { getBackendProbeUrl, getLabelFromBackend } from '@/helper/utils'
 import {
   activeBackend,
@@ -76,14 +138,19 @@ import {
   backendManagerView,
   openBackendManager,
 } from '@/store/setup'
-import { ChevronRightIcon, ExclamationTriangleIcon, ServerIcon } from '@heroicons/vue/24/outline'
+import { useStatusStore } from '@/store/status'
+import {
+  ArrowPathIcon,
+  ChevronRightIcon,
+  ExclamationTriangleIcon,
+  ServerIcon,
+} from '@heroicons/vue/24/outline'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
-const AUTO_SWITCH_TIMEOUT = 8000
-
-const isSwitching = ref(false)
+const statusStore = useStatusStore()
 const detail = ref('')
+const isReloading = ref(false)
 
 // 探测结果属于上一个后端时不认,免得刚切走就弹一个旧后端的失败。
 const probe = computed(() =>
@@ -91,15 +158,41 @@ const probe = computed(() =>
 )
 const isRetrying = computed(() => probe.value?.status === 'probing')
 
+// 判断是否属于 Controller 存活但 sing-box 核心未运行 / 离线
+const isCoreOffline = computed(() => {
+  const msg = probe.value?.message || detail.value || ''
+  return (
+    msg.includes('核心未运行') ||
+    msg.includes('core offline') ||
+    statusStore.status?.core_alive === false ||
+    (statusStore.status?.core && !statusStore.status.core.alive)
+  )
+})
+
+const displayErrorDetail = computed(() => {
+  if (isCoreOffline.value) {
+    return (
+      statusStore.status?.core_error ||
+      statusStore.status?.core?.error ||
+      detail.value ||
+      'sing-box 核心进程已停止或未启动'
+    )
+  }
+  return detail.value || '无法连接到控制服务'
+})
+
 // 失败一次就一直摆着,直到真的连上或换了后端 —— 点重试的瞬间探测状态会回到
 // probing,若跟着它走,页面会先整个消失再弹回来,像是自己好了。
 const failed = ref(false)
 
 watch(
-  () => probe.value?.status,
-  (status) => {
-    if (status === 'failed') failed.value = true
-    if (status === 'connected' || status === undefined) failed.value = false
+  [() => probe.value?.status, () => statusStore.status?.core_alive, () => statusStore.status?.core?.alive],
+  ([status, coreAlive, coreObjAlive]) => {
+    if (status === 'failed' || coreAlive === false || coreObjAlive === false) {
+      failed.value = true
+    } else if (status === 'connected' || status === undefined) {
+      failed.value = false
+    }
   },
   { immediate: true },
 )
@@ -141,7 +234,30 @@ watch(
   { immediate: true },
 )
 
-const retry = () => startBackendSession()
+const retry = () => {
+  void statusStore.refresh()
+  startBackendSession()
+}
+
+const reloadCore = async () => {
+  if (isReloading.value) return
+  isReloading.value = true
+  try {
+    const res = await api.reload()
+    showToast(res.reloaded ? 'sing-box 核心重载成功' : '已发送重载指令', 'success')
+    await statusStore.refresh()
+    startBackendSession()
+  } catch (e) {
+    showToast((e as Error).message || '重载核心失败', 'error')
+  } finally {
+    isReloading.value = false
+  }
+}
+
+const switchBackend = (uuid: string) => {
+  activeUuid.value = uuid
+  startBackendSession()
+}
 
 const editActiveBackend = () => {
   if (!activeUuid.value) return
@@ -160,3 +276,4 @@ const editActiveBackend = () => {
   opacity: 0;
 }
 </style>
+

@@ -496,7 +496,7 @@ const refreshRoutes = async () => {
         language.value,
         lookupLocations,
       )
-
+      console.log('📍 [buildEarthRoutes 结果]:', result)
       if (!disposed) {
         routeCount.value = result.routes.length
         if (result.origin) renderer.value?.setInitialLocation(result.origin)
@@ -681,7 +681,8 @@ const initialize = async () => {
     createdRenderer.setAutoRotation(!rotationPaused.value)
     createdRenderer.setCityLabelsVisible(showCityLabels.value)
     scheduleRouteRefresh()
-  } catch {
+  } catch(error) {
+    console.error('🔥 [EarthRenderer] 初始化崩溃:', error)
     canvasRef.value?.replaceChildren()
     rendererError.value = t('earthRendererError')
   }

@@ -134,6 +134,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("PUT /api/dns/rules/{id}", h.handleUpdateDNSRule)
 	mux.HandleFunc("DELETE /api/dns/rules/{id}", h.handleDeleteDNSRule)
 	mux.HandleFunc("PUT /api/dns/options", h.handlePutDNSOptions)
+	mux.HandleFunc("POST /api/dns/lookup", h.handleDNSLookup)
 
 	// 诊断
 	mux.HandleFunc("GET /api/diagnostics", h.handleDiagnostics)
@@ -157,8 +158,57 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	return h.withMiddleware(mux)
 }
 
+type statusResponseWriter struct {
+	http.ResponseWriter
+	statusCode   int
+	bytesWritten int64
+}
+
+func (rw *statusResponseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *statusResponseWriter) Write(b []byte) (int, error) {
+	if rw.statusCode == 0 {
+		rw.statusCode = http.StatusOK
+	}
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytesWritten += int64(n)
+	return n, err
+}
+
+func (rw *statusResponseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
+func (rw *statusResponseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
 		// CORS（webui dev server 跨端口）
 		origin := r.Header.Get("Origin")
 		if origin != "" {
@@ -171,14 +221,41 @@ func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+
+		wrapped := &statusResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		defer func() {
+			duration := time.Since(start)
+			status := wrapped.statusCode
+			ip := clientIP(r)
+			path := r.URL.Path
+			if r.URL.RawQuery != "" {
+				path += "?" + r.URL.RawQuery
+			}
+
+			// 对健康检查接口在 Debug 级别输出，避免高频刷屏
+			if r.URL.Path == "/healthz" {
+				logger.Debug("[HTTP] %s %s %d (%s) - %s %dB", r.Method, path, status, duration, ip, wrapped.bytesWritten)
+				return
+			}
+
+			if status >= 500 {
+				logger.Error("[HTTP] %s %s %d (%s) - %s %dB", r.Method, path, status, duration, ip, wrapped.bytesWritten)
+			} else if status >= 400 {
+				logger.Warn("[HTTP] %s %s %d (%s) - %s %dB", r.Method, path, status, duration, ip, wrapped.bytesWritten)
+			} else {
+				logger.Info("[HTTP] %s %s %d (%s) - %s %dB", r.Method, path, status, duration, ip, wrapped.bytesWritten)
+			}
+		}()
+
 		// 鉴权
 		if h.secret != "" {
 			if r.Header.Get("X-Secret") != h.secret && r.URL.Query().Get("token") != h.secret {
-				writeError(w, http.StatusUnauthorized, errors.New("invalid secret"))
+				logger.Warn("鉴权失败: IP=%s Path=%s", clientIP(r), r.URL.Path)
+				writeError(wrapped, http.StatusUnauthorized, errors.New("invalid secret"))
 				return
 			}
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(wrapped, r)
 	})
 }
 
@@ -226,7 +303,7 @@ func (h *Handler) schema() ([]byte, error) {
 // commit 执行"内存修改 → 全量校验 → 原子写盘"管线。
 func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*option.Options, *store.Meta) error) {
 	if err := h.store.Update(h.ctx(r), mutate); err != nil {
-		logger.Error("store.Update 失败: %v", err) // 👈 加这行，控制台会直接打印出具体的错误信息
+		logger.Warn("配置更新提交失败 (path=%s): %v", r.URL.Path, err)
 		var refErr *GroupReferenceError
 		if errors.As(err, &refErr) {
 			writeJSON(w, http.StatusConflict, map[string]any{
@@ -238,12 +315,15 @@ func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*op
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	logger.Info("配置更新已原子落盘 (path=%s)", r.URL.Path)
 	response := map[string]any{"saved": true}
 	// 保存后自动重载 sing-box（settings.reload.after_save）
 	if executed, err := h.reloadIfEnabled(); err != nil {
+		logger.Error("配置保存后自动重载 sing-box 失败: %v", err)
 		response["reload_error"] = err.Error()
 		response["message"] = "配置已保存，但 sing-box 重载失败"
 	} else if executed {
+		logger.Info("配置保存后自动重载 sing-box 成功")
 		response["reloaded"] = true
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -290,6 +370,7 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if h.store.Options.Route != nil {
 		ruleCount = len(h.store.Options.Route.Rules)
 	}
+	coreStatus := h.probeCoreHealth(1 * time.Second)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"config_path":       h.store.Path(),
 		"controller_config": h.settings.Path(),
@@ -300,6 +381,11 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"inbounds":          len(h.store.Options.Inbounds),
 		"outbounds":         len(h.store.Options.Outbounds),
 		"rules":             ruleCount,
+		"core":              coreStatus,
+		"core_alive":        coreStatus.Alive,
+		"core_version":      coreStatus.Version,
+		"core_type":         coreStatus.Type,
+		"core_error":        coreStatus.Error,
 	})
 }
 
@@ -364,6 +450,8 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		// 动态调整 logger 级别实时生效
+		logger.SetLevel(newValues.Log.Level)
 	}
 	if newValues.MinPort < 1024 || newValues.MinPort > 65535 {
 		writeError(w, http.StatusBadRequest, errors.New("min_port 需在 1024-65535 之间"))
@@ -381,17 +469,22 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		*s = newValues
 		return nil
 	}); err != nil {
+		logger.Error("更新 controller 设置失败: %v", err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	logger.Info("Controller 设置已成功更新 (listen=%s, log_level=%s, min_port=%d, config=%s)",
+		newValues.Listen, logger.GetLevel().String(), newValues.MinPort, newValues.Config)
 	// config 路径变更 → 切换主配置存储
 	if h.store.Path() != newValues.Config {
+		logger.Info("切换 sing-box 配置文件路径: %s -> %s", h.store.Path(), newValues.Config)
 		h.store.SetPath(newValues.Config)
 		if err := h.store.Load(ctx, store.DefaultConfig{
 			InboundType: newValues.Defaults.InboundType,
 			Listen:      newValues.Defaults.Listen,
 			ListenPort:  newValues.Defaults.ListenPort,
 		}); err != nil {
+			logger.Error("加载新 sing-box 主配置失败: %v", err)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"saved":      true,
 				"load_error": err.Error(),
@@ -412,9 +505,11 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	content, err := h.store.Content(h.ctx(r))
 	if err != nil {
+		logger.Error("获取 sing-box 格式化配置失败: %v", err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	logger.Debug("读取 sing-box 格式化配置成功 (bytes=%d)", len(content))
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
@@ -426,6 +521,7 @@ func (h *Handler) handleGetConfigRaw(w http.ResponseWriter, r *http.Request) {
 	if len(content) == 0 {
 		content = []byte("{}\n")
 	}
+	logger.Debug("读取 sing-box 原始配置成功 (bytes=%d)", len(content))
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
@@ -442,16 +538,21 @@ func (h *Handler) handlePutConfigRaw(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("配置内容为空"))
 		return
 	}
+	logger.Info("尝试原样保存 sing-box 配置 (bytes=%d)", len(body))
 	if err := h.store.RawSave(h.ctx(r), body); err != nil {
+		logger.Warn("原样保存 sing-box 配置校验或写盘失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	logger.Info("原样保存 sing-box 配置成功")
 	response := map[string]any{"saved": true}
 	// 保存后自动重载 sing-box（settings.reload.after_save）
 	if executed, err := h.reloadIfEnabled(); err != nil {
+		logger.Error("保存后自动重载 sing-box 失败: %v", err)
 		response["reload_error"] = err.Error()
 		response["message"] = "配置已保存，但 sing-box 重载失败"
 	} else if executed {
+		logger.Info("保存后自动重载 sing-box 成功")
 		response["reloaded"] = true
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -463,8 +564,10 @@ func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	logger.Info("尝试全量更新 sing-box 配置 (bytes=%d)", len(body))
 	// 先完整校验，再落盘
 	if err := store.Validate(h.ctx(r), body); err != nil {
+		logger.Warn("全量更新 sing-box 配置校验失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
