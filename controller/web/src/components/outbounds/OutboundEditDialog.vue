@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { showToast } from '@/helper/toast'
 import { showConfirmDialog } from '@/helper/confirmDialog'
-import { ClipboardPasteIcon, KeyRoundIcon, LoaderIcon } from 'lucide-vue-next'
+import { ClipboardPasteIcon, KeyRoundIcon, LoaderIcon } from '@lucide/vue'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
