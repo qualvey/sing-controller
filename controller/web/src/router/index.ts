@@ -83,7 +83,7 @@ const childrenRouter = [
 // Routes that require a specific capability to be visitable.
 const ROUTE_CAPABILITY: Partial<Record<string, Cap>> = {
   [ROUTE_NAME.rules]: 'rules',
-  [ROUTE_NAME.tools]: 'tools',
+  // [ROUTE_NAME.tools]: 'tools',
 }
 
 const router = createRouter({
@@ -111,8 +111,7 @@ const title = useTitle('zashboard')
 const setTitleByName = (name: string | symbol | undefined) => {
   if (typeof name === 'string' && activeBackend.value) {
     const backend = activeBackend.value
-    const prefix = backend.label || `${backend.host}:${backend.port}`
-    title.value = `${prefix} | ${i18n.global.t(name)}`
+    title.value = `${i18n.global.t(name)}`
   } else {
     title.value = 'zashboard'
   }
