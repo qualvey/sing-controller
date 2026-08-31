@@ -40,10 +40,11 @@ export default defineConfig({
     __COMMIT_ID__: JSON.stringify(getGitCommitId()),
     __FONT__: JSON.stringify(font),
   },
-  esbuild: {
-    // 生产环境打包时自动丢弃所有 debugger 和 console.log
-    drop: process.env.NODE_ENV === 'production' ? ['debugger', 'console'] : []
-  },
+  build: { sourcemap: true },
+  // esbuild: {
+  //   // 生产环境打包时自动丢弃所有 debugger 和 console.log
+  //   drop: process.env.NODE_ENV === 'production' ? ['debugger', 'console'] : []
+  // },
   base: resolveBase(),
   plugins: [vue(), lezer(), tailwindcss(), vueJsx()],
   resolve: {
@@ -56,11 +57,20 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    sourcemapIgnoreList: false ,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: 'http://localhost:8080',
         changeOrigin: true,
-        ws: true
+        ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.error('[vite proxy error]', err)
+          })
+          proxy.on('proxyReq', (_proxyReq, req, _res) => {
+            console.log('[vite proxy req]', req.method, req.url)
+          })
+        }
       }
     }
   }
