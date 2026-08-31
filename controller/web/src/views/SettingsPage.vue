@@ -267,6 +267,7 @@ import BackendStatusDot from '@/components/common/BackendStatusDot.vue'
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import SelectInput from '@/components/common/SelectInput.vue'
 import BackendSettings from '@/components/settings/backend/BackendSettings.vue'
+import ConfigEditor from '@/components/settings/config/ConfigEditor.vue'
 import ConnectionsSettings from '@/components/settings/connections/ConnectionsSettings.vue'
 import ZashboardSettings from '@/components/settings/general/ZashboardSettings.vue'
 import OverviewSettings from '@/components/settings/overview/OverviewSettings.vue'
@@ -287,6 +288,7 @@ import {
   ArrowsRightLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CodeBracketSquareIcon,
   CubeTransparentIcon,
   GlobeAltIcon,
   HomeIcon,
@@ -347,6 +349,10 @@ const categoryPresentation: Record<SETTINGS_MENU_KEY, { icon: Component; compone
   [SETTINGS_MENU_KEY.connections]: {
     icon: ArrowsRightLeftIcon,
     component: ConnectionsSettings,
+  },
+  [SETTINGS_MENU_KEY.config]: {
+    icon: CodeBracketSquareIcon,
+    component: ConfigEditor,
   },
 }
 const allCategoryComponents: CategoryView[] = SETTINGS_CATEGORIES.map((category) => ({
