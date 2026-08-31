@@ -42,7 +42,7 @@ const migrateBackendList = (list: LegacyBackend[]): Backend[] => {
 
 
 export const backendList = ref<Backend[]>([
-  { type: 'singbox', protocol: 'sing-box', uuid: '123' }
+  { type: 'singbox', protocol: 'sing-box', uuid: '123', label: 'sing-box' }
 ]);
 
 export const showBackendSettingsDialog = ref(false)
