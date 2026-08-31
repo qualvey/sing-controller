@@ -40,26 +40,62 @@ export const getSingboxClient = (): SingboxClient | null => {
   return current.client
 }
 
+import type { ProbeResult } from '@/helper/connectivity'
+
 // Probe the sing-box channel for the Setup connectivity test.
-export const probeSingboxChannel = async (backend: Backend, timeout = 10000): Promise<boolean> => {
+export const probeSingboxChannel = async (
+  backend: Backend,
+  timeout = 10000,
+  signal?: AbortSignal,
+): Promise<ProbeResult> => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+  const onAbort = () => controller.abort()
+  signal?.addEventListener('abort', onAbort, { once: true })
+
+  const startAt = Date.now()
+  const latency = () => Date.now() - startAt
+
+  // 1. 优先探测 controller /healthz 或 /api/status 端点
+  try {
+    const res = await fetch(`${window.location.origin}/healthz`, {
+      method: 'GET',
+      signal: controller.signal,
+    })
+    if (res.ok) {
+      return { ok: true, latency: latency() }
+    }
+  } catch {
+    // continue to gRPC check
+  }
+
+  // 2. 备选探测 sing-box gRPC 接口
   const baseUrl = getSingboxUrlFromBackend()
-  if (!baseUrl) return false
-  // const secret = getSingboxSecret(backend)
+  if (!baseUrl) {
+    clearTimeout(timeoutId)
+    signal?.removeEventListener('abort', onAbort)
+    return { ok: false, latency: latency(), kind: 'network', message: 'No sing-box URL' }
+  }
+
   const client = createClient(
     StartedService,
     createGrpcWebTransport({
       baseUrl,
-      // interceptors: secret ? [authInterceptor(secret)] : [],
     }),
   )
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeout)
+
   try {
     await client.getVersion({}, { signal: controller.signal })
-    return true
-  } catch {
-    return false
+    return { ok: true, latency: latency() }
+  } catch (e) {
+    return {
+      ok: false,
+      latency: latency(),
+      kind: controller.signal.aborted ? 'timeout' : 'network',
+      message: e instanceof Error ? e.message : String(e),
+    }
   } finally {
-    clearTimeout(timer)
+    clearTimeout(timeoutId)
+    signal?.removeEventListener('abort', onAbort)
   }
 }

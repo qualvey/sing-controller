@@ -24,6 +24,7 @@
 // 字符串可靠,不该被降级成全局猜测。
 
 import { probeClashChannel } from '@/api/clash'
+import { probeSingboxChannel } from '@/api/singbox/client'
 import { displayAllFeatures } from '@/store/settings'
 import type { ProbeResult } from '@/helper/connectivity'
 
@@ -174,7 +175,12 @@ export const probeBackend = async (
   backend: Backend,
   timeout: number = 10000,
   signal?: AbortSignal,
-): Promise<ProbeResult> => probeClashChannel(backend, timeout, signal)
+): Promise<ProbeResult> => {
+  if (backend.type === 'singbox') {
+    return probeSingboxChannel(backend, timeout, signal)
+  }
+  return probeClashChannel(backend, timeout, signal)
+}
 
 export const isBackendAvailable = (backend: Backend, timeout: number = 10000) =>
   probeBackend(backend, timeout).then((result) => result.ok)

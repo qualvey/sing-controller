@@ -1,5 +1,7 @@
-// api 层公共入口。注册全局拦截器并再导出 Clash 纯请求函数。
-// 后端选择 / 数据组装 / 响应式状态一律在 assembly 层,不在此处。
-import './http'
+// api 层公共入口。
+// 1. 独立封装的 sing-controller 专有配置管理 API (根据 API.md)
+export * from './controller'
 
+// 2. zashboard 遗产：Clash 兼容接口与拦截器
+import './http'
 export * from './clash'

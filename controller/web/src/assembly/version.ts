@@ -1,7 +1,12 @@
-// 组装层 · 版本与升级。
-// 版本字符串是 core 轴(assembly/backend.ts)的唯一来源:这里探测完成后写入 core,
-// 后端切换的瞬间先重置为 'unknown',避免沿用上一个后端的结论。
-import { fetchClashVersion, restartCoreAPI, upgradeCoreAPI, upgradeUIAPI } from '@/api/clash'
+import { api } from '@/api'
+import {
+  fetchClashVersion,
+  probeClashChannel,
+  restartCoreAPI,
+  upgradeCoreAPI,
+  upgradeUIAPI,
+} from '@/api/clash'
+import { getSingboxClient } from '@/api/singbox/client'
 import HonkLogo from '@/assets/images/honk.svg'
 import MetacubexLogo from '@/assets/images/metacubex.jpg'
 import { MIHOMO, MIHOMO_CHANNEL } from '@/constant'
@@ -10,7 +15,7 @@ import { autoUpgradeCore, autoUpgradeDashboard, checkUpgradeCore } from '@/store
 import { activeBackend } from '@/store/setup'
 import type { Backend } from '@/types'
 import { computed, nextTick, ref } from 'vue'
-import { can, core, Core, resetCore } from './backend'
+import { can, channel, Channel, clashAvailable, core, Core, resetCore } from './backend'
 
 export const version = ref()
 export const isCoreUpdateAvailable = ref(false)
@@ -28,11 +33,13 @@ export type BackendProbe = {
 
 export const backendProbe = ref<BackendProbe | undefined>()
 
-// honk 的 /version 返回 "honk <semver>"(见 honk-core/src/clash_api.rs 的 version handler)。
+// 内核类型嗅探：优先识别 sing-box，支持 honk 与 mihomo
 const detectCore = (versionString: string): Core => {
   if (!versionString) return Core.Unknown
+  if (/\bsing-box\b/i.test(versionString) || /singbox/i.test(versionString)) return Core.Singbox
   if (/\bhonk\b/i.test(versionString)) return Core.Honk
-  return Core.Mihomo
+  if (/\bmihomo\b/i.test(versionString) || /\bmeta\b/i.test(versionString)) return Core.Mihomo
+  return Core.Singbox
 }
 
 // 内核品牌的展示信息(logo / 官网链接)。纯展示,不是能力门控,故允许 view 使用。
@@ -40,10 +47,16 @@ export const coreBrand = computed(() => {
   switch (core.value) {
     case Core.Honk:
       return { logo: HonkLogo, url: 'https://github.com/Glassyiris/honk' }
-    default:
+    case Core.Mihomo:
       return {
         logo: MetacubexLogo,
         url: MIHOMO_CHANNEL[mihomo.value?.[0] ?? MIHOMO.Meta].url,
+      }
+    case Core.Singbox:
+    default:
+      return {
+        logo: MetacubexLogo,
+        url: 'https://sing-box.sagernet.org',
       }
   }
 })
@@ -64,7 +77,41 @@ export const mihomo = computed<[MIHOMO, string] | undefined>(() => {
   }
 })
 
-export const fetchVersionAPI = () => fetchClashVersion()
+export const fetchVersionAPI = async (): Promise<{ data: { version: string } }> => {
+  if (channel.value === Channel.Singbox) {
+    // 1. 优先尝试 gRPC StartedService.getVersion
+    try {
+      const client = getSingboxClient()
+      if (client) {
+        const resp = await client.client.getVersion({})
+        if (resp && resp.version) {
+          return { data: { version: resp.version } }
+        }
+      }
+    } catch {
+      // continue
+    }
+
+    // 2. 尝试 controller /api/status 或 /healthz
+    try {
+      const status = await api.status()
+      if (status) {
+        return { data: { version: 'sing-box (controller)' } }
+      }
+    } catch {
+      // continue
+    }
+
+    // 3. 备选尝试 clash API /version
+    try {
+      return await fetchClashVersion()
+    } catch {
+      return { data: { version: 'sing-box' } }
+    }
+  }
+
+  return fetchClashVersion()
+}
 
 const probeBackend = async (backend: Backend) => {
   const startAt = Date.now()
@@ -95,6 +142,15 @@ const probeBackend = async (backend: Backend) => {
     latency: Date.now() - startAt,
     message: '',
   }
+
+  // 异步静默探测 clash_api 连通性，供 Clash 专属功能做软降级
+  probeClashChannel(backend, 3000)
+    .then((res) => {
+      clashAvailable.value = res.ok
+    })
+    .catch(() => {
+      clashAvailable.value = false
+    })
 
   if (!can('coreUpdateCheck') || !checkUpgradeCore.value || backend.disableUpgradeCore) return
 
