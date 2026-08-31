@@ -641,7 +641,7 @@ import {
   TrashIcon,
   UserPlusIcon,
   WandIcon,
-} from 'lucide-vue-next'
+} from '@lucide/vue'
 import { computed, reactive, ref, watch } from 'vue'
 
 

@@ -14,8 +14,11 @@ import {
 import { roundArrow } from 'tippy.js'
 
 import {
-  DatabaseSearch,
-}  from 'lucide-vue-next'
+  UsersRound,
+  SquareArrowRightEnter,
+  GlobeCheck
+
+} from '@lucide/vue'
 
 export const IS_APPLE_DEVICE = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
 
@@ -259,12 +262,12 @@ export enum ROUTE_NAME {
   logs = 'logs',
   rules = 'rules',
   //tools = 'tools',
-  settings = 'settings',
-  setup = 'setup',
   inbounds = 'inbounds',
   users = 'users',
   routes = 'routes',
   dns = 'dns',
+  settings = 'settings',
+  setup = 'setup',
 }
 
 export const ROUTE_ICON_MAP = {
@@ -274,12 +277,12 @@ export const ROUTE_ICON_MAP = {
   [ROUTE_NAME.rules]: SwatchIcon,
   [ROUTE_NAME.routes]: SwatchIcon,
   [ROUTE_NAME.logs]: DocumentTextIcon,
-  [ROUTE_NAME.dns]: DatabaseSearch,
+  [ROUTE_NAME.dns]: GlobeCheck,
   // [ROUTE_NAME.tools]: WrenchScrewdriverIcon,
   [ROUTE_NAME.settings]: Cog6ToothIcon,
   [ROUTE_NAME.setup]: CubeTransparentIcon,
-  [ROUTE_NAME.inbounds]: InboxIcon,
-  [ROUTE_NAME.users]: UserIcon,
+  [ROUTE_NAME.inbounds]: SquareArrowRightEnter,
+  [ROUTE_NAME.users]: UsersRound,
 }
 
 export enum TABLE_SIZE {
