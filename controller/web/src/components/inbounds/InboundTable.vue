@@ -1,14 +1,32 @@
 <template>
   <div class="border-base-content/10 bg-base-100 overflow-hidden rounded-lg border shadow-xs">
-    <table class="table table-sm w-full">
+    <!-- 头部工具栏：标题与新建按钮 -->
+    <div class="flex items-center justify-between border-b border-base-content/10 px-4 py-3">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-semibold text-base-content/90">{{ $t('inbounds') }}</span>
+        <span class="badge badge-sm badge-neutral badge-outline font-mono">{{ inbounds.length }}</span>
+      </div>
+      <button
+        class="btn btn-primary btn-sm gap-1.5"
+        @click="openCreateInboundModal"
+      >
+        <PlusIcon class="h-4 w-4" />
+        {{ $t('createInbound') }}
+      </button>
+    </div>
+
+    <table
+      v-if="inbounds.length"
+      class="table table-sm w-full"
+    >
       <thead>
-        <tr class="border-base-content/10">
-          <th class="w-[140px]">类型</th>
+        <tr class="border-base-content/10 text-xs">
+          <th class="w-[140px]">{{ $t('type') }}</th>
           <th class="w-[180px]">tag</th>
-          <th>listen</th>
-          <th class="w-[120px]">listen_port</th>
-          <th class="w-[220px]">method</th>
-          <th class="w-[130px] text-right">操作</th>
+          <th>{{ $t('listen') }}</th>
+          <th class="w-[120px]">{{ $t('listenPort') }}</th>
+          <th class="w-[220px]">{{ $t('method') }}</th>
+          <th class="w-[130px] text-right">{{ $t('actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -80,23 +98,31 @@
               class="btn btn-ghost btn-xs text-primary"
               @click="openEditInboundModal(row.tag)"
             >
-              编辑
+              {{ $t('edit') }}
             </button>
             <button
               class="btn btn-ghost btn-xs text-error"
               @click="handleRemove(row)"
             >
-              删除
+              {{ $t('delete') }}
             </button>
           </td>
         </tr>
       </tbody>
     </table>
+
     <div
-      v-if="!inbounds.length"
-      class="text-base-content/60 py-10 text-center text-sm"
+      v-else
+      class="text-base-content/60 flex flex-col items-center justify-center py-12 text-center text-sm"
     >
-      暂无 Inbound。点击右上角「新建 Inbound」进行添加。
+      <p class="mb-3">{{ $t('noInboundsTip') }}</p>
+      <button
+        class="btn btn-primary btn-sm gap-1.5"
+        @click="openCreateInboundModal"
+      >
+        <PlusIcon class="h-4 w-4" />
+        {{ $t('createInbound') }}
+      </button>
     </div>
   </div>
 </template>
@@ -105,8 +131,12 @@
 import type { Inbound } from '@/api'
 import { deleteInbound, inboundsFilter } from '@/assembly/inbounds'
 import HighlightText from '@/components/common/HighlightText.vue'
-import { openEditInboundModal } from '@/composables/inboundManagement'
+import { openCreateInboundModal, openEditInboundModal } from '@/composables/inboundManagement'
 import { showConfirmDialog } from '@/helper/confirmDialog'
+import { PlusIcon } from '@heroicons/vue/24/outline'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps<{
   inbounds: Inbound[]
@@ -114,9 +144,9 @@ defineProps<{
 
 const handleRemove = async (row: Inbound) => {
   const { confirmed } = await showConfirmDialog({
-    title: '删除确认',
+    title: t('confirmDelete') || '删除确认',
     message: `确定删除 inbound「${row.tag}」？该操作不可恢复。`,
-    confirmText: '删除',
+    confirmText: t('delete') || '删除',
     confirmButtonClass: 'btn-error',
   })
   if (!confirmed) return

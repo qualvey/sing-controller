@@ -11,17 +11,9 @@
         />
         <div class="flex-1"></div>
         <button
-          v-if="inboundsTabShow === 'form'"
-          class="btn btn-circle btn-sm btn-primary"
-          title="新建 Inbound"
-          @click="openCreateInboundModal"
-        >
-          <PlusIcon class="h-4 w-4" />
-        </button>
-        <button
           class="btn btn-circle btn-sm"
           :disabled="loading"
-          title="刷新"
+          :title="$t('refresh')"
           @click="fetchInbounds"
         >
           <ArrowPathIcon
@@ -38,7 +30,7 @@
         <TextInput
           v-model="inboundsFilter"
           class="w-full flex-1"
-          placeholder="搜索 Inbound / tag / 端口 | Regex"
+          :placeholder="$t('searchInbounds')"
           :clearable="true"
         />
       </div>
@@ -46,7 +38,7 @@
         v-if="inboundsTabShow === 'form'"
         class="text-base-content/60 flex items-center justify-between px-1 text-xs"
       >
-        <span>{{ inbounds.length }} 个入站</span>
+        <span>{{ inbounds.length }} {{ $t('inbounds') }}</span>
       </div>
     </div>
 
@@ -62,17 +54,9 @@
         v-if="inboundsTabShow === 'form'"
         v-model="inboundsFilter"
         class="w-80"
-        placeholder="搜索 Inbound / tag / 端口 | Regex"
+        :placeholder="$t('searchInbounds')"
         :clearable="true"
       />
-      <button
-        v-if="inboundsTabShow === 'form'"
-        class="btn btn-primary btn-sm gap-1.5"
-        @click="openCreateInboundModal"
-      >
-        <PlusIcon class="h-4 w-4" />
-        新建 Inbound
-      </button>
       <button
         class="btn btn-ghost btn-sm gap-1.5"
         :disabled="loading"
@@ -82,14 +66,14 @@
           class="h-4 w-4"
           :class="{ 'animate-spin': loading }"
         />
-        刷新
+        {{ $t('refresh') }}
       </button>
       <div class="flex-1"></div>
       <div
         v-if="inboundsTabShow === 'form'"
         class="text-base-content/60 flex items-center gap-2 text-xs"
       >
-        <span>{{ inbounds.length }} 个入站</span>
+        <span>{{ inbounds.length }} {{ $t('inbounds') }}</span>
       </div>
     </div>
   </CtrlsBar>
@@ -107,15 +91,16 @@ import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import SegmentedControl, { type SegmentOption } from '@/components/common/SegmentedControl.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useCtrlsBar } from '@/composables/useCtrlsBar'
-import { openCreateInboundModal } from '@/composables/inboundManagement'
-import { ArrowPathIcon, PlusIcon } from '@heroicons/vue/24/outline'
+import { ArrowPathIcon } from '@heroicons/vue/24/outline'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const { isLargeCtrlsBar } = useCtrlsBar()
 
 const tabOptions = computed<SegmentOption[]>(() => [
-  { value: 'form', label: '入站', count: inbounds.value.length },
-  { value: 'cert', label: '证书' },
-  { value: 'source', label: '源码' },
+  { value: 'form', label: t('inbounds'), count: inbounds.value.length },
+  { value: 'cert', label: t('cert') || '证书' },
+  { value: 'source', label: t('source') },
 ])
 </script>

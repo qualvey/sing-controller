@@ -13,7 +13,7 @@
           class="text-base-content/50 py-16 text-center text-sm"
         >
           <span class="loading loading-spinner loading-md text-primary mb-2 block mx-auto"></span>
-          加载 Inbound 列表中…
+          {{ $t('loading') || '加载中…' }}
         </div>
 
         <template v-else>
@@ -30,6 +30,16 @@
             v-else
             class="flex flex-col gap-3"
           >
+            <div class="flex items-center justify-between px-1">
+              <span class="text-xs text-base-content/60">{{ renderInbounds.length }} {{ $t('inbounds') }}</span>
+              <button
+                class="btn btn-primary btn-sm gap-1.5"
+                @click="openCreateInboundModal"
+              >
+                <PlusIcon class="h-4 w-4" />
+                {{ $t('createInbound') }}
+              </button>
+            </div>
             <InboundCard
               v-for="row in renderInbounds"
               :key="row.tag"
@@ -39,7 +49,7 @@
               v-if="!renderInbounds.length"
               class="text-base-content/50 border-base-content/10 bg-base-100 rounded-lg border py-10 text-center text-sm"
             >
-              暂无匹配的 Inbound
+              {{ $t('noInboundsTip') }}
             </div>
           </div>
         </template>
@@ -86,7 +96,9 @@ import InboundEditDialog from '@/components/inbounds/InboundEditDialog.vue'
 import InboundTable from '@/components/inbounds/InboundTable.vue'
 import SourcePane from '@/components/SourcePane.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
+import { openCreateInboundModal } from '@/composables/inboundManagement'
 import { isMiddleScreen } from '@/helper/utils'
+import { PlusIcon } from '@heroicons/vue/24/outline'
 import { onMounted } from 'vue'
 
 const { padding } = usePaddingForViews({
