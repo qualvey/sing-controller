@@ -271,7 +271,7 @@ export const ROUTE_ICON_MAP = {
   [ROUTE_NAME.connections]: ArrowsRightLeftIcon,
   [ROUTE_NAME.rules]: SwatchIcon,
   [ROUTE_NAME.logs]: DocumentTextIcon,
-  [ROUTE_NAME.tools]: WrenchScrewdriverIcon,
+  // [ROUTE_NAME.tools]: WrenchScrewdriverIcon,
   [ROUTE_NAME.settings]: Cog6ToothIcon,
   [ROUTE_NAME.setup]: CubeTransparentIcon,
   [ROUTE_NAME.inbounds]: InboxIcon,
@@ -401,6 +401,7 @@ export const DEFAULT_THEME = {
 export type THEME = Record<string, string>
 
 export enum IP_INFO_API {
+  IPIP = 'ipip.net',
   IPSB = 'ip.sb',
   IPWHOIS = 'ipwho.is',
   IPAPI = 'ipapi.is',
