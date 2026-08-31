@@ -6,7 +6,7 @@
       class="p-3"
       :style="padding"
     >
-      <!-- 表单视图 -->
+      <!-- 入站表单视图 -->
       <template v-if="inboundsTabShow === 'form'">
         <div
           v-if="loading && !inbounds.length"
@@ -45,6 +45,13 @@
         </template>
       </template>
 
+      <!-- 证书管理视图 -->
+      <template v-else-if="inboundsTabShow === 'cert'">
+        <div class="base-container">
+          <CertManager />
+        </div>
+      </template>
+
       <!-- 源码视图 -->
       <template v-else-if="inboundsTabShow === 'source'">
         <div class="base-container">
@@ -73,6 +80,7 @@ import {
   renderInbounds,
 } from '@/assembly/inbounds'
 import InboundsCtrl from '@/components/controls/InboundsCtrl.vue'
+import CertManager from '@/components/inbounds/cert/CertManager.vue'
 import InboundCard from '@/components/inbounds/InboundCard.vue'
 import InboundEditDialog from '@/components/inbounds/InboundEditDialog.vue'
 import InboundTable from '@/components/inbounds/InboundTable.vue'

@@ -114,7 +114,8 @@ import { computed } from 'vue'
 const { isLargeCtrlsBar } = useCtrlsBar()
 
 const tabOptions = computed<SegmentOption[]>(() => [
-  { value: 'form', label: '表单', count: inbounds.value.length },
+  { value: 'form', label: '入站', count: inbounds.value.length },
+  { value: 'cert', label: '证书' },
   { value: 'source', label: '源码' },
 ])
 </script>
