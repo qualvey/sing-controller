@@ -5,8 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/sagernet/sing-box/option"
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/store"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 	"github.com/sagernet/sing/common/json/badoption"
 )
@@ -141,6 +142,7 @@ func (h *Handler) handleGetDNS(w http.ResponseWriter, r *http.Request) {
 	h.store.AlignMeta()
 	dns := h.store.Options.DNS
 	if dns == nil {
+		logger.Debug("查询 DNS 配置成功 (未配置 DNS 段)")
 		writeJSON(w, http.StatusOK, map[string]any{"servers": []any{}, "rules": []any{}, "options": map[string]any{}})
 		return
 	}
@@ -148,6 +150,7 @@ func (h *Handler) handleGetDNS(w http.ResponseWriter, r *http.Request) {
 	for i := range dns.Servers {
 		content, err := json.MarshalContext(ctx, &dns.Servers[i])
 		if err != nil {
+			logger.Error("序列化 DNS server [%s] 失败: %v", dns.Servers[i].Tag, err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -157,6 +160,7 @@ func (h *Handler) handleGetDNS(w http.ResponseWriter, r *http.Request) {
 	for i := range dns.Rules {
 		content, err := json.MarshalContext(ctx, &dns.Rules[i])
 		if err != nil {
+			logger.Error("序列化 DNS 规则 #%d 失败: %v", i+1, err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -165,6 +169,7 @@ func (h *Handler) handleGetDNS(w http.ResponseWriter, r *http.Request) {
 			"rule": json.RawMessage(content),
 		})
 	}
+	logger.Debug("查询 DNS 配置成功 (servers=%d, rules=%d)", len(dns.Servers), len(dns.Rules))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"servers": servers,
 		"rules":   rules,
@@ -188,6 +193,7 @@ func (h *Handler) handleCreateDNSServer(w http.ResponseWriter, r *http.Request) 
 	}
 	var server option.DNSServerOptions
 	if err := json.UnmarshalContext(h.ctx(r), body, &server); err != nil {
+		logger.Warn("解析创建 DNS server 请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -197,9 +203,11 @@ func (h *Handler) handleCreateDNSServer(w http.ResponseWriter, r *http.Request) 
 	}
 	h.commit(w, r, func(options *option.Options, _ *store.Meta) error {
 		if dnsServerIndex(options, server.Tag) >= 0 {
+			logger.Warn("创建 DNS server 失败: tag 已存在 [%s]", server.Tag)
 			return errors.New("DNS server tag 重复: " + server.Tag)
 		}
 		ensureDNS(options).Servers = append(options.DNS.Servers, server)
+		logger.Info("成功创建 DNS server [tag: %s, type: %s]", server.Tag, server.Type)
 		return nil
 	})
 }
@@ -213,6 +221,7 @@ func (h *Handler) handleUpdateDNSServer(w http.ResponseWriter, r *http.Request) 
 	}
 	var server option.DNSServerOptions
 	if err := json.UnmarshalContext(h.ctx(r), body, &server); err != nil {
+		logger.Warn("解析更新 DNS server [%s] 请求体失败: %v", tag, err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -223,9 +232,11 @@ func (h *Handler) handleUpdateDNSServer(w http.ResponseWriter, r *http.Request) 
 	h.commit(w, r, func(options *option.Options, _ *store.Meta) error {
 		index := dnsServerIndex(options, tag)
 		if index < 0 {
+			logger.Warn("更新 DNS server 失败: tag 不存在 [%s]", tag)
 			return errors.New("DNS server 不存在: " + tag)
 		}
 		options.DNS.Servers[index] = server
+		logger.Info("更新 DNS server 成功 [tag: %s, type: %s]", tag, server.Type)
 		return nil
 	})
 }
@@ -236,12 +247,15 @@ func (h *Handler) handleDeleteDNSServer(w http.ResponseWriter, r *http.Request) 
 	h.commit(w, r, func(options *option.Options, _ *store.Meta) error {
 		index := dnsServerIndex(options, tag)
 		if index < 0 {
+			logger.Warn("删除 DNS server 失败: tag 不存在 [%s]", tag)
 			return errors.New("DNS server 不存在: " + tag)
 		}
 		if refs := dnsReferencesTag(options, tag); len(refs) > 0 {
 			if !force {
+				logger.Warn("删除 DNS server 存在引用阻止 [%s]: refs=%v", tag, refs)
 				return &GroupReferenceError{Tag: tag, References: refs}
 			}
+			logger.Info("强制删除 DNS server [%s]: 清理引用 %v", tag, refs)
 			// force：清空 final 引用 + 从规则中移除 outbound 引用
 			if options.DNS.Final == tag {
 				options.DNS.Final = ""
@@ -253,6 +267,7 @@ func (h *Handler) handleDeleteDNSServer(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 		options.DNS.Servers = append(options.DNS.Servers[:index], options.DNS.Servers[index+1:]...)
+		logger.Info("成功删除 DNS server [tag: %s, force=%v]", tag, force)
 		return nil
 	})
 }
@@ -284,12 +299,15 @@ func (h *Handler) handleCreateDNSRule(w http.ResponseWriter, r *http.Request) {
 	}
 	var rule option.DNSRule
 	if err := json.UnmarshalContext(h.ctx(r), body, &rule); err != nil {
+		logger.Warn("解析创建 DNS 规则请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+		newID := store.NewUUID()
 		ensureDNS(options).Rules = append(options.DNS.Rules, rule)
-		meta.DNSRuleIDs = append(meta.DNSRuleIDs, store.NewUUID())
+		meta.DNSRuleIDs = append(meta.DNSRuleIDs, newID)
+		logger.Info("成功创建 DNS 规则 [id=%s, rules_count=%d]", newID, len(options.DNS.Rules))
 		return nil
 	})
 }
@@ -303,15 +321,18 @@ func (h *Handler) handleUpdateDNSRule(w http.ResponseWriter, r *http.Request) {
 	}
 	var rule option.DNSRule
 	if err := json.UnmarshalContext(h.ctx(r), body, &rule); err != nil {
+		logger.Warn("解析更新 DNS 规则 [%s] 请求体失败: %v", id, err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findDNSRuleIndexByID(id)
 		if index < 0 {
+			logger.Warn("更新 DNS 规则失败: id 不存在 [%s]", id)
 			return errors.New("DNS 规则不存在: " + id)
 		}
 		options.DNS.Rules[index] = rule
+		logger.Info("更新 DNS 规则成功 [id=%s]", id)
 		return nil
 	})
 }
@@ -321,10 +342,12 @@ func (h *Handler) handleDeleteDNSRule(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findDNSRuleIndexByID(id)
 		if index < 0 {
+			logger.Warn("删除 DNS 规则失败: id 不存在 [%s]", id)
 			return errors.New("DNS 规则不存在: " + id)
 		}
 		options.DNS.Rules = append(options.DNS.Rules[:index], options.DNS.Rules[index+1:]...)
 		meta.DNSRuleIDs = append(meta.DNSRuleIDs[:index], meta.DNSRuleIDs[index+1:]...)
+		logger.Info("成功删除 DNS 规则 [id=%s]", id)
 		return nil
 	})
 }
@@ -345,6 +368,7 @@ func (h *Handler) handlePutDNSOptions(w http.ResponseWriter, r *http.Request) {
 		ReverseMapping   *bool                  `json:"reverse_mapping"`
 	}
 	if err := json.Unmarshal(body, &patch); err != nil {
+		logger.Warn("解析更新 DNS 选项请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -352,6 +376,7 @@ func (h *Handler) handlePutDNSOptions(w http.ResponseWriter, r *http.Request) {
 		dns := ensureDNS(options)
 		if patch.Final != nil {
 			if *patch.Final != "" && dnsServerIndex(options, *patch.Final) < 0 {
+				logger.Warn("更新 DNS 选项失败: dns.final 引用不存在 [%s]", *patch.Final)
 				return errors.New("dns.final 引用的 server 不存在: " + *patch.Final)
 			}
 			dns.Final = *patch.Final
@@ -371,6 +396,8 @@ func (h *Handler) handlePutDNSOptions(w http.ResponseWriter, r *http.Request) {
 		if patch.ReverseMapping != nil {
 			dns.ReverseMapping = *patch.ReverseMapping
 		}
+		logger.Info("成功更新 DNS 基础选项")
 		return nil
 	})
 }
+

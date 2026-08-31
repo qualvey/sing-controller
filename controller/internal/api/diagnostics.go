@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
@@ -245,6 +246,7 @@ func (h *Handler) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 	add("info", "inbounds: %d，outbounds: %d，route 规则: %d，DNS servers: %d，DNS 规则: %d",
 		len(options.Inbounds), len(options.Outbounds), routeRuleCount(options), dnsServerCount(options), dnsRuleCount(options))
 
+	logger.Info("执行配置诊断完成 (findings_count=%d)", len(out))
 	writeJSON(w, http.StatusOK, map[string]any{"diagnostics": out})
 }
 

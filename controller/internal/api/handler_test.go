@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,11 @@ const testConfigJSONC = `{
 `
 
 func newTestHandler(t *testing.T) http.Handler {
+	h, _ := newTestHandlerWithPaths(t)
+	return h
+}
+
+func newTestHandlerWithPaths(t *testing.T) (http.Handler, string) {
 	t.Helper()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json")
@@ -32,7 +38,7 @@ func newTestHandler(t *testing.T) http.Handler {
 	}
 	st := store.New(cfgPath)
 	set := settings.New(filepath.Join(dir, "settings.json"))
-	return NewHandler(HandlerOptions{Store: st, Settings: set, Version: "test"})
+	return NewHandler(HandlerOptions{Store: st, Settings: set, Version: "test"}), cfgPath
 }
 
 func doRequest(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
@@ -123,5 +129,40 @@ func TestHealthz(t *testing.T) {
 	rec := doRequest(t, h, http.MethodGet, "/healthz", "")
 	if rec.Code != http.StatusOK {
 		t.Errorf("healthz status = %d, want 200", rec.Code)
+	}
+}
+
+func TestPutSettingsUpdatesLogLevelDynamically(t *testing.T) {
+	h, cfgPath := newTestHandlerWithPaths(t)
+	escapedPath := strings.ReplaceAll(cfgPath, "\\", "\\\\")
+
+	// 设置为 warn
+	bodyWarn := fmt.Sprintf(`{"config":"%s","min_port":8000,"log":{"level":"warn"}}`, escapedPath)
+	recPut1 := doRequest(t, h, http.MethodPut, "/api/settings", bodyWarn)
+	if recPut1.Code != http.StatusOK {
+		t.Fatalf("PUT settings failed: %d, body: %s", recPut1.Code, recPut1.Body.String())
+	}
+
+	// 验证 settings 返回 level warn
+	recGet1 := doRequest(t, h, http.MethodGet, "/api/settings", "")
+	if recGet1.Code != http.StatusOK {
+		t.Fatalf("GET settings failed: %d", recGet1.Code)
+	}
+	if !strings.Contains(recGet1.Body.String(), `"level":"warn"`) {
+		t.Errorf("expected level warn in settings response: %s", recGet1.Body.String())
+	}
+
+	// 更新为 debug
+	bodyDebug := fmt.Sprintf(`{"config":"%s","min_port":8000,"log":{"level":"debug"}}`, escapedPath)
+	recPut2 := doRequest(t, h, http.MethodPut, "/api/settings", bodyDebug)
+	if recPut2.Code != http.StatusOK {
+		t.Fatalf("PUT settings debug failed: %d, body: %s", recPut2.Code, recPut2.Body.String())
+	}
+	recGet2 := doRequest(t, h, http.MethodGet, "/api/settings", "")
+	if recGet2.Code != http.StatusOK {
+		t.Fatalf("GET settings after debug failed: %d", recGet2.Code)
+	}
+	if !strings.Contains(recGet2.Body.String(), `"level":"debug"`) {
+		t.Errorf("expected level debug in settings response: %s", recGet2.Body.String())
 	}
 }

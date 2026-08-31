@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/sagernet/sing-box/option"
 )
 
@@ -70,6 +71,7 @@ func (c *proxyCache) get(prefix string, resolve func() (*url.URL, string, string
 			pr.SetXForwarded()
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			logger.Warn("反向代理上游请求失败 (prefix=%s, target=%s, path=%s): %v", prefix, target.String(), r.URL.Path, err)
 			writeError(w, http.StatusBadGateway, err)
 		},
 	}
@@ -116,11 +118,13 @@ func (h *Handler) clashAPIConfig() *option.ClashAPIOptions {
 func (h *Handler) handleClashProxy(w http.ResponseWriter, r *http.Request) {
 	e := h.proxies.get("/api/clash", h.clashTarget)
 	if e == nil {
+		logger.Debug("clash API 代理不可用: 未配置或未启用")
 		writeError(w, http.StatusNotFound, errClashAPIUnavailable)
 		return
 	}
 	e.proxy.ServeHTTP(w, r)
 }
+
 func checkUpstreamReachable(rawTarget string, timeout time.Duration) error {
 	u, err := url.Parse(rawTarget)
 	if err != nil {
@@ -192,19 +196,11 @@ func (h *Handler) serviceAPIConfig() *option.APIServiceOptions {
 
 func (h *Handler) handleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	e := h.proxies.get("/api/grpc", h.serviceAPITarget)
-	// _, _, target := h.serviceAPITarget()
 	if e == nil {
+		logger.Debug("service API (gRPC) 代理不可用: 未配置或未启用")
 		writeError(w, http.StatusNotFound, errServiceAPIUnavailable)
 		return
 	}
-	// if err := checkUpstreamReachable(target, 300*time.Millisecond); err != nil {
-	// 	logger.Error("service api upstream is unreachable: target=%s, error=%v, path=%s",
-	// 		target,
-	// 		err,
-	// 		r.URL.Path,
-	// 	)
-	// 	writeError(w, http.StatusBadGateway, errors.New("upstream service unavailable"))
-	// 	return
-	// }
 	e.proxy.ServeHTTP(w, r)
 }
+

@@ -4,8 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/sagernet/sing-box/option"
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/store"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
 
@@ -40,6 +41,7 @@ func (h *Handler) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 	for i := range h.store.Options.Route.Rules {
 		content, err := json.MarshalContext(ctx, &h.store.Options.Route.Rules[i])
 		if err != nil {
+			logger.Error("序列化 route 规则 #%d 失败: %v", i+1, err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -50,6 +52,7 @@ func (h *Handler) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 			"disabled": h.store.Meta.IsRuleDisabled(id),
 		})
 	}
+	logger.Debug("查询 route 规则列表成功 (count=%d)", len(items))
 	writeJSON(w, http.StatusOK, map[string]any{"routes": items, "final": h.store.Options.Route.Final})
 }
 
@@ -57,14 +60,17 @@ func (h *Handler) handleGetRoute(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	index := h.findRuleIndexByID(id)
 	if index < 0 || index >= len(h.store.Options.Route.Rules) {
+		logger.Debug("获取 route 规则失败: id 未找到 [%s]", id)
 		writeError(w, http.StatusNotFound, errors.New("route 规则不存在: "+id))
 		return
 	}
 	content, err := json.MarshalContext(h.ctx(r), &h.store.Options.Route.Rules[index])
 	if err != nil {
+		logger.Error("序列化 route 规则 [%s] 失败: %v", id, err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	logger.Debug("获取 route 规则详情成功 [id=%s]", id)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":       id,
 		"rule":     json.RawMessage(content),
@@ -80,12 +86,15 @@ func (h *Handler) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	var rule option.Rule
 	if err := json.UnmarshalContext(h.ctx(r), body, &rule); err != nil {
+		logger.Warn("解析创建 route 规则请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+		newID := store.NewUUID()
 		options.Route.Rules = append(options.Route.Rules, rule)
-		meta.RuleIDs = append(meta.RuleIDs, store.NewUUID())
+		meta.RuleIDs = append(meta.RuleIDs, newID)
+		logger.Info("成功创建 route 规则 [id=%s, rules_count=%d]", newID, len(options.Route.Rules))
 		return nil
 	})
 }
@@ -99,15 +108,18 @@ func (h *Handler) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	var rule option.Rule
 	if err := json.UnmarshalContext(h.ctx(r), body, &rule); err != nil {
+		logger.Warn("解析更新 route 规则 [%s] 请求体失败: %v", id, err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findRuleIndexByID(id)
 		if index < 0 {
+			logger.Warn("更新 route 规则失败: id 不存在 [%s]", id)
 			return errors.New("route 规则不存在: " + id)
 		}
 		options.Route.Rules[index] = rule
+		logger.Info("更新 route 规则成功 [id=%s]", id)
 		return nil
 	})
 }
@@ -117,11 +129,13 @@ func (h *Handler) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findRuleIndexByID(id)
 		if index < 0 {
+			logger.Warn("删除 route 规则失败: id 不存在 [%s]", id)
 			return errors.New("route 规则不存在: " + id)
 		}
 		options.Route.Rules = append(options.Route.Rules[:index], options.Route.Rules[index+1:]...)
 		meta.RuleIDs = append(meta.RuleIDs[:index], meta.RuleIDs[index+1:]...)
 		meta.SetRuleDisabled(id, false)
+		logger.Info("成功删除 route 规则 [id=%s]", id)
 		return nil
 	})
 }
@@ -143,6 +157,7 @@ func (h *Handler) handleToggleRoute(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findRuleIndexByID(id)
 		if index < 0 {
+			logger.Warn("切换 route 规则状态失败: id 不存在 [%s]", id)
 			return errors.New("route 规则不存在: " + id)
 		}
 		if req.Disabled != nil {
@@ -150,6 +165,8 @@ func (h *Handler) handleToggleRoute(w http.ResponseWriter, r *http.Request) {
 		} else {
 			meta.ToggleRuleDisabled(id)
 		}
+		logger.Info("切换 route 规则状态 [id=%s, disabled=%v]", id, meta.IsRuleDisabled(id))
 		return nil
 	})
 }
+

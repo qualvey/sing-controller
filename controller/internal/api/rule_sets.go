@@ -5,8 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/sagernet/sing-box/option"
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/store"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
 
@@ -150,6 +151,7 @@ func (h *Handler) handleListRuleSets(w http.ResponseWriter, r *http.Request) {
 		for i := range h.store.Options.Route.RuleSet {
 			content, err := json.MarshalContext(ctx, &h.store.Options.Route.RuleSet[i])
 			if err != nil {
+				logger.Error("序列化 rule_set #%d 失败: %v", i+1, err)
 				writeError(w, http.StatusInternalServerError, err)
 				return
 			}
@@ -159,6 +161,7 @@ func (h *Handler) handleListRuleSets(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
+	logger.Debug("查询 rule-sets 列表成功 (count=%d)", len(items))
 	writeJSON(w, http.StatusOK, map[string]any{"rule_sets": items})
 }
 
@@ -170,13 +173,16 @@ func (h *Handler) handleCreateRuleSet(w http.ResponseWriter, r *http.Request) {
 	}
 	var ruleSet option.RuleSet
 	if err := json.Unmarshal(body, &ruleSet); err != nil {
+		logger.Warn("解析创建 rule_set 请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+		newID := store.NewUUID()
 		h.ensureRuleSet(options)
 		options.Route.RuleSet = append(options.Route.RuleSet, ruleSet)
-		meta.RuleSetIDs = append(meta.RuleSetIDs, store.NewUUID())
+		meta.RuleSetIDs = append(meta.RuleSetIDs, newID)
+		logger.Info("成功创建 rule_set [id=%s, type=%s, tag=%v]", newID, ruleSet.Type, ruleSet.Tag)
 		return nil
 	})
 }
@@ -190,15 +196,18 @@ func (h *Handler) handleUpdateRuleSet(w http.ResponseWriter, r *http.Request) {
 	}
 	var ruleSet option.RuleSet
 	if err := json.Unmarshal(body, &ruleSet); err != nil {
+		logger.Warn("解析更新 rule_set [%s] 请求体失败: %v", id, err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	h.commit(w, r, func(options *option.Options, _ *store.Meta) error {
 		index := h.findRuleSetIndexByID(id)
 		if index < 0 {
+			logger.Warn("更新 rule_set 失败: id 不存在 [%s]", id)
 			return errors.New("rule_set 不存在: " + id)
 		}
 		options.Route.RuleSet[index] = ruleSet
+		logger.Info("更新 rule_set 成功 [id=%s, type=%s, tag=%v]", id, ruleSet.Type, ruleSet.Tag)
 		return nil
 	})
 }
@@ -209,6 +218,7 @@ func (h *Handler) handleDeleteRuleSet(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findRuleSetIndexByID(id)
 		if index < 0 {
+			logger.Warn("删除 rule_set 失败: id 不存在 [%s]", id)
 			return errors.New("rule_set 不存在: " + id)
 		}
 		// 收集被引用 tag（一个定义可带多个 tag）
@@ -222,8 +232,10 @@ func (h *Handler) handleDeleteRuleSet(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(refs) > 0 {
 			if !force {
+				logger.Warn("删除 rule_set 存在引用阻止 [%s]: tags=%v, refs=%v", id, tags, refs)
 				return &GroupReferenceError{Tag: tags[0], References: refs}
 			}
+			logger.Info("强制删除 rule_set [%s]: 清理规则引用 %v", id, refs)
 			for _, tag := range tags {
 				if options.Route != nil {
 					for i := range options.Route.Rules {
@@ -243,6 +255,8 @@ func (h *Handler) handleDeleteRuleSet(w http.ResponseWriter, r *http.Request) {
 		}
 		options.Route.RuleSet = append(options.Route.RuleSet[:index], options.Route.RuleSet[index+1:]...)
 		meta.RuleSetIDs = append(meta.RuleSetIDs[:index], meta.RuleSetIDs[index+1:]...)
+		logger.Info("成功删除 rule_set [id=%s, tags=%v, force=%v]", id, tags, force)
 		return nil
 	})
 }
+

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/settings"
 )
 
@@ -171,14 +172,19 @@ func detectReloadCommand(service string) (*exec.Cmd, string, error) {
 }
 
 func (h *Handler) handleReload(w http.ResponseWriter, r *http.Request) {
+	logger.Info("收到手动重载 sing-box 请求")
 	executed, err := h.reloadNow()
 	if err != nil {
+		logger.Error("手动重载 sing-box 失败: %v", err)
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
 	if !executed {
+		logger.Warn("手动重载已被禁用 (reload.mode 为 none)")
 		writeError(w, http.StatusBadRequest, errors.New("重载已禁用（Settings → reload.mode 为 none）"))
 		return
 	}
+	logger.Info("手动重载 sing-box 成功")
 	writeJSON(w, http.StatusOK, map[string]any{"reloaded": true})
 }
+

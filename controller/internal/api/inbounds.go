@@ -25,11 +25,13 @@ func (h *Handler) handleListInbounds(w http.ResponseWriter, r *http.Request) {
 	for i := range h.store.Options.Inbounds {
 		content, err := json.MarshalContext(ctx, &h.store.Options.Inbounds[i])
 		if err != nil {
+			logger.Error("序列化 inbound [%s] 失败: %v", h.store.Options.Inbounds[i].Tag, err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
 		items = append(items, content)
 	}
+	logger.Debug("查询入站列表成功 (count=%d)", len(items))
 	writeJSON(w, http.StatusOK, map[string]any{"inbounds": items})
 }
 
@@ -41,6 +43,7 @@ func (h *Handler) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 	}
 	var inbound option.Inbound
 	if err := json.UnmarshalContext(h.ctx(r), body, &inbound); err != nil {
+		logger.Warn("解析创建 inbound 请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -69,14 +72,17 @@ func (h *Handler) handleGetInbound(w http.ResponseWriter, r *http.Request) {
 	tag := r.PathValue("tag")
 	index := h.findInboundIndex(tag)
 	if index < 0 {
+		logger.Debug("获取 inbound 失败: tag 未找到 [%s]", tag)
 		writeError(w, http.StatusNotFound, errors.New("inbound 不存在: "+tag))
 		return
 	}
 	content, err := json.MarshalContext(h.ctx(r), &h.store.Options.Inbounds[index])
 	if err != nil {
+		logger.Error("序列化 inbound [%s] 失败: %v", tag, err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	logger.Debug("获取 inbound 详情成功 [tag: %s]", tag)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
@@ -91,6 +97,7 @@ func (h *Handler) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 	}
 	var inbound option.Inbound
 	if err := json.UnmarshalContext(h.ctx(r), body, &inbound); err != nil {
+		logger.Warn("解析更新 inbound [%s] 请求体失败: %v", tag, err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -104,9 +111,11 @@ func (h *Handler) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, meta *metaType) error {
 		index := h.findInboundIndex(tag)
 		if index < 0 {
+			logger.Warn("更新 inbound 失败: tag 不存在 [%s]", tag)
 			return errors.New("inbound 不存在: " + tag)
 		}
 		options.Inbounds[index] = inbound
+		logger.Info("更新 inbound [tag: %s, type: %s]", tag, inbound.Type)
 		// 用户池绑定投影
 		return syncUsersToInbounds(h.ctx(r), options, meta.Users)
 	})
@@ -117,16 +126,19 @@ func (h *Handler) handleDeleteInbound(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, _ *metaType) error {
 		index := h.findInboundIndex(tag)
 		if index < 0 {
+			logger.Warn("删除 inbound 失败: tag 不存在 [%s]", tag)
 			return errors.New("inbound 不存在: " + tag)
 		}
 		if options.Route != nil {
 			for i, rule := range options.Route.Rules {
 				if ruleReferencesInbound(&rule, tag) {
+					logger.Warn("删除 inbound 失败 [%s]: 被 route 规则 #%d 引用", tag, i+1)
 					return errors.New("route 规则 #" + itoa(i+1) + " 引用了该 inbound，请先修改路由")
 				}
 			}
 		}
 		options.Inbounds = append(options.Inbounds[:index], options.Inbounds[index+1:]...)
+		logger.Info("成功删除 inbound [tag: %s]", tag)
 		return nil
 	})
 }

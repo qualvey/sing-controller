@@ -17,10 +17,10 @@ import (
 
 	"github.com/qualvey/sing-controller/internal/api"
 	"github.com/qualvey/sing-controller/internal/collector"
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/realtime"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
-	"github.com/sagernet/sing-box/log"
 )
 
 // version 由 goreleaser ldflags 注入（-X main.version={{ .Version }}），本地构建为 dev
@@ -59,12 +59,17 @@ func main() {
 
 	values := cfg.Values()
 
+	// 初始化并设置日志级别（支持 trace, debug, info, warn, error 等）
+	if values.Log != nil {
+		logger.Init(values.Log.Level)
+	} else {
+		logger.Init("info")
+	}
+
 	rt := realtime.NewBroadcaster(values.RealTime.IntervalMS, values.RealTime.OnlineThresholdSec)
 	rt.Start()
 	wg.Add(1)
 	go collector.StartCollector(ctx, &wg, cfg, rt)
-	// 日志级别（复用 sing-box 的 level 枚举/解析）
-	setLogLevel(values.Log.Level)
 
 	// 监听地址：命令行 -listen 优先，否则取 config.json 的 listen
 	if listenAddr == "" {
@@ -102,7 +107,7 @@ func main() {
 		"listen", listenAddr,
 		"controller_config", settingsPath,
 		"sing_box_config", cfgStore.Path(),
-		"log_level", values.Log.Level,
+		"log_level", logger.GetLevel().String(),
 	)
 	srv := &http.Server{Addr: listenAddr, Handler: handler}
 	go func() {
@@ -128,25 +133,4 @@ func main() {
 	wg.Wait()
 	rt.Stop()
 	slog.Info("controller stopped cleanly")
-}
-
-// setLogLevel 将 sing-box 的日志级别映射到 slog 并设置全局级别。
-func setLogLevel(levelText string) {
-	level, err := log.ParseLevel(levelText)
-	if err != nil {
-		slog.Warn("unknown log level, fallback to info", "level", levelText)
-		level = log.LevelInfo
-	}
-	var slogLevel slog.Level
-	switch level {
-	case log.LevelTrace, log.LevelDebug:
-		slogLevel = slog.LevelDebug
-	case log.LevelInfo:
-		slogLevel = slog.LevelInfo
-	case log.LevelWarn:
-		slogLevel = slog.LevelWarn
-	case log.LevelError, log.LevelFatal, log.LevelPanic:
-		slogLevel = slog.LevelError
-	}
-	slog.SetLogLoggerLevel(slogLevel)
 }

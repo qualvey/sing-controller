@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
@@ -23,11 +24,13 @@ func (h *Handler) handleListOutbounds(w http.ResponseWriter, r *http.Request) {
 	for i := range h.store.Options.Outbounds {
 		content, err := json.MarshalContext(ctx, &h.store.Options.Outbounds[i])
 		if err != nil {
+			logger.Error("序列化 outbound [%s] 失败: %v", h.store.Options.Outbounds[i].Tag, err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
 		items = append(items, content)
 	}
+	logger.Debug("查询出站列表成功 (count=%d)", len(items))
 	writeJSON(w, http.StatusOK, map[string]any{"outbounds": items})
 }
 
@@ -39,6 +42,7 @@ func (h *Handler) handleCreateOutbound(w http.ResponseWriter, r *http.Request) {
 	}
 	var outbound option.Outbound
 	if err := json.UnmarshalContext(h.ctx(r), body, &outbound); err != nil {
+		logger.Warn("解析创建 outbound 请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -49,6 +53,7 @@ func (h *Handler) handleCreateOutbound(w http.ResponseWriter, r *http.Request) {
 	attached := false
 	err = h.store.Update(h.ctx(r), func(options *option.Options, _ *metaType) error {
 		if h.findOutboundIndex(outbound.Tag) >= 0 {
+			logger.Warn("创建 outbound 失败: tag 已存在 [%s]", outbound.Tag)
 			return errors.New("outbound tag 已存在: " + outbound.Tag)
 		}
 		options.Outbounds = append(options.Outbounds, outbound)
@@ -59,9 +64,11 @@ func (h *Handler) handleCreateOutbound(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
+		logger.Warn("创建 outbound 校验或写盘失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	logger.Info("成功创建 outbound [tag: %s, type: %s, attached=%v]", outbound.Tag, outbound.Type, attached)
 	response := map[string]any{"saved": true}
 	if attached {
 		response["attached"] = true
@@ -156,14 +163,17 @@ func (h *Handler) handleGetOutbound(w http.ResponseWriter, r *http.Request) {
 	tag := r.PathValue("tag")
 	index := h.findOutboundIndex(tag)
 	if index < 0 {
+		logger.Debug("获取 outbound 失败: tag 未找到 [%s]", tag)
 		writeError(w, http.StatusNotFound, errors.New("outbound 不存在: "+tag))
 		return
 	}
 	content, err := json.MarshalContext(h.ctx(r), &h.store.Options.Outbounds[index])
 	if err != nil {
+		logger.Error("序列化 outbound [%s] 失败: %v", tag, err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	logger.Debug("获取 outbound 详情成功 [tag: %s]", tag)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
@@ -178,6 +188,7 @@ func (h *Handler) handleUpdateOutbound(w http.ResponseWriter, r *http.Request) {
 	}
 	var outbound option.Outbound
 	if err := json.UnmarshalContext(h.ctx(r), body, &outbound); err != nil {
+		logger.Warn("解析更新 outbound [%s] 请求体失败: %v", tag, err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -191,9 +202,11 @@ func (h *Handler) handleUpdateOutbound(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, _ *metaType) error {
 		index := h.findOutboundIndex(tag)
 		if index < 0 {
+			logger.Warn("更新 outbound 失败: tag 不存在 [%s]", tag)
 			return errors.New("outbound 不存在: " + tag)
 		}
 		options.Outbounds[index] = outbound
+		logger.Info("更新 outbound [tag: %s, type: %s]", tag, outbound.Type)
 		return nil
 	})
 }
@@ -204,15 +217,18 @@ func (h *Handler) handleDeleteOutbound(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, _ *metaType) error {
 		index := h.findOutboundIndex(tag)
 		if index < 0 {
+			logger.Warn("删除 outbound 失败: tag 不存在 [%s]", tag)
 			return errors.New("outbound 不存在: " + tag)
 		}
 		// 引用检查：route.final 与规则 outbound 字段（始终拒绝，需手动改路由）
 		if options.Route != nil {
 			if options.Route.Final == tag {
+				logger.Warn("删除 outbound 失败 [%s]: 被 route.final 引用", tag)
 				return errors.New("route.final 引用了该 outbound，请先修改路由")
 			}
 			for i, rule := range options.Route.Rules {
 				if ruleReferencesOutbound(&rule, tag) {
+					logger.Warn("删除 outbound 失败 [%s]: 被 route 规则 #%d 引用", tag, i+1)
 					return errors.New("route 规则 #" + itoa(i+1) + " 引用了该 outbound，请先修改路由")
 				}
 			}
@@ -220,11 +236,15 @@ func (h *Handler) handleDeleteOutbound(w http.ResponseWriter, r *http.Request) {
 		// 引用检查：selector/urltest 组成员；force=true 时自动从所有引用组拔除 tag
 		if refs := groupReferencesTag(options, tag); len(refs) > 0 {
 			if !force {
+				logger.Warn("删除 outbound 存在组引用阻止 [%s]: 引用组=%v", tag, refs)
 				return &GroupReferenceError{Tag: tag, References: refs}
 			}
+			logger.Info("强制删除 outbound [%s]: 从引用组 %v 中拔除", tag, refs)
 			removeTagFromGroups(options, tag)
 		}
 		options.Outbounds = append(options.Outbounds[:index], options.Outbounds[index+1:]...)
+		logger.Info("成功删除 outbound [tag: %s, force=%v]", tag, force)
 		return nil
 	})
 }
+

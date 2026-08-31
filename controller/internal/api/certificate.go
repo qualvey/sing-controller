@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sagernet/sing-box/option"
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/store"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json"
 )
 
@@ -25,6 +26,7 @@ func (h *Handler) handleGetCertificate(w http.ResponseWriter, r *http.Request) {
 	for i := range h.store.Options.CertificateProviders {
 		content, err := json.MarshalContext(ctx, &h.store.Options.CertificateProviders[i])
 		if err != nil {
+			logger.Error("序列化 certificate provider #%d 失败: %v", i+1, err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -37,11 +39,13 @@ func (h *Handler) handleGetCertificate(w http.ResponseWriter, r *http.Request) {
 	if cert != nil {
 		content, err := json.Marshal(cert)
 		if err != nil {
+			logger.Error("序列化顶层 certificate 配置失败: %v", err)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
 		certContent = content
 	}
+	logger.Debug("查询证书配置成功 (providers=%d)", len(providers))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"certificate": certContent,
 		"providers":   providers,
@@ -58,13 +62,16 @@ func (h *Handler) handlePutCertificate(w http.ResponseWriter, r *http.Request) {
 	h.commit(w, r, func(options *option.Options, _ *store.Meta) error {
 		if string(body) == "null" {
 			options.Certificate = nil
+			logger.Info("清空顶层 certificate 配置")
 			return nil
 		}
 		var cert option.CertificateOptions
 		if err := json.Unmarshal(body, &cert); err != nil {
+			logger.Warn("解析顶层 certificate 配置失败: %v", err)
 			return err
 		}
 		options.Certificate = &cert
+		logger.Info("成功更新顶层 certificate 配置 (store=%s)", cert.Store)
 		return nil
 	})
 }
@@ -121,12 +128,15 @@ func (h *Handler) handleCreateCertProvider(w http.ResponseWriter, r *http.Reques
 	}
 	var provider option.CertificateProvider
 	if err := json.UnmarshalContext(h.ctx(r), body, &provider); err != nil {
+		logger.Warn("解析创建 certificate provider 请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+		newID := store.NewUUID()
 		options.CertificateProviders = append(options.CertificateProviders, provider)
-		meta.CertificateProviderIDs = append(meta.CertificateProviderIDs, store.NewUUID())
+		meta.CertificateProviderIDs = append(meta.CertificateProviderIDs, newID)
+		logger.Info("成功创建 certificate provider [id=%s, type=%s, tag=%s]", newID, provider.Type, provider.Tag)
 		return nil
 	})
 }
@@ -140,15 +150,18 @@ func (h *Handler) handleUpdateCertProvider(w http.ResponseWriter, r *http.Reques
 	}
 	var provider option.CertificateProvider
 	if err := json.UnmarshalContext(h.ctx(r), body, &provider); err != nil {
+		logger.Warn("解析更新 certificate provider [%s] 请求体失败: %v", id, err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	h.commit(w, r, func(options *option.Options, _ *store.Meta) error {
 		index := h.findCertProviderIndexByID(id)
 		if index < 0 {
+			logger.Warn("更新 certificate provider 失败: id 不存在 [%s]", id)
 			return errors.New("certificate provider 不存在: " + id)
 		}
 		options.CertificateProviders[index] = provider
+		logger.Info("更新 certificate provider 成功 [id=%s, type=%s, tag=%s]", id, provider.Type, provider.Tag)
 		return nil
 	})
 }
@@ -159,13 +172,16 @@ func (h *Handler) handleDeleteCertProvider(w http.ResponseWriter, r *http.Reques
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
 		index := h.findCertProviderIndexByID(id)
 		if index < 0 {
+			logger.Warn("删除 certificate provider 失败: id 不存在 [%s]", id)
 			return errors.New("certificate provider 不存在: " + id)
 		}
 		tag := options.CertificateProviders[index].Tag
 		if refs := certProviderReferencedBy(options, tag); len(refs) > 0 {
 			if !force {
+				logger.Warn("删除 certificate provider 存在引用阻止 [%s]: tag=%s, refs=%v", id, tag, refs)
 				return &GroupReferenceError{Tag: tag, References: refs}
 			}
+			logger.Info("强制删除 certificate provider [%s]: 清理 TLS 引用 %v", id, refs)
 			// force：清掉所有 tls.certificate_provider 引用（JSON map 操作）
 			if err := removeCertProviderRefs(h.ctx(r), options, tag); err != nil {
 				return err
@@ -173,6 +189,7 @@ func (h *Handler) handleDeleteCertProvider(w http.ResponseWriter, r *http.Reques
 		}
 		options.CertificateProviders = append(options.CertificateProviders[:index], options.CertificateProviders[index+1:]...)
 		meta.CertificateProviderIDs = append(meta.CertificateProviderIDs[:index], meta.CertificateProviderIDs[index+1:]...)
+		logger.Info("成功删除 certificate provider [id=%s, tag=%s, force=%v]", id, tag, force)
 		return nil
 	})
 }
@@ -245,3 +262,4 @@ func removeKeyRecursive(obj map[string]any, key, value string) {
 		}
 	}
 }
+

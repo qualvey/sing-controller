@@ -8,21 +8,26 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/store"
 )
 
 func (h *Handler) handleToolUUID(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"uuid": store.NewUUID()})
+	id := store.NewUUID()
+	logger.Debug("生成 UUID: %s", id)
+	writeJSON(w, http.StatusOK, map[string]any{"uuid": id})
 }
 
 // handleToolRealityKeypair 生成 Reality X25519 密钥对（与 sing-box generate reality-keypair 一致，URL-safe base64）。
 func (h *Handler) handleToolRealityKeypair(w http.ResponseWriter, r *http.Request) {
 	privateKey, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
+		logger.Error("生成 Reality 密钥对失败: %v", err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	publicKey := privateKey.PublicKey()
+	logger.Debug("生成 Reality 密钥对成功")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"private_key": base64.RawURLEncoding.EncodeToString(privateKey.Bytes()),
 		"public_key":  base64.RawURLEncoding.EncodeToString(publicKey.Bytes()),
@@ -34,9 +39,11 @@ func (h *Handler) handleToolRealityKeypair(w http.ResponseWriter, r *http.Reques
 func (h *Handler) handleToolPassword(w http.ResponseWriter, r *http.Request) {
 	key := make([]byte, 16)
 	if _, err := rand.Read(key); err != nil {
+		logger.Error("生成随机密码失败: %v", err)
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	logger.Debug("生成随机密码成功")
 	writeJSON(w, http.StatusOK, map[string]any{"password": base64.StdEncoding.EncodeToString(key)})
 }
 
@@ -52,14 +59,17 @@ func (h *Handler) handleToolParseJSON(w http.ResponseWriter, r *http.Request) {
 		JSON string `json:"json"`
 	}
 	if err := json.Unmarshal(body, &request); err != nil {
+		logger.Warn("解析 JSON 工具请求体失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	var data any
 	if err := json.Unmarshal([]byte(request.JSON), &data); err != nil {
+		logger.Warn("解析用户提供的 JSON 文本失败: %v", err)
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	logger.Debug("解析 JSON 文本成功")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": data})
 }
 
@@ -70,6 +80,7 @@ func (h *Handler) handlePortAvailable(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("start"); raw != "" {
 		parsed, err := strconv.ParseUint(raw, 10, 16)
 		if err != nil || parsed < 1024 {
+			logger.Warn("请求可用端口参数非法: start=%s", raw)
 			writeError(w, http.StatusBadRequest, strconv.ErrRange)
 			return
 		}
@@ -77,8 +88,11 @@ func (h *Handler) handlePortAvailable(w http.ResponseWriter, r *http.Request) {
 	}
 	port := findAvailablePort(start)
 	if port == 0 {
+		logger.Error("未找到可用端口: start=%d", start)
 		writeError(w, http.StatusInternalServerError, strconv.ErrRange)
 		return
 	}
+	logger.Debug("分配可用端口成功: port=%d (start=%d)", port, start)
 	writeJSON(w, http.StatusOK, map[string]any{"port": port, "start": start})
 }
+

@@ -4,19 +4,21 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/qualvey/sing-controller/internal/db"
-	"github.com/qualvey/sing-controller/internal/models"
-
 	"github.com/gin-gonic/gin"
+	"github.com/qualvey/sing-controller/internal/db"
+	"github.com/qualvey/sing-controller/internal/logger"
+	"github.com/qualvey/sing-controller/internal/models"
 )
 
 // GetStats 历史统计：traffic_totals 全量（对齐原系统 StatsView）
 func GetStats(c *gin.Context) {
 	var totals []models.TrafficTotal
 	if err := db.DB.Order("total_bytes desc").Find(&totals).Error; err != nil {
+		logger.Error("查询全量流量统计失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	logger.Debug("查询全量流量统计成功 (count=%d)", len(totals))
 	c.JSON(http.StatusOK, totals)
 }
 
@@ -35,6 +37,7 @@ type PeriodSummary struct {
 func GetStatsUsers(c *gin.Context) {
 	var users []models.User
 	if err := db.DB.Find(&users).Error; err != nil {
+		logger.Error("查询用户周期流量统计失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -61,5 +64,7 @@ func GetStatsUsers(c *gin.Context) {
 			CycleEnd:         end,
 		})
 	}
+	logger.Debug("查询用户周期流量大盘成功 (users_count=%d)", len(result))
 	c.JSON(http.StatusOK, result)
 }
+
