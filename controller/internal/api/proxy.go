@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -20,6 +22,15 @@ var (
 	errClashAPIUnavailable   = errors.New("clash API 不可用：settings 未配置 clash_api 且 sing-box 配置未启用 experimental.clash_api")
 	errServiceAPIUnavailable = errors.New("service API 不可用：settings 未配置 service_api 且 sing-box 配置未启用 services[type=api]")
 )
+
+// CoreStatus 描述 sing-box 内核运行时的健康状态
+type CoreStatus struct {
+	Alive     bool   `json:"alive"`
+	Type      string `json:"type"`
+	Version   string `json:"version"`
+	LatencyMS int64  `json:"latency_ms"`
+	Error     string `json:"error,omitempty"`
+}
 
 // reverseProxyEntry 一个反向代理目标（clash API / service API 共用）
 type reverseProxyEntry struct {
@@ -204,3 +215,89 @@ func (h *Handler) handleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	e.proxy.ServeHTTP(w, r)
 }
 
+// probeCoreHealth 对 upstream sing-box 内核进行实际探活
+func (h *Handler) probeCoreHealth(timeout time.Duration) CoreStatus {
+	// 1. 优先尝试 Clash API /version 探活（最精确，能取到具体版本与内核类型）
+	if target, secret, _ := h.clashTarget(); target != nil {
+		start := time.Now()
+		client := &http.Client{
+			Timeout: timeout,
+		}
+		reqURL := strings.TrimRight(target.String(), "/") + "/version"
+		req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+		if err == nil {
+			if secret != "" {
+				req.Header.Set("Authorization", "Bearer "+secret)
+			}
+			resp, reqErr := client.Do(req)
+			if reqErr == nil {
+				defer resp.Body.Close()
+				latency := time.Since(start).Milliseconds()
+				if resp.StatusCode == http.StatusOK {
+					body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+					var verResp struct {
+						Version string `json:"version"`
+					}
+					if err := json.Unmarshal(body, &verResp); err == nil && verResp.Version != "" {
+						return CoreStatus{
+							Alive:     true,
+							Type:      "sing-box",
+							Version:   verResp.Version,
+							LatencyMS: latency,
+						}
+					}
+					return CoreStatus{
+						Alive:     true,
+						Type:      "sing-box",
+						Version:   "sing-box",
+						LatencyMS: latency,
+					}
+				} else if resp.StatusCode == http.StatusUnauthorized {
+					return CoreStatus{
+						Alive:     true,
+						Type:      "sing-box",
+						Error:     "clash API 鉴权失败 (401 Unauthorized)",
+						LatencyMS: latency,
+					}
+				}
+				return CoreStatus{
+					Alive:     false,
+					Type:      "sing-box",
+					Error:     "clash API 返回 HTTP " + resp.Status,
+					LatencyMS: latency,
+				}
+			}
+			return CoreStatus{
+				Alive:     false,
+				Type:      "sing-box",
+				Error:     reqErr.Error(),
+				LatencyMS: time.Since(start).Milliseconds(),
+			}
+		}
+	}
+
+	// 2. 备选尝试 service API（gRPC）TCP 探活
+	if target, _, _ := h.serviceAPITarget(); target != nil {
+		start := time.Now()
+		if err := checkUpstreamReachable(target.String(), timeout); err != nil {
+			return CoreStatus{
+				Alive:     false,
+				Type:      "sing-box",
+				Error:     err.Error(),
+				LatencyMS: time.Since(start).Milliseconds(),
+			}
+		}
+		return CoreStatus{
+			Alive:     true,
+			Type:      "sing-box",
+			Version:   "sing-box",
+			LatencyMS: time.Since(start).Milliseconds(),
+		}
+	}
+
+	return CoreStatus{
+		Alive: false,
+		Type:  "unknown",
+		Error: "未配置 clash_api 或 service_api",
+	}
+}

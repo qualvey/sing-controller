@@ -40,6 +40,7 @@ export const getSingboxClient = (): SingboxClient | null => {
   return current.client
 }
 
+import { api } from '@/api/controller'
 import type { ProbeResult } from '@/helper/connectivity'
 
 // Probe the sing-box channel for the Setup connectivity test.
@@ -56,13 +57,26 @@ export const probeSingboxChannel = async (
   const startAt = Date.now()
   const latency = () => Date.now() - startAt
 
-  // 1. 优先探测 controller /healthz 或 /api/status 端点
+  // 1. 优先通过 controller /api/status 探测核心与链路状态
   try {
-    const res = await fetch(`${window.location.origin}/healthz`, {
-      method: 'GET',
-      signal: controller.signal,
-    })
-    if (res.ok) {
+    const status = await api.status()
+    if (status) {
+      if (status.core && !status.core.alive) {
+        return {
+          ok: false,
+          latency: latency(),
+          kind: 'network',
+          message: status.core.error || 'sing-box 核心未运行',
+        }
+      }
+      if (status.core_alive === false) {
+        return {
+          ok: false,
+          latency: latency(),
+          kind: 'network',
+          message: status.core_error || 'sing-box 核心未运行',
+        }
+      }
       return { ok: true, latency: latency() }
     }
   } catch {

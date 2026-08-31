@@ -79,7 +79,27 @@ export const mihomo = computed<[MIHOMO, string] | undefined>(() => {
 
 export const fetchVersionAPI = async (): Promise<{ data: { version: string } }> => {
   if (channel.value === Channel.Singbox) {
-    // 1. 优先尝试 gRPC StartedService.getVersion
+    // 1. 优先通过 controller /api/status 检查内核健康与版本
+    try {
+      const status = await api.status()
+      if (status) {
+        if (status.core && !status.core.alive) {
+          throw new Error(status.core.error || 'sing-box 核心未运行')
+        }
+        if (status.core_alive === false) {
+          throw new Error(status.core_error || 'sing-box 核心未运行')
+        }
+        if (status.core?.version || status.core_version) {
+          return { data: { version: status.core?.version || status.core_version || 'sing-box' } }
+        }
+      }
+    } catch (e) {
+      if (e instanceof Error && (e.message.includes('核心未运行') || e.message.includes('offline'))) {
+        throw e
+      }
+    }
+
+    // 2. 备选尝试 direct gRPC StartedService.getVersion
     try {
       const client = getSingboxClient()
       if (client) {
@@ -92,22 +112,8 @@ export const fetchVersionAPI = async (): Promise<{ data: { version: string } }> 
       // continue
     }
 
-    // 2. 尝试 controller /api/status 或 /healthz
-    try {
-      const status = await api.status()
-      if (status) {
-        return { data: { version: 'sing-box (controller)' } }
-      }
-    } catch {
-      // continue
-    }
-
-    // 3. 备选尝试 clash API /version
-    try {
-      return await fetchClashVersion()
-    } catch {
-      return { data: { version: 'sing-box' } }
-    }
+    // 3. 备选尝试 clash API /version (必须真实请求并抛错，不吞掉异常)
+    return await fetchClashVersion()
   }
 
   return fetchClashVersion()
@@ -118,7 +124,7 @@ const probeBackend = async (backend: Backend) => {
   let data
 
   try {
-    ;({ data } = await fetchVersionAPI())
+    ; ({ data } = await fetchVersionAPI())
   } catch (e) {
     if (activeBackend.value?.uuid === backend.uuid) {
       backendProbe.value = {
@@ -158,7 +164,7 @@ const probeBackend = async (backend: Backend) => {
 
   if (isCoreUpdateAvailable.value && autoUpgradeCore.value) {
     // 自动升级不是用户点的,失败静默
-    upgradeCoreAPI('auto').catch(() => {})
+    upgradeCoreAPI('auto').catch(() => { })
   }
 }
 
@@ -184,7 +190,7 @@ export const probeActiveBackend = () => {
     ? { uuid: backend.uuid, status: 'probing', latency: 0, message: '' }
     : undefined
 
-  probe = backend ? probeBackend(backend).catch(() => {}) : Promise.resolve()
+  probe = backend ? probeBackend(backend).catch(() => { }) : Promise.resolve()
   return probe
 }
 
@@ -261,7 +267,7 @@ export const checkUIUpdate = async () => {
   isUIUpdateAvailable.value = await fetchIsUIUpdateAvailable()
   if (isUIUpdateAvailable.value && autoUpgradeDashboard.value) {
     // 自动升级不是用户点的,失败静默
-    upgradeUIAPI().catch(() => {})
+    upgradeUIAPI().catch(() => { })
   }
 }
 

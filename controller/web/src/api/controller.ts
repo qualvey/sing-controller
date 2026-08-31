@@ -1,5 +1,13 @@
 import axios, { type AxiosError } from 'axios'
 
+export interface CoreStatusInfo {
+  alive: boolean
+  type?: string
+  version?: string
+  latency_ms?: number
+  error?: string
+}
+
 export interface StatusInfo {
   config_path: string
   controller_config: string
@@ -17,6 +25,11 @@ export interface StatusInfo {
   inbounds: number
   outbounds: number
   rules: number
+  core?: CoreStatusInfo
+  core_alive?: boolean
+  core_version?: string
+  core_type?: string
+  core_error?: string
 }
 
 export interface ControllerSettings {
