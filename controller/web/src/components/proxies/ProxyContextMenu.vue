@@ -30,7 +30,7 @@ const handleTestLatency = async () => {
   const { name, groupName } = target.value
   closeProxyContextMenu()
   try {
-    await proxyLatencyTest(name, getTestUrl(groupName), undefined)
+    await proxyLatencyTest(name, getTestUrl(groupName))
   } catch {
     // latency test failure is handled in assembly/proxies
   }

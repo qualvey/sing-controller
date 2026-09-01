@@ -3,12 +3,16 @@
 // 并按后端类型路由到 clash(拉取式)/ singbox(流驱动)的组装实现。
 import { can, Channel, channel } from '@/assembly/backend'
 import { NOT_CONNECTED, PROXY_TAB_TYPE, PROXY_TYPE, TEST_URL } from '@/constant'
-import { groupTestUrls, independentLatencyTest, speedtestUrl } from '@/store/settings'
+import {
+  groupTestUrls,
+  independentLatencyTest,
+  speedtestTimeout,
+  speedtestUrl,
+} from '@/store/settings'
 import type { Proxy, ProxyProvider } from '@/types'
 import { useStorage } from '@vueuse/core'
 import { last } from 'lodash'
 import { computed, ref } from 'vue'
-import * as clash from './clash'
 
 
 export const proxiesFilter = ref('')
@@ -159,9 +163,10 @@ export const handlerProxySelect = async (proxyGroupName: string, proxyName: stri
 
 export const proxyLatencyTest = async (
   proxyName: string,
-  url?: string,
-  timeout?: number
-) => clash.proxyLatencyTest(proxyName, url, timeout)
+  url = speedtestUrlWithDefault.value,
+  timeout = speedtestTimeout.value,
+  groupName?: string,
+) => (await load()).proxyLatencyTest(proxyName, url, timeout, groupName)
 
 export const proxyGroupLatencyTest = async (proxyGroupName: string) =>
   (await load()).proxyGroupLatencyTest(proxyGroupName)
