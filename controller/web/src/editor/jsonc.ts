@@ -11,6 +11,10 @@ import type { JSONPath, Node, ParseError } from 'jsonc-parser'
 import { parser } from './jsonc.grammar'
 import { getSingBoxValidator } from './schemaValidator'
 
+import { autocompletion } from '@codemirror/autocomplete'
+import { hoverTooltip } from '@codemirror/view'
+import { jsoncCompletionSource, jsoncHoverTooltip } from './schemaIntellisense'
+
 export const jsoncLanguage = LRLanguage.define({
   name: 'jsonc',
   parser: parser.configure({
@@ -41,8 +45,13 @@ export const jsoncLanguage = LRLanguage.define({
 })
 
 export function jsonc(): LanguageSupport {
-  return new LanguageSupport(jsoncLanguage)
+  return new LanguageSupport(jsoncLanguage, [
+    autocompletion({ override: [jsoncCompletionSource] }),
+    hoverTooltip(jsoncHoverTooltip)
+  ])
 }
+
+export { jsoncCompletionSource, jsoncHoverTooltip }
 
 function parseInstancePath(path: string): JSONPath {
   if (!path || path === '/') return []
