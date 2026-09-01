@@ -1,5 +1,7 @@
 sing-box-webui.exe
 controller/sing-box-controller.exe
+controller/sing-controller.exe
+*.exe
 config.json
 !packaging/config.json
 config.json.meta

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.11.0（2026-09-01）
+
+### 新功能
+- **WebSocket 反代连通性校验与错误诊断**：
+  - 新增前端 WebSocket 握手探活机制（`probeWebSocket`），支持自定义超时、错误分类与 `AbortSignal`
+  - 连通性探测全面集成 WebSocket 校验：Clash 通道探测（`/api/clash/traffic`）、sing-box 通道探测及全局会话初始化均严格校验 WS 连通性
+  - 针对 Nginx / Caddy 等反向代理漏配 `Upgrade` / `Connection` 请求头导致的实时流静默失效，提供直观的错误弹窗、状态指示栏（Controller / sing-box 核心 / WebSocket 三状态）及一键复制 Nginx 反代配置参考
+- **全新控制台与双通道架构**：
+  - 深度重构仪表盘，全面支持节点代理组、实时连接、实时日志、规则集、DNS、入站与用户管理
+  - 统一支持 sing-box 原生 API 与 Clash 兼容 API 自动探测与能力适配
+
+### 优化与修复
+- 补充多语言诊断文案（包含 WebSocket 握手失败、CORS 拦截、混合内容限制等，支持 zh, zh-tw, en, ru）
+- 优化 WebSocket 重连与连接状态管理
+
 ## v0.10.0（2026-08-10）
 
 ### 新功能
