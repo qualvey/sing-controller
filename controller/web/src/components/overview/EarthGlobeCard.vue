@@ -328,6 +328,7 @@ import { useI18n } from 'vue-i18n'
 import { buildEarthRoutes } from './earth/routes'
 import {
   DBIP_COMPRESSED_BYTES,
+  earthLocationCache,
   type EarthEndpointInfo,
   type EarthLocation,
   type GeoDatabaseError,
@@ -354,10 +355,11 @@ const rotationPaused = ref(false)
 const expanded = ref(false)
 const routeCount = ref(0)
 const routesLoading = ref(false)
+const initialRoutesLoaded = ref(false)
 const hoveredEndpoint = ref<EarthEndpointInfo | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
 const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
-const locationCache = new Map<string, EarthLocation | null>()
+const locationCache = earthLocationCache
 const lookupRequests = new Map<number, (locations: Record<string, EarthLocation | null>) => void>()
 let lookupID = 0
 let worker: Worker | null = null
@@ -422,7 +424,9 @@ const showNoData = computed(
   () =>
     databaseStatus.value === 'ready' &&
     originStatus.value === 'ready' &&
+    initialRoutesLoaded.value &&
     !routesLoading.value &&
+    !refreshRunning &&
     routeCount.value === 0,
 )
 const tooltipStyle = computed<CSSProperties>(() => ({
@@ -509,6 +513,7 @@ const refreshRoutes = async () => {
       }
     } finally {
       routesLoading.value = false
+      initialRoutesLoaded.value = true
     }
   } while (refreshQueued && !disposed)
 

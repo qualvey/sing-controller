@@ -1,3 +1,4 @@
+import { earthLocationCache } from '@/components/overview/earth/types'
 import { IP_INFO_API, LANG } from '@/constant'
 import { geoipASNDatabaseURL, geoipCountryDatabaseURL, IPInfoAPI, language } from '@/store/settings'
 import { watchDebounced } from '@vueuse/core'
@@ -119,9 +120,9 @@ const getIPFromIPapiisAPI = async (ip = '') => {
   }
 }
 
-export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
+const fetchOnlineIPInfo = async (ip = ''): Promise<IPInfo> => {
   switch (IPInfoAPI.value) {
-    case IP_INFO_API.IPAPI:
+    case IP_INFO_API.IPAPI: {
       const ipapi = await getIPFromIPapiisAPI(ip)
 
       return {
@@ -132,7 +133,8 @@ export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
         asn: ipapi.asn_num?.toString() ?? '',
         organization: ipapi.asn_org ?? ipapi.company_name ?? '',
       }
-    case IP_INFO_API.IPWHOIS:
+    }
+    case IP_INFO_API.IPWHOIS: {
       const ipwhois = await getIPFromIPWhoisAPI(ip)
 
       return {
@@ -140,11 +142,12 @@ export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
         region: ipwhois.region,
         country: ipwhois.country,
         city: ipwhois.city,
-        asn: ipwhois.connection.asn?.toString(),
-        organization: ipwhois.connection.org,
+        asn: ipwhois.connection.asn?.toString() ?? '',
+        organization: ipwhois.connection.org ?? '',
       }
+    }
     case IP_INFO_API.IPSB:
-    default:
+    default: {
       const ipsb = await getIPFromIpsbAPI(ip)
 
       return {
@@ -152,9 +155,40 @@ export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
         country: ipsb.country,
         region: ipsb.region,
         city: ipsb.city,
-        asn: ipsb.asn?.toString(),
-        organization: ipsb.organization,
+        asn: ipsb.asn?.toString() ?? '',
+        organization: ipsb.organization ?? '',
       }
+    }
+  }
+}
+
+export const getIPInfo = async (ip = ''): Promise<IPInfo> => {
+  if (!ip) return EMPTY_GEOIP_INFO
+
+  // 并发查询：本地 MMDB（保证地理位置与地球仪/本地离线库一致）+ 在线 API（获取实时准确的 ASN 与组织名称）
+  const [mmdbInfo, apiInfo] = await Promise.all([
+    getGeoIPInfo(ip).catch(() => null),
+    fetchOnlineIPInfo(ip).catch(() => null),
+  ])
+
+  // 尝试读取地球仪高精度 DB-IP 城市/国家（例如阿姆斯特丹 / 荷兰）
+  const earthLocation = earthLocationCache.get(ip)
+
+  const finalCountry = earthLocation?.country || mmdbInfo?.country || apiInfo?.country || ''
+  const finalCity = earthLocation?.city || mmdbInfo?.city || apiInfo?.city || ''
+  const finalRegion = mmdbInfo?.region || apiInfo?.region || ''
+
+  // 其他参数（ASN 编号、组织机构/运营商）优先从在线 API 获取，缺失时从 MMDB ASN 补全
+  const finalAsn = apiInfo?.asn || mmdbInfo?.asn || ''
+  const finalOrg = apiInfo?.organization || mmdbInfo?.organization || ''
+
+  return {
+    ip,
+    country: finalCountry,
+    region: finalRegion,
+    city: finalCity,
+    asn: finalAsn,
+    organization: finalOrg,
   }
 }
 
@@ -302,7 +336,7 @@ const lookup = async <T extends GeoIPResponse>(url: string, ip: string): Promise
   }
 }
 
-const getGeoIPInfo = async (ip: string): Promise<IPInfo> => {
+export const getGeoIPInfo = async (ip: string): Promise<IPInfo> => {
   const [country, asn] = await Promise.all([
     lookup<CountryResponse>(geoipCountryDatabaseURL.value, ip),
     lookup<AsnResponse>(geoipASNDatabaseURL.value, ip),

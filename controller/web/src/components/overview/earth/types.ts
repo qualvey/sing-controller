@@ -16,6 +16,8 @@ export interface EarthLocation {
   country: string
 }
 
+export const earthLocationCache = new Map<string, EarthLocation | null>()
+
 export interface EarthHostTraffic {
   host: string
   downloaded: number
