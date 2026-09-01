@@ -5,6 +5,7 @@
 // 由 index.ts 门面按当前后端动态选用。
 import { getGeoIPInfoSync } from '@/api/geoip'
 import { CONNECTIONS_TABLE_ACCESSOR_KEY, PROXY_CHAIN_DIRECTION } from '@/constant'
+import { destinationIP, dnsRevision, getCachedIPSync } from '@/helper/dns'
 import { getIPLabelFromMap } from '@/helper/sourceip'
 import { fromNow, prettyBytesHelper } from '@/helper/utils'
 import type { Connection } from '@/types'
@@ -91,6 +92,9 @@ export const createGetConnectionDisplayValue =
     key: CONNECTIONS_TABLE_ACCESSOR_KEY,
     options: ConnectionDisplayOptions,
   ) => {
+    // 依赖响应式版本号，确保 DNS 异步解析完成时触发重新计算/渲染
+    void dnsRevision.value
+
     switch (key) {
       case CONNECTIONS_TABLE_ACCESSOR_KEY.Type:
         return accessor.networkType(connection)
@@ -120,12 +124,20 @@ export const createGetConnectionDisplayValue =
         return accessor.sourcePort(connection)
       case CONNECTIONS_TABLE_ACCESSOR_KEY.SniffHost:
         return accessor.sniffHost(connection) || '-'
-      case CONNECTIONS_TABLE_ACCESSOR_KEY.Destination:
-        return accessor.destination(connection)
-      case CONNECTIONS_TABLE_ACCESSOR_KEY.DestinationType:
-        return getDestinationType(accessor.destination(connection))
+      case CONNECTIONS_TABLE_ACCESSOR_KEY.Destination: {
+        const dest = accessor.destination(connection)
+        const ip = destinationIP(dest) || getCachedIPSync(dest)
+        return ip || dest
+      }
+      case CONNECTIONS_TABLE_ACCESSOR_KEY.DestinationType: {
+        const dest = accessor.destination(connection)
+        const ip = destinationIP(dest) || getCachedIPSync(dest) || dest
+        return getDestinationType(ip)
+      }
       case CONNECTIONS_TABLE_ACCESSOR_KEY.GeoIP: {
-        const { country, organization } = getGeoIPInfoSync(accessor.destination(connection))
+        const dest = accessor.destination(connection)
+        const ip = destinationIP(dest) || getCachedIPSync(dest) || dest
+        const { country, organization } = getGeoIPInfoSync(ip)
 
         return [country, organization].filter(Boolean).join(' / ')
       }

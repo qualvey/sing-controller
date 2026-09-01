@@ -1,4 +1,5 @@
 import {
+  connectionAccessor,
   disconnectByIdAPI,
   fetchConnectionsAPI,
   getConnectionVisibleSearchValues,
@@ -16,6 +17,7 @@ import {
   getInboundUserFromConnection,
   getNetworkTypeFromConnection,
 } from '@/helper'
+import { cleanHostOrDomain, destinationIP, resolveDomains } from '@/helper/dns'
 import { toSearchRegex } from '@/helper/search'
 import type { Connection } from '@/types'
 import { useStorage, watchOnce } from '@vueuse/core'
@@ -86,6 +88,23 @@ export const initConnections = () => {
     }
 
     activeConnections.value = snapshot.active
+
+    if (snapshot.active.length > 0) {
+      const domains: string[] = []
+      const accessor = connectionAccessor()
+      for (const conn of snapshot.active) {
+        const dest = accessor.destination(conn)
+        if (dest) {
+          const clean = cleanHostOrDomain(dest)
+          if (clean && !destinationIP(clean) && !clean.includes(' ')) {
+            domains.push(clean)
+          }
+        }
+      }
+      if (domains.length > 0) {
+        resolveDomains(domains).catch(() => {})
+      }
+    }
 
     if (snapshot.closed.length > 0) {
       closedConnections.value = closedConnections.value.concat(snapshot.closed).slice(-500)

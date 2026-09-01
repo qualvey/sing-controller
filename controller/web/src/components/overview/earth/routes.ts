@@ -1,8 +1,7 @@
-import { api } from '@/api/controller'
 import { connectionAccessor } from '@/assembly/connections'
 import { proxyMap } from '@/assembly/proxies'
+import { cleanHostOrDomain, destinationIP, normalizeIP, resolveDomains } from '@/helper/dns'
 import type { Connection } from '@/types'
-import * as ipaddr from 'ipaddr.js'
 import type { EarthHostTraffic, EarthLocation, EarthRoute } from './types'
 
 interface RawCandidate {
@@ -22,63 +21,8 @@ interface ResolvedCandidate {
   downloaded: number
 }
 
-const domainDnsCache = new Map<string, string>()
-
-const cacheResolvedDomain = (domain: string, ip: string) => {
-  domainDnsCache.set(domain, ip)
-  if (domainDnsCache.size > 2048) {
-    const oldest = domainDnsCache.keys().next().value
-    if (oldest) domainDnsCache.delete(oldest)
-  }
-}
-
-const normalizeIP = (value: string) => {
-  try {
-    return ipaddr.parse(value).toNormalizedString()
-  } catch {
-    return null
-  }
-}
-
-/** Splits IP, IP:port and bracketed IPv6 without interpreting a domain as an IP. */
-const destinationIP = (rawValue: string) => {
-  const value = rawValue.trim()
-  if (!value) return null
-
-  const bareIP = normalizeIP(value)
-  if (bareIP) return bareIP
-
-  if (value.startsWith('[')) {
-    const closingBracket = value.indexOf(']')
-    if (closingBracket > 1) return normalizeIP(value.slice(1, closingBracket))
-  }
-
-  const lastColon = value.lastIndexOf(':')
-  if (lastColon > 0 && /^\d+$/.test(value.slice(lastColon + 1))) {
-    return normalizeIP(value.slice(0, lastColon))
-  }
-
-  return null
-}
-
-const cleanHostOrDomain = (rawValue: string): string => {
-  let val = rawValue.trim()
-  if (!val) return ''
-
-  if (val.startsWith('[')) {
-    const closing = val.indexOf(']')
-    if (closing > 1) val = val.slice(1, closing)
-  } else {
-    const lastColon = val.lastIndexOf(':')
-    if (lastColon > 0 && /^\d+$/.test(val.slice(lastColon + 1))) {
-      val = val.slice(0, lastColon)
-    }
-  }
-  return val.replace(/\.$/, '')
-}
-
 /**
- * Extracts raw targets (either direct IP or domain/outbound) from active connections
+ * 从当前活跃连接中提取目标（直连 IP、域名或出站节点服务器）
  */
 const extractRawCandidates = (connections: readonly Connection[]): RawCandidate[] => {
   const accessor = connectionAccessor()
@@ -133,31 +77,20 @@ const extractRawCandidates = (connections: readonly Connection[]): RawCandidate[
 }
 
 /**
- * Resolves domains to IPs via DNS Lookup API with memory cache
+ * 借助全局 DNS 服务批量将域名解析为 IP
  */
 const resolveCandidateIPs = async (
   rawCandidates: readonly RawCandidate[],
 ): Promise<ResolvedCandidate[]> => {
-  const uncachedDomains = new Set<string>()
+  const domainList: string[] = []
 
   for (const candidate of rawCandidates) {
     if (!candidate.isDirectIP && candidate.rawTarget) {
-      if (!domainDnsCache.has(candidate.rawTarget)) {
-        uncachedDomains.add(candidate.rawTarget)
-      }
+      domainList.push(candidate.rawTarget)
     }
   }
 
-  if (uncachedDomains.size > 0) {
-    try {
-      const results = await api.dnsLookup([...uncachedDomains])
-      for (const [domain, ip] of Object.entries(results)) {
-        if (ip) cacheResolvedDomain(domain, ip)
-      }
-    } catch {
-      // 忽略 DNS 解析错误，无法解析的 candidate 将在下方过滤
-    }
-  }
+  const resolvedMap = domainList.length > 0 ? await resolveDomains(domainList) : {}
 
   const resolved: ResolvedCandidate[] = []
 
@@ -166,9 +99,9 @@ const resolveCandidateIPs = async (
     if (candidate.isDirectIP) {
       finalIP = candidate.rawTarget
     } else {
-      const cached = domainDnsCache.get(candidate.rawTarget)
-      if (cached) {
-        finalIP = destinationIP(cached) || cached
+      const resolvedFromDNS = resolvedMap[candidate.rawTarget]
+      if (resolvedFromDNS) {
+        finalIP = destinationIP(resolvedFromDNS) || resolvedFromDNS
       }
     }
 
@@ -253,4 +186,3 @@ export const buildEarthRoutes = async (
 
   return { routes: [...aggregated.values()], origin }
 }
-

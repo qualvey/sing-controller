@@ -152,6 +152,7 @@ import SourceIPLabels from '@/components/settings/connections/SourceIPLabels.vue
 import { useConnections } from '@/composables/connections'
 import { CONNECTIONS_TABLE_ACCESSOR_KEY } from '@/constant'
 import { getConnectionChains, getConnectionSourceIP, getDestinationFromConnection } from '@/helper'
+import { cleanHostOrDomain, destinationIP as parseDestinationIP, resolveDomain } from '@/helper/dns'
 import { PROXIES_PARENT_CLASS } from '@/helper/utils'
 import { proxyChainDirection, showFullProxyChain } from '@/store/settings'
 import {
@@ -176,6 +177,7 @@ const { t } = useI18n()
 const details = ref<IPInfo | null>(null)
 const selectedProxy = ref('')
 const sourceIPDialogVisible = ref(false)
+const resolvedDestinationIP = ref('')
 
 type TabType = 'overview' | 'raw' | 'proxies'
 const tabLabel: Record<TabType, string> = {
@@ -185,9 +187,12 @@ const tabLabel: Record<TabType, string> = {
 }
 const activeTab = ref<TabType>('overview')
 
-const destinationIP = computed(() =>
-  infoConn.value ? getDestinationFromConnection(infoConn.value) : undefined,
-)
+const destinationIP = computed(() => {
+  if (resolvedDestinationIP.value) return resolvedDestinationIP.value
+  const raw = infoConn.value ? getDestinationFromConnection(infoConn.value) : ''
+  const direct = parseDestinationIP(cleanHostOrDomain(raw)) || parseDestinationIP(raw)
+  return direct || raw
+})
 const sourceIP = computed(() => (infoConn.value ? getConnectionSourceIP(infoConn.value) : ''))
 const isValidDestinationIP = computed(
   () => !!destinationIP.value && ipaddr.isValid(destinationIP.value),
@@ -288,6 +293,51 @@ watch(
 )
 
 watch(
+  () => infoConn.value,
+  async (conn) => {
+    if (!conn) {
+      resolvedDestinationIP.value = ''
+      details.value = null
+      return
+    }
+
+    const raw = getDestinationFromConnection(conn) || ''
+    const clean = cleanHostOrDomain(raw)
+    const direct = parseDestinationIP(clean) || parseDestinationIP(raw)
+
+    if (direct) {
+      resolvedDestinationIP.value = direct
+      return
+    }
+
+    if (clean && !clean.includes(' ')) {
+      const ip = await resolveDomain(clean)
+      if (ip) {
+        resolvedDestinationIP.value = ip
+        return
+      }
+    }
+
+    // 回退：若无直接 IP 且非有效域名，尝试从出站代理节点服务器解析
+    const outbound = getConnectionChains(conn)[0] || (conn as any).outbound || ''
+    if (outbound && outbound !== 'direct' && outbound !== 'block' && outbound !== 'dns-out') {
+      const node = proxyMap.value[outbound]
+      const server = cleanHostOrDomain((node as any)?.server || (node as any)?.host || '')
+      if (server) {
+        const sIP = parseDestinationIP(server) || (await resolveDomain(server))
+        if (sIP) {
+          resolvedDestinationIP.value = sIP
+          return
+        }
+      }
+    }
+
+    resolvedDestinationIP.value = ''
+  },
+  { immediate: true },
+)
+
+watch(
   () => destinationIP.value,
   (newIP) => {
     if (!newIP || !isValidDestinationIP.value || isPrivateIP.value) {
@@ -304,5 +354,6 @@ watch(
       details.value = res
     })
   },
+  { immediate: true },
 )
 </script>
