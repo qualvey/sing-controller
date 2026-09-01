@@ -1,1 +1,4 @@
-outbound添加，从json解析，如果当前表单选择了tuic,粘贴了vless的信息，第一次会报错。如果选择了vless,粘贴tuic也会报错
+
+编辑节点，如果修改tag,路径tag与body tag不一致（后端）
+
+前端没有添加节点的入口

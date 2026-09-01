@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:types": "json2ts ./schema.json -o src/types/gen/singbox.d.ts --bannerComment \"/* 自动由 sing-box schema 生成，请勿手动修改 */\""
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.13.0",
@@ -95,6 +96,7 @@
     "eslint": "^10.8.0",
     "eslint-plugin-vue": "^10.10.0",
     "husky": "^9.1.7",
+    "json-schema-to-typescript": "^16.0.0",
     "lint-staged": "^17.2.0",
     "postcss": "^8.5.25",
     "postcss-conditionals": "^2.1.0",
