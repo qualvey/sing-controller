@@ -500,7 +500,6 @@ const refreshRoutes = async () => {
         language.value,
         lookupLocations,
       )
-      console.log('📍 [buildEarthRoutes 结果]:', result)
       if (!disposed) {
         routeCount.value = result.routes.length
         if (result.origin) renderer.value?.setInitialLocation(result.origin)
