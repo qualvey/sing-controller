@@ -54,8 +54,7 @@
 import { PROXY_CARD_SIZE, PROXY_SORT_TYPE } from '@/constant'
 import { checkTruncation } from '@/helper/tooltip'
 import { scrollIntoCenter } from '@/helper/utils'
-import { proxyLatencyTest } from '@/assembly/proxies'
-import { getIPv6ByName, getTestUrl, proxyMap } from '@/assembly/proxies'
+import { getIPv6ByName, getTestUrl, isTestingNode, proxyLatencyTest, proxyMap } from '@/assembly/proxies'
 import { openProxyContextMenu } from '@/composables/proxyContextMenu'
 import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
 import { smartWeightsMap } from '@/store/smart'
@@ -81,7 +80,7 @@ const handleContextMenu = (e: MouseEvent) => {
 
 const cardRef = ref()
 const node = computed(() => proxyMap.value[props.name])
-const isLatencyTesting = ref(false)
+const isLatencyTesting = computed(() => isTestingNode(props.name))
 const typeFormatter = (type: string) => {
   type = type.toLowerCase()
   type = type.replace('shadowsocks', 'ss')
@@ -105,13 +104,10 @@ const latencyTipAnimationClass = ref<string[]>([])
 const handlerLatencyTest = async () => {
   if (isLatencyTesting.value) return
 
-  isLatencyTesting.value = true
   try {
-
     await proxyLatencyTest(props.name, getTestUrl(props.groupName))
-    isLatencyTesting.value = false
   } catch {
-    isLatencyTesting.value = false
+    // latency test failure is handled in assembly/proxies
   }
 
   if (

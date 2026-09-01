@@ -32,7 +32,7 @@
 import { NOT_CONNECTED } from '@/constant'
 import { getColorForLatency } from '@/helper'
 import { useTooltip } from '@/helper/tooltip'
-import { getHistoryByName, getLatencyByName } from '@/assembly/proxies'
+import { getHistoryByName, getLatencyByName, isTestingNode } from '@/assembly/proxies'
 import { BoltIcon } from '@heroicons/vue/24/outline'
 import { CountUp } from 'countup.js'
 import dayjs from 'dayjs'
@@ -124,7 +124,7 @@ const color = computed(() => {
 type LatencyState = 'loading' | 'empty' | 'value'
 
 const state = computed<LatencyState>(() => {
-  if (props.loading) return 'loading'
+  if (props.loading || isTestingNode(props.name)) return 'loading'
   if (latency.value === NOT_CONNECTED || !latency.value) return 'empty'
   return 'value'
 })

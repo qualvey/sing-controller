@@ -161,12 +161,24 @@ export const fetchProxies = async () => (await load()).fetchProxies()
 export const handlerProxySelect = async (proxyGroupName: string, proxyName: string) =>
   (await load()).handlerProxySelect(proxyGroupName, proxyName)
 
+export const testingNodeMap = ref<Record<string, boolean>>({})
+export const isTestingNode = (name?: string) => !!(name && testingNodeMap.value[name])
+
 export const proxyLatencyTest = async (
   proxyName: string,
   url = speedtestUrlWithDefault.value,
   timeout = speedtestTimeout.value,
   groupName?: string,
-) => (await load()).proxyLatencyTest(proxyName, url, timeout, groupName)
+) => {
+  testingNodeMap.value = { ...testingNodeMap.value, [proxyName]: true }
+  try {
+    return await (await load()).proxyLatencyTest(proxyName, url, timeout, groupName)
+  } finally {
+    const next = { ...testingNodeMap.value }
+    delete next[proxyName]
+    testingNodeMap.value = next
+  }
+}
 
 export const proxyGroupLatencyTest = async (proxyGroupName: string) =>
   (await load()).proxyGroupLatencyTest(proxyGroupName)
