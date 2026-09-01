@@ -229,9 +229,8 @@ func (h *Handler) handleUpdateDNSServer(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if server.Tag != tag {
-		writeError(w, http.StatusBadRequest, errors.New("路径 tag 与 body tag 不一致"))
-		return
+	if server.Tag == "" {
+		server.Tag = tag
 	}
 	h.commit(w, r, func(options *option.Options, _ *store.Meta) error {
 		index := dnsServerIndex(options, tag)
@@ -239,8 +238,22 @@ func (h *Handler) handleUpdateDNSServer(w http.ResponseWriter, r *http.Request) 
 			logger.Warn("更新 DNS server 失败: tag 不存在 [%s]", tag)
 			return errors.New("DNS server 不存在: " + tag)
 		}
+		if server.Tag != tag {
+			if dnsServerIndex(options, server.Tag) >= 0 {
+				logger.Warn("更新 DNS server 失败: 新 tag 已存在 [%s]", server.Tag)
+				return errors.New("DNS server tag 已存在: " + server.Tag)
+			}
+			if options.DNS != nil {
+				if options.DNS.Final == tag {
+					options.DNS.Final = server.Tag
+				}
+				for i := range options.DNS.Rules {
+					_ = renameServerInDNSRule(h.ctx(r), &options.DNS.Rules[i], tag, server.Tag)
+				}
+			}
+		}
 		options.DNS.Servers[index] = server
-		logger.Info("更新 DNS server 成功 [tag: %s, type: %s]", tag, server.Type)
+		logger.Info("更新 DNS server 成功 [oldTag: %s, newTag: %s, type: %s]", tag, server.Tag, server.Type)
 		return nil
 	})
 }

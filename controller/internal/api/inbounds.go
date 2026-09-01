@@ -104,18 +104,34 @@ func (h *Handler) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 	if inbound.Tag == "" {
 		inbound.Tag = tag
 	}
-	if inbound.Tag != tag {
-		writeError(w, http.StatusBadRequest, errors.New("路径 tag 与 body tag 不一致"))
-		return
-	}
 	h.commit(w, r, func(options *option.Options, meta *metaType) error {
 		index := h.findInboundIndex(tag)
 		if index < 0 {
 			logger.Warn("更新 inbound 失败: tag 不存在 [%s]", tag)
 			return errors.New("inbound 不存在: " + tag)
 		}
+		if inbound.Tag != tag {
+			if h.findInboundIndex(inbound.Tag) >= 0 {
+				logger.Warn("更新 inbound 失败: 新 tag 已存在 [%s]", inbound.Tag)
+				return errors.New("inbound tag 已存在: " + inbound.Tag)
+			}
+			if options.Route != nil {
+				for i := range options.Route.Rules {
+					_ = renameInboundInRule(h.ctx(r), &options.Route.Rules[i], tag, inbound.Tag)
+				}
+			}
+			if meta != nil {
+				for i := range meta.Users {
+					for idx, bTag := range meta.Users[i].BoundInbounds {
+						if bTag == tag {
+							meta.Users[i].BoundInbounds[idx] = inbound.Tag
+						}
+					}
+				}
+			}
+		}
 		options.Inbounds[index] = inbound
-		logger.Info("更新 inbound [tag: %s, type: %s]", tag, inbound.Type)
+		logger.Info("更新 inbound [oldTag: %s, newTag: %s, type: %s]", tag, inbound.Tag, inbound.Type)
 		// 用户池绑定投影
 		return syncUsersToInbounds(h.ctx(r), options, meta.Users)
 	})

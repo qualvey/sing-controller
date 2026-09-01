@@ -179,6 +179,30 @@ func (h *Handler) handleGetOutbound(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(content)
 }
 
+// renameTagInGroups 将所有 selector/urltest 组中的 oldTag 替换为 newTag。
+func renameTagInGroups(options *option.Options, oldTag, newTag string) {
+	for i := range options.Outbounds {
+		outbound := &options.Outbounds[i]
+		switch typed := outbound.Options.(type) {
+		case *option.SelectorOutboundOptions:
+			for idx, m := range typed.Outbounds {
+				if m == oldTag {
+					typed.Outbounds[idx] = newTag
+				}
+			}
+			if typed.Default == oldTag {
+				typed.Default = newTag
+			}
+		case *option.URLTestOutboundOptions:
+			for idx, m := range typed.Outbounds {
+				if m == oldTag {
+					typed.Outbounds[idx] = newTag
+				}
+			}
+		}
+	}
+}
+
 func (h *Handler) handleUpdateOutbound(w http.ResponseWriter, r *http.Request) {
 	tag := r.PathValue("tag")
 	body, err := readRawBody(r)
@@ -195,18 +219,29 @@ func (h *Handler) handleUpdateOutbound(w http.ResponseWriter, r *http.Request) {
 	if outbound.Tag == "" {
 		outbound.Tag = tag
 	}
-	if outbound.Tag != tag {
-		writeError(w, http.StatusBadRequest, errors.New("路径 tag 与 body tag 不一致"))
-		return
-	}
 	h.commit(w, r, func(options *option.Options, _ *metaType) error {
 		index := h.findOutboundIndex(tag)
 		if index < 0 {
 			logger.Warn("更新 outbound 失败: tag 不存在 [%s]", tag)
 			return errors.New("outbound 不存在: " + tag)
 		}
+		if outbound.Tag != tag {
+			if h.findOutboundIndex(outbound.Tag) >= 0 {
+				logger.Warn("更新 outbound 失败: 新 tag 已存在 [%s]", outbound.Tag)
+				return errors.New("outbound tag 已存在: " + outbound.Tag)
+			}
+			renameTagInGroups(options, tag, outbound.Tag)
+			if options.Route != nil {
+				if options.Route.Final == tag {
+					options.Route.Final = outbound.Tag
+				}
+				for i := range options.Route.Rules {
+					_ = renameOutboundInRule(h.ctx(r), &options.Route.Rules[i], tag, outbound.Tag)
+				}
+			}
+		}
 		options.Outbounds[index] = outbound
-		logger.Info("更新 outbound [tag: %s, type: %s]", tag, outbound.Type)
+		logger.Info("更新 outbound [oldTag: %s, newTag: %s, type: %s]", tag, outbound.Tag, outbound.Type)
 		return nil
 	})
 }

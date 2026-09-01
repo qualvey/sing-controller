@@ -75,6 +75,10 @@
 
     <!-- 新建/编辑 Inbound 弹窗 -->
     <InboundEditDialog />
+
+    <!-- 全局用户抽屉与编辑弹窗（内联收纳） -->
+    <UserDrawer />
+    <UserEditDialog />
   </div>
 </template>
 
@@ -95,6 +99,8 @@ import InboundCard from '@/components/inbounds/InboundCard.vue'
 import InboundEditDialog from '@/components/inbounds/InboundEditDialog.vue'
 import InboundTable from '@/components/inbounds/InboundTable.vue'
 import SourcePane from '@/components/SourcePane.vue'
+import UserDrawer from '@/components/users/UserDrawer.vue'
+import UserEditDialog from '@/components/users/UserEditDialog.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { openCreateInboundModal } from '@/composables/inboundManagement'
 import { isMiddleScreen } from '@/helper/utils'
@@ -115,3 +121,4 @@ onMounted(async () => {
   ])
 })
 </script>
+
