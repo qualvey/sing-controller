@@ -17,9 +17,17 @@
           </span>
           <div class="min-w-0 flex-1">
             <h1 class="text-base font-semibold leading-tight">
-              {{ isCoreOffline ? 'sing-box 核心未运行' : $t('backendUnreachable') }}
+              {{
+                isCoreOffline
+                  ? 'sing-box 核心未运行'
+                  : isWsError
+                    ? 'WebSocket 连接失败'
+                    : $t('backendUnreachable')
+              }}
             </h1>
-            <div class="text-base-content/60 mt-0.5 truncate text-sm">{{ label }}</div>
+            <div class="text-base-content/60 mt-0.5 truncate text-sm">
+              {{ isWsError ? '反向代理未配置 WebSocket / Upgrade 转发' : label }}
+            </div>
             <div
               v-if="url !== label"
               class="text-base-content/40 truncate text-xs"
@@ -29,7 +37,7 @@
           </div>
         </div>
 
-        <!-- 状态状态指示栏 -->
+        <!-- 状态指示栏：核心离线 -->
         <div
           v-if="isCoreOffline"
           class="bg-base-200/60 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs"
@@ -45,8 +53,51 @@
           </span>
         </div>
 
+        <!-- 状态指示栏：WebSocket 握手失败 -->
+        <div
+          v-else-if="isWsError"
+          class="bg-base-200/60 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs"
+        >
+          <span class="inline-flex items-center gap-1 text-success">
+            <span class="inline-block h-2 w-2 rounded-full bg-success"></span>
+            Controller: 在线
+          </span>
+          <span class="text-base-content/20">|</span>
+          <span class="inline-flex items-center gap-1 text-success">
+            <span class="inline-block h-2 w-2 rounded-full bg-success"></span>
+            sing-box 核心: 在线
+          </span>
+          <span class="text-base-content/20">|</span>
+          <span class="inline-flex items-center gap-1 text-error">
+            <span class="inline-block h-2 w-2 rounded-full bg-error"></span>
+            WebSocket: 异常
+          </span>
+        </div>
+
         <div class="bg-error/10 text-error rounded-lg px-3 py-2 text-xs leading-5 break-all">
           {{ displayErrorDetail }}
+        </div>
+
+        <!-- WebSocket 异常时展示 Nginx / 反代配置指导与一键复制 -->
+        <div
+          v-if="isWsError"
+          class="border-base-border bg-base-200/60 flex flex-col gap-2 rounded-lg border p-3 text-xs"
+        >
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-base-content/80">Nginx 反代配置参考：</span>
+            <button
+              class="btn btn-ghost btn-xs text-primary h-6 min-h-0 px-2"
+              @click="copyNginxConfig"
+            >
+              {{ copiedNginx ? '已复制 ✓' : '复制配置' }}
+            </button>
+          </div>
+          <pre class="bg-base-300/80 text-base-content/90 rounded p-2 text-[11px] font-mono leading-relaxed overflow-x-auto select-all"><code>proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";</code></pre>
+          <div class="text-base-content/60 text-[11px] leading-relaxed">
+            提示：HTTP 请求正常但 WebSocket 无法升级握手。实时流量、连接图表与日志均依赖 WebSocket。
+          </div>
         </div>
 
         <div class="flex flex-col gap-2">
@@ -151,6 +202,7 @@ import { useRoute } from 'vue-router'
 const statusStore = useStatusStore()
 const detail = ref('')
 const isReloading = ref(false)
+const copiedNginx = ref(false)
 
 // 探测结果属于上一个后端时不认,免得刚切走就弹一个旧后端的失败。
 const probe = computed(() =>
@@ -169,6 +221,20 @@ const isCoreOffline = computed(() => {
   )
 })
 
+// 判断是否属于 HTTP 正常但 WebSocket 握手失败
+const isWsError = computed(() => {
+  const msg = probe.value?.message || detail.value || ''
+  return (
+    !isCoreOffline.value &&
+    (msg.includes('WebSocket') ||
+      msg.includes('websocket') ||
+      msg.includes('Upgrade') ||
+      msg.includes('upgrade') ||
+      msg.includes('反代') ||
+      msg.includes('反向代理'))
+  )
+})
+
 const displayErrorDetail = computed(() => {
   if (isCoreOffline.value) {
     return (
@@ -178,8 +244,25 @@ const displayErrorDetail = computed(() => {
       'sing-box 核心进程已停止或未启动'
     )
   }
+  if (isWsError.value) {
+    return detail.value || 'WebSocket 连接失败，请检查反向代理 WebSocket (Upgrade) 转发配置'
+  }
   return detail.value || '无法连接到控制服务'
 })
+
+const copyNginxConfig = async () => {
+  const config = `proxy_http_version 1.1;\nproxy_set_header Upgrade $http_upgrade;\nproxy_set_header Connection "upgrade";`
+  try {
+    await navigator.clipboard.writeText(config)
+    copiedNginx.value = true
+    showToast('已复制 Nginx WebSocket 配置', 'success')
+    setTimeout(() => {
+      copiedNginx.value = false
+    }, 2500)
+  } catch {
+    showToast('复制失败，请手动选择复制', 'error')
+  }
+}
 
 // 失败一次就一直摆着,直到真的连上或换了后端 —— 点重试的瞬间探测状态会回到
 // probing,若跟着它走,页面会先整个消失再弹回来,像是自己好了。

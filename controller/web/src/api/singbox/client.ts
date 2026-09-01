@@ -41,7 +41,8 @@ export const getSingboxClient = (): SingboxClient | null => {
 }
 
 import { api } from '@/api/controller'
-import type { ProbeResult } from '@/helper/connectivity'
+import { getClashWsUrl } from '@/api/clash'
+import { probeWebSocket, type ProbeResult } from '@/helper/connectivity'
 
 // Probe the sing-box channel for the Setup connectivity test.
 export const probeSingboxChannel = async (
@@ -77,6 +78,19 @@ export const probeSingboxChannel = async (
           message: status.core_error || 'sing-box 核心未运行',
         }
       }
+
+      // HTTP & 核心正常，进一步验证 WebSocket 通信（检查反代 Upgrade）
+      const wsUrl = getClashWsUrl(backend, 'traffic')
+      const wsRes = await probeWebSocket(wsUrl, Math.min(timeout, 3000), controller.signal)
+      if (!wsRes.ok) {
+        return {
+          ok: false,
+          latency: latency(),
+          kind: 'websocket',
+          message: wsRes.message || 'WebSocket 握手失败（反向代理未配置 Upgrade 支持）',
+        }
+      }
+
       return { ok: true, latency: latency() }
     }
   } catch {
@@ -100,6 +114,17 @@ export const probeSingboxChannel = async (
 
   try {
     await client.getVersion({}, { signal: controller.signal })
+    // gRPC 正常，同样验证 WebSocket
+    const wsUrl = getClashWsUrl(backend, 'traffic')
+    const wsRes = await probeWebSocket(wsUrl, Math.min(timeout, 3000), controller.signal)
+    if (!wsRes.ok) {
+      return {
+        ok: false,
+        latency: latency(),
+        kind: 'websocket',
+        message: wsRes.message || 'WebSocket 握手失败（反向代理未配置 Upgrade 支持）',
+      }
+    }
     return { ok: true, latency: latency() }
   } catch (e) {
     return {

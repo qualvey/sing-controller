@@ -4,7 +4,7 @@
 import axios from 'axios'
 import ReconnectingWebSocket from 'reconnectingwebsocket'
 import { shallowRef } from 'vue'
-import type { ProbeResult } from '@/helper/connectivity'
+import { probeWebSocket, type ProbeResult } from '@/helper/connectivity'
 
 // ============ 类型（clash API 响应结构） ============
 
@@ -331,11 +331,46 @@ export const upgradeUIAPI = () => {
   return axios.post('/upgrade/ui')
 }
 
-export const createClashWebSocket = <T>(url: string, searchParams?: Record<string, string>) => {
-  const backend = activeBackend.value!
-  const resurl = new URL(`${getUrlFromBackend(backend).replace('http', 'ws')}/${url}`)
+export const getClashWsUrl = (backend?: Omit<Backend, 'uuid'>, endpoint: string = 'traffic') => {
+  const isHttps = location.protocol === 'https:'
+  const proto = isHttps ? 'wss:' : 'ws:'
+  const ep = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
 
-  // resurl.searchParams.append('token', backend.password || '')
+  if (
+    backend &&
+    backend.host &&
+    backend.port &&
+    backend.host !== location.hostname &&
+    backend.host !== 'localhost' &&
+    backend.host !== '127.0.0.1'
+  ) {
+    const bProto = backend.protocol === 'https' ? 'wss:' : 'ws:'
+    const secPath = backend.secondaryPath
+      ? backend.secondaryPath.startsWith('/')
+        ? backend.secondaryPath
+        : `/${backend.secondaryPath}`
+      : ''
+    const base = `${bProto}//${backend.host}:${backend.port}${secPath}`
+    return base.endsWith('/') ? `${base}${ep}` : `${base}/${ep}`
+  }
+
+  const secPath = backend?.secondaryPath
+    ? backend.secondaryPath.startsWith('/')
+      ? backend.secondaryPath
+      : `/${backend.secondaryPath}`
+    : `${import.meta.env.BASE_URL}api/clash`
+  const base = `${proto}//${location.host}${secPath}`
+  return base.endsWith('/') ? `${base}${ep}` : `${base}/${ep}`
+}
+
+export const createClashWebSocket = <T>(url: string, searchParams?: Record<string, string>) => {
+  const backend = activeBackend.value
+  const rawUrl = getClashWsUrl(backend, url)
+  const resurl = new URL(rawUrl)
+
+  if (backend?.password) {
+    resurl.searchParams.append('token', backend.password)
+  }
 
   if (searchParams) {
     Object.entries(searchParams).forEach(([key, value]) => {
@@ -351,7 +386,11 @@ export const createClashWebSocket = <T>(url: string, searchParams?: Record<strin
   }
 
   const messageHandler = ({ data: message }: { data: string }) => {
-    data.value = JSON.parse(message)
+    try {
+      data.value = JSON.parse(message)
+    } catch {
+      // ignore
+    }
   }
 
   websocket.onmessage = url === 'logs' ? messageHandler : debounce(messageHandler, 100)
@@ -362,9 +401,8 @@ export const createClashWebSocket = <T>(url: string, searchParams?: Record<strin
   }
 }
 
-// 连通性探测。打的就是面板实际在用的那条 API(/version),所以它通了就是真通了。
-// 失败时区分「密码不对 / 端点不对 / 超时 / 不透明网络错误」四类 —— 浏览器只肯说最后
-// 一种,剩下三种能在这里确知的就别推给诊断去猜(见 helper/connectivity)。
+// 连通性探测。包含 HTTP /version 与 WebSocket /traffic 两层探测，
+// 确保即使 HTTP 能通，也能及时捕获 Nginx 等反向代理漏配 Upgrade 头的异常状态。
 export const probeClashChannel = async (
   backend: Backend,
   timeout: number,
@@ -388,14 +426,28 @@ export const probeClashChannel = async (
       signal: controller.signal,
     })
 
-    if (res.ok) return { ok: true, latency: latency() }
-
-    return {
-      ok: false,
-      latency: latency(),
-      kind: res.status === 401 ? 'unauthorized' : 'http',
-      message: `HTTP ${res.status}`,
+    if (!res.ok) {
+      return {
+        ok: false,
+        latency: latency(),
+        kind: res.status === 401 ? 'unauthorized' : 'http',
+        message: `HTTP ${res.status}`,
+      }
     }
+
+    // 2. HTTP 探测通过后，进一步探测 WebSocket 连通性
+    const wsUrl = getClashWsUrl(backend, 'traffic')
+    const wsProbe = await probeWebSocket(wsUrl, Math.min(timeout, 3000), controller.signal)
+    if (!wsProbe.ok) {
+      return {
+        ok: false,
+        latency: latency(),
+        kind: 'websocket',
+        message: wsProbe.message || 'WebSocket 握手失败（反向代理未配置 Upgrade 支持）',
+      }
+    }
+
+    return { ok: true, latency: latency() }
   } catch (e) {
     // 外部取消(切走了 / 组件卸载)不是失败,但调用方已经不看结果了,归入超时即可。
     return {

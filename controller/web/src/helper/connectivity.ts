@@ -23,13 +23,20 @@ export type ProbeFailureKind =
   | 'timeout'
   // 不透明的网络错误,交给 diagnose 进一步区分
   | 'network'
+  // WebSocket 握手或升级失败（反向代理未配置 Upgrade 等）
+  | 'websocket'
 
 export type ProbeResult =
   | { ok: true; latency: number }
   | { ok: false; latency: number; kind: ProbeFailureKind; message: string }
 
 export type ConnectionDiagnosis =
-  'offline' | 'corsBlocked' | 'mixedContent' | 'mixedContentOrUnreachable' | 'unreachable'
+  | 'offline'
+  | 'corsBlocked'
+  | 'mixedContent'
+  | 'mixedContentOrUnreachable'
+  | 'unreachable'
+  | 'websocketFailed'
 
 const DIAGNOSIS_MESSAGE_KEY: Record<ConnectionDiagnosis, string> = {
   offline: 'diagnosisOffline',
@@ -37,6 +44,7 @@ const DIAGNOSIS_MESSAGE_KEY: Record<ConnectionDiagnosis, string> = {
   mixedContent: 'diagnosisMixedContent',
   mixedContentOrUnreachable: 'diagnosisMixedContentOrUnreachable',
   unreachable: 'diagnosisUnreachable',
+  websocketFailed: 'diagnosisWebSocketFailed',
 }
 
 // 浏览器把跨域网络错误说成什么,各家不一样。
@@ -86,6 +94,102 @@ export const diagnoseConnection = async (
   }
 }
 
+/**
+ * 探测 WebSocket 握手与连通性
+ * 确保反向代理已配置 Upgrade / Connection 头
+ */
+export const probeWebSocket = (
+  url: string,
+  timeout = 3000,
+  signal?: AbortSignal,
+): Promise<{ ok: true; latency: number } | { ok: false; latency: number; kind: 'websocket' | 'timeout'; message: string }> => {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ ok: false, latency: 0, kind: 'timeout', message: 'Aborted' })
+      return
+    }
+
+    const startAt = Date.now()
+    const latency = () => Date.now() - startAt
+
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let ws: WebSocket | null = null
+    let settled = false
+
+    const done = (result: {
+      ok: true; latency: number
+    } | {
+      ok: false; latency: number; kind: 'websocket' | 'timeout'; message: string
+    }) => {
+      if (settled) return
+      settled = true
+      if (timer !== null) {
+        clearTimeout(timer)
+        timer = null
+      }
+      signal?.removeEventListener('abort', onAbort)
+      if (ws) {
+        try {
+          ws.onopen = null
+          ws.onerror = null
+          ws.onclose = null
+          ws.onmessage = null
+          ws.close()
+        } catch {
+          // ignore
+        }
+        ws = null
+      }
+      resolve(result)
+    }
+
+    const onAbort = () => {
+      done({ ok: false, latency: latency(), kind: 'timeout', message: 'Aborted' })
+    }
+
+    signal?.addEventListener('abort', onAbort, { once: true })
+
+    timer = setTimeout(() => {
+      done({ ok: false, latency: latency(), kind: 'timeout', message: 'WebSocket 连接超时' })
+    }, timeout)
+
+    try {
+      ws = new WebSocket(url)
+      ws.onopen = () => {
+        done({ ok: true, latency: latency() })
+      }
+      ws.onmessage = () => {
+        done({ ok: true, latency: latency() })
+      }
+      ws.onerror = () => {
+        done({
+          ok: false,
+          latency: latency(),
+          kind: 'websocket',
+          message: 'WebSocket 握手失败（反向代理未配置 Upgrade 支持）',
+        })
+      }
+      ws.onclose = (e) => {
+        if (!settled) {
+          done({
+            ok: false,
+            latency: latency(),
+            kind: 'websocket',
+            message: e.reason || `WebSocket 连接断开 (code: ${e.code || 'unknown'})，请检查反代 WebSocket 配置`,
+          })
+        }
+      }
+    } catch (e) {
+      done({
+        ok: false,
+        latency: latency(),
+        kind: 'websocket',
+        message: e instanceof Error ? e.message : String(e),
+      })
+    }
+  })
+}
+
 // 把一次探测失败翻译成可以直接显示给用户的一句话。
 // 只有不透明的网络错误才值得再探一次;其余分类本身已经说清了原因。
 export const describeProbeFailure = async (
@@ -97,14 +201,16 @@ export const describeProbeFailure = async (
 
   switch (failure.kind) {
     case 'unauthorized':
-      return t('diagnosisUnauthorized')
+      return t('diagnosisUnauthorized') || '认证失败，密码或密钥错误'
     case 'http':
-      return `${failure.message} — ${t('diagnosisBadEndpoint')}`
+      return `${failure.message} — ${t('diagnosisBadEndpoint') || 'API 端点异常'}`
     case 'timeout':
-      return t('diagnosisTimeout')
+      return t('diagnosisTimeout') || '连接超时'
+    case 'websocket':
+      return failure.message || t('diagnosisWebSocketFailed') || 'WebSocket 连接失败（反向代理未配置 Upgrade 支持）'
     default: {
       const diagnosis = await diagnoseConnection(url, signal)
-      return t(DIAGNOSIS_MESSAGE_KEY[diagnosis])
+      return t(DIAGNOSIS_MESSAGE_KEY[diagnosis]) || failure.message || '无法连接到控制服务'
     }
   }
 }
@@ -116,8 +222,19 @@ export const describeConnectionError = async (
   url: string,
   signal?: AbortSignal,
 ): Promise<string> => {
+  if (
+    message.includes('WebSocket') ||
+    message.includes('websocket') ||
+    message.includes('Upgrade') ||
+    message.includes('upgrade') ||
+    message.includes('反代')
+  ) {
+    return message
+  }
+
   if (!isOpaqueNetworkError(message)) return message
 
   const diagnosis = await diagnoseConnection(url, signal)
-  return i18n.global.t(DIAGNOSIS_MESSAGE_KEY[diagnosis])
+  return i18n.global.t(DIAGNOSIS_MESSAGE_KEY[diagnosis]) || message
 }
+

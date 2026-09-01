@@ -1,6 +1,7 @@
 import { api } from '@/api'
 import {
   fetchClashVersion,
+  getClashWsUrl,
   probeClashChannel,
   restartCoreAPI,
   upgradeCoreAPI,
@@ -10,6 +11,7 @@ import { getSingboxClient } from '@/api/singbox/client'
 import HonkLogo from '@/assets/images/honk.svg'
 import MetacubexLogo from '@/assets/images/metacubex.jpg'
 import { MIHOMO, MIHOMO_CHANNEL } from '@/constant'
+import { probeWebSocket } from '@/helper/connectivity'
 import { getRequestErrorMessage } from '@/helper/requestError'
 import { autoUpgradeCore, autoUpgradeDashboard, checkUpgradeCore } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
@@ -140,23 +142,31 @@ const probeBackend = async (backend: Backend) => {
   // 探测期间用户可能又切了后端,过期结果直接丢弃。
   if (activeBackend.value?.uuid !== backend.uuid) return
 
+  // 验证 WebSocket 连通性（防止 Nginx 等反向代理漏配 Upgrade 导致实时流静默失效）
+  const wsUrl = getClashWsUrl(backend, 'traffic')
+  const wsProbe = await probeWebSocket(wsUrl, 3000)
+  if (!wsProbe.ok) {
+    clashAvailable.value = false
+    if (activeBackend.value?.uuid === backend.uuid) {
+      backendProbe.value = {
+        uuid: backend.uuid,
+        status: 'failed',
+        latency: 0,
+        message: wsProbe.message || 'WebSocket 握手失败（反向代理未配置 Upgrade 支持）',
+      }
+    }
+    return
+  }
+
   version.value = data?.version || ''
   core.value = detectCore(version.value)
+  clashAvailable.value = true
   backendProbe.value = {
     uuid: backend.uuid,
     status: 'connected',
     latency: Date.now() - startAt,
     message: '',
   }
-
-  // 异步静默探测 clash_api 连通性，供 Clash 专属功能做软降级
-  probeClashChannel(backend, 3000)
-    .then((res) => {
-      clashAvailable.value = res.ok
-    })
-    .catch(() => {
-      clashAvailable.value = false
-    })
 
   if (!can('coreUpdateCheck') || !checkUpgradeCore.value || backend.disableUpgradeCore) return
 
