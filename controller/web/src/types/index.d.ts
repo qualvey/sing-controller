@@ -1,4 +1,5 @@
 import type { Connection as SingboxConnectionRawMessage } from '@/gen/daemon/started_service_pb'
+export * from './gen/singbox'
 
 export type BackendType = 'clash' | 'singbox'
 
