@@ -276,17 +276,28 @@
               style="grid-column: 1 / -1"
             >
               <span class="border-base-content/10 h-px flex-1 border-t" />
-              用户（Users 页统一管理，可选）
+              用户（用户池统一管理，可选）
               <span class="border-base-content/10 h-px flex-1 border-t" />
             </div>
 
             <label class="text-base-content/70 pt-2 text-sm">绑定用户</label>
-            <div class="flex flex-col gap-1">
-              <ChipInput
-                v-model="selectedPoolUsers"
-                :suggestions="poolUsers.map((u) => u.name)"
-                placeholder="从用户池选择（多选）"
-              />
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center gap-2">
+                <ChipInput
+                  v-model="selectedPoolUsers"
+                  class="flex-1"
+                  :suggestions="poolUsers.map((u) => u.name)"
+                  placeholder="从用户池选择（多选）"
+                />
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs gap-1 shrink-0"
+                  @click="handleCreateUserForInbound"
+                >
+                  <UserPlusIcon class="h-3.5 w-3.5" />
+                  新建用户
+                </button>
+              </div>
               <p class="text-base-content/60 text-xs">
                 绑定后注入 users[]（name+password）；非 2022 method 以用户密码为准，2022 method 以顶部 password 为主密钥
               </p>
@@ -335,21 +346,33 @@
               style="grid-column: 1 / -1"
             >
               <span class="border-base-content/10 h-px flex-1 border-t" />
-              用户（Users 页统一管理）
+              用户（用户池统一管理）
               <span class="border-base-content/10 h-px flex-1 border-t" />
             </div>
 
             <label class="text-base-content/70 pt-2 text-sm">绑定用户</label>
-            <div class="flex flex-col gap-1">
-              <ChipInput
-                v-model="selectedPoolUsers"
-                :suggestions="poolUsers.map((u) => u.name)"
-                placeholder="从用户池选择（多选）"
-              />
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center gap-2">
+                <ChipInput
+                  v-model="selectedPoolUsers"
+                  class="flex-1"
+                  :suggestions="poolUsers.map((u) => u.name)"
+                  placeholder="从用户池选择（多选）"
+                />
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs gap-1 shrink-0"
+                  @click="handleCreateUserForInbound"
+                >
+                  <UserPlusIcon class="h-3.5 w-3.5" />
+                  新建用户
+                </button>
+              </div>
               <p class="text-base-content/60 text-xs">
-                用户统一在 Users 页创建/编辑；此处仅选择要绑定到本入站的用户，保存后自动注入 users[]（按类型取用字段）
+                保存后自动将所选用户注入 users[]（按类型取用 uuid/password 等字段）
               </p>
             </div>
+
 
             <div
               class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
@@ -359,6 +382,7 @@
               协议
               <span class="border-base-content/10 h-px flex-1 border-t" />
             </div>
+
 
             <label class="text-base-content/70 pt-2 text-sm">拥塞控制</label>
             <SelectField
@@ -632,6 +656,7 @@ import {
   isEditMode,
   isInboundModalOpen,
 } from '@/composables/inboundManagement'
+import { openCreateUserModal } from '@/composables/userManagement'
 import { showToast } from '@/helper/toast'
 import { useStatusStore } from '@/store/status'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
@@ -654,6 +679,15 @@ const saving = ref(false)
 const allocating = ref(false)
 const generating = ref(false)
 const suppressTypeWatch = ref(false)
+
+const handleCreateUserForInbound = () => {
+  openCreateUserModal((newUser) => {
+    if (newUser.name && !selectedPoolUsers.value.includes(newUser.name)) {
+      selectedPoolUsers.value = [...selectedPoolUsers.value, newUser.name]
+    }
+  })
+}
+
 const validateMsg = ref('')
 const showSsPassword = ref(false)
 const showUserPasswords = reactive<Record<number, boolean>>({})

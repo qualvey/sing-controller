@@ -188,6 +188,7 @@ import {
   editingUser,
   isEditMode,
   isUserModalOpen,
+  onUserSavedCallback,
 } from '@/composables/userManagement'
 import { EyeIcon, EyeSlashIcon, KeyIcon } from '@heroicons/vue/24/outline'
 import { ref, watch } from 'vue'
@@ -292,6 +293,9 @@ const onSubmit = handleSubmit(async (values) => {
     }
     const success = await saveUser(payload, isEditMode.value, editingUser.value?.name)
     if (success) {
+      if (onUserSavedCallback.value) {
+        onUserSavedCallback.value(payload)
+      }
       closeUserModal()
     }
   } finally {
@@ -299,3 +303,4 @@ const onSubmit = handleSubmit(async (values) => {
   }
 })
 </script>
+

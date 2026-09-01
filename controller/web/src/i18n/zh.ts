@@ -15,6 +15,10 @@ const zh: LANG_MESSAGE = {
   routes: "路由",
   dns: "DNS",
   users: '用户',
+  manageUsers: '用户池管理',
+  createUser: '新建用户',
+  searchUsers: '搜索用户名 / UUID / 绑定入站 | Regex',
+  noMatchingUsers: '暂无匹配的用户',
   createInbound: '新建 Inbound',
   searchInbounds: '搜索 Inbound / tag / 端口 | Regex',
   noInboundsTip: '暂无入站配置。',
@@ -646,10 +650,12 @@ const zh: LANG_MESSAGE = {
   folder_delete_confirm: '确认删除文件夹「{name}」？',
 
   // Proxy & Rule Context Menu
+  createNode: '新建节点',
   testLatency: '节点测速',
   editNode: '编辑节点',
   copyNodeName: '复制节点名',
   deleteNode: '删除节点',
+  confirmDeleteNode: '确定删除节点「{name}」？该操作不可恢复。',
   subscriptionNodeTip: '订阅节点不可直接编辑',
   specialNodeTip: '内置节点不可编辑',
 

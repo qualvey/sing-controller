@@ -13,6 +13,10 @@ const en = {
   routes: 'Routes',
   dns: 'DNS',
   users: 'Users',
+  manageUsers: 'User Pool',
+  createUser: 'New User',
+  searchUsers: 'Search users / UUID / inbound | Regex',
+  noMatchingUsers: 'No matching users found',
   createInbound: 'Create Inbound',
   searchInbounds: 'Search Inbound / Tag / Port | Regex',
   noInboundsTip: 'No inbounds configured yet.',
@@ -657,10 +661,12 @@ const en = {
   folder_delete_confirm: 'Delete folder "{name}"?',
 
   // Proxy & Rule Context Menu
+  createNode: 'Create Node',
   testLatency: 'Test Latency',
   editNode: 'Edit Node',
   copyNodeName: 'Copy Node Name',
   deleteNode: 'Delete Node',
+  confirmDeleteNode: 'Are you sure you want to delete node "{name}"? This cannot be undone.',
   subscriptionNodeTip: 'Subscription nodes cannot be edited directly',
   specialNodeTip: 'Built-in nodes cannot be edited',
 

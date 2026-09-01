@@ -642,10 +642,12 @@ const zhTW: LANG_MESSAGE = {
   folder_delete_confirm: '確認刪除資料夾「{name}」？',
 
   // Proxy & Rule Context Menu
+  createNode: '新建節點',
   testLatency: '節點測速',
   editNode: '編輯節點',
   copyNodeName: '複製節點名',
   deleteNode: '刪除節點',
+  confirmDeleteNode: '確定刪除節點「{name}」？該操作不可恢復。',
   subscriptionNodeTip: '訂閱節點不可直接編輯',
   specialNodeTip: '內置節點不可編輯',
 

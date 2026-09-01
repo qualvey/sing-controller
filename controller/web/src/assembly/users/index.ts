@@ -1,5 +1,5 @@
-// 组装层 · users 门面。持有 users / inbounds 统一状态与渲染派生，提供用户管理操作。
 import { api, type Inbound, type UserMeta } from '@/api'
+import { fetchInbounds as refreshInboundsList, fetchPoolUsers as refreshPoolUsersList } from '@/assembly/inbounds'
 import { toSearchRegex } from '@/helper/search'
 import { showToast } from '@/helper/toast'
 import { computed, ref } from 'vue'
@@ -64,7 +64,7 @@ export const saveUser = async (user: UserMeta, isEdit: boolean, originalName?: s
       await api.createUser(user)
     }
     showToast('已保存（绑定入站的 users 已同步）', 'success')
-    await fetchUsers()
+    await Promise.all([fetchUsers(), refreshPoolUsersList(), refreshInboundsList()])
     return true
   } catch (e) {
     showToast((e as Error).message || '保存失败', 'error')
@@ -76,13 +76,14 @@ export const deleteUser = async (name: string) => {
   try {
     await api.deleteUser(name)
     showToast('已删除', 'success')
-    await fetchUsers()
+    await Promise.all([fetchUsers(), refreshPoolUsersList(), refreshInboundsList()])
     return true
   } catch (e) {
     showToast((e as Error).message || '删除失败', 'error')
     return false
   }
 }
+
 
 // crypto.randomUUID 需要安全上下文（https/localhost）——局域网 http 下不可用，
 // 用 getRandomValues（无此限制）实现 UUID v4

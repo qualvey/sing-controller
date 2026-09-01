@@ -1,6 +1,22 @@
 <template>
   <div class="border-base-content/10 bg-base-100 overflow-hidden rounded-lg border shadow-xs">
+    <!-- 头部工具栏：标题与新建按钮 -->
+    <div class="flex items-center justify-between border-b border-base-content/10 px-4 py-3">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-semibold text-base-content/90">{{ $t('users') || '用户' }}</span>
+        <span class="badge badge-sm badge-neutral badge-outline font-mono">{{ users.length }}</span>
+      </div>
+      <button
+        class="btn btn-primary btn-sm gap-1.5"
+        @click="openCreateUserModal"
+      >
+        <PlusIcon class="h-4 w-4" />
+        {{ $t('createUser') || '新建用户' }}
+      </button>
+    </div>
+
     <table class="table table-sm w-full">
+
       <thead>
         <tr class="border-base-content/10">
           <th class="w-[160px]">name</th>
@@ -166,8 +182,10 @@ import {
   ClipboardDocumentIcon,
   EyeIcon,
   EyeSlashIcon,
+  PlusIcon,
   UserIcon,
 } from '@heroicons/vue/24/outline'
+
 import { useClipboard } from '@vueuse/core'
 import { reactive } from 'vue'
 

@@ -46,7 +46,7 @@
     <OutboundEditDialog
       v-model="isProxyEditModalOpen"
       :tag="proxyEditTargetTag"
-      :is-edit="true"
+      :is-edit="isProxyEditModalIsEdit"
       @saved="fetchProxies"
     />
   </div>
@@ -62,7 +62,11 @@ import ProxyProvider from '@/components/proxies/ProxyProvider.vue'
 import ProxyGroupChainModal from '@/components/proxies/ProxyGroupChainModal.vue'
 import ProxyContextMenu from '@/components/proxies/ProxyContextMenu.vue'
 import OutboundEditDialog from '@/components/outbounds/OutboundEditDialog.vue'
-import { isProxyEditModalOpen, proxyEditTargetTag } from '@/composables/proxyContextMenu'
+import {
+  isProxyEditModalOpen,
+  isProxyEditModalIsEdit,
+  proxyEditTargetTag,
+} from '@/composables/proxyContextMenu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import {
   disableProxiesPageScroll,

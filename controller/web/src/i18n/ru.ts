@@ -656,10 +656,12 @@ const ru: LANG_MESSAGE = {
   folder_delete_confirm: 'Удалить папку «{name}»?',
 
   // Proxy & Rule Context Menu
+  createNode: 'Создать узел',
   testLatency: 'Тест задержки',
   editNode: 'Редактировать узел',
   copyNodeName: 'Скопировать имя узла',
   deleteNode: 'Удалить узел',
+  confirmDeleteNode: 'Удалить узел «{name}»? Это действие нельзя отменить.',
   subscriptionNodeTip: 'Узлы подписки нельзя редактировать напрямую',
   specialNodeTip: 'Встроенные узлы нельзя редактировать',
 
