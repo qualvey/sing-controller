@@ -332,35 +332,15 @@ export const upgradeUIAPI = () => {
 }
 
 export const getClashWsUrl = (backend?: Omit<Backend, 'uuid'>, endpoint: string = 'traffic') => {
-  const isHttps = location.protocol === 'https:'
+  const isHttps = backend?.protocol === 'https' || (!backend?.protocol && location.protocol === 'https:')
   const proto = isHttps ? 'wss:' : 'ws:'
   const ep = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
 
-  if (
-    backend &&
-    backend.host &&
-    backend.port &&
-    backend.host !== location.hostname &&
-    backend.host !== 'localhost' &&
-    backend.host !== '127.0.0.1'
-  ) {
-    const bProto = backend.protocol === 'https' ? 'wss:' : 'ws:'
-    const secPath = backend.secondaryPath
-      ? backend.secondaryPath.startsWith('/')
-        ? backend.secondaryPath
-        : `/${backend.secondaryPath}`
-      : ''
-    const base = `${bProto}//${backend.host}:${backend.port}${secPath}`
-    return base.endsWith('/') ? `${base}${ep}` : `${base}/${ep}`
-  }
+  const baseUrl = import.meta.env.BASE_URL || '/'
+  const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+  const apiPath = `${cleanBase}/api/clash`
 
-  const secPath = backend?.secondaryPath
-    ? backend.secondaryPath.startsWith('/')
-      ? backend.secondaryPath
-      : `/${backend.secondaryPath}`
-    : `${import.meta.env.BASE_URL}api/clash`
-  const base = `${proto}//${location.host}${secPath}`
-  return base.endsWith('/') ? `${base}${ep}` : `${base}/${ep}`
+  return `${proto}//${location.host}${apiPath}/${ep}`
 }
 
 export const createClashWebSocket = <T>(url: string, searchParams?: Record<string, string>) => {
@@ -368,15 +348,12 @@ export const createClashWebSocket = <T>(url: string, searchParams?: Record<strin
   const rawUrl = getClashWsUrl(backend, url)
   const resurl = new URL(rawUrl)
 
-  if (backend?.password) {
-    resurl.searchParams.append('token', backend.password)
-  }
-
   if (searchParams) {
     Object.entries(searchParams).forEach(([key, value]) => {
       resurl.searchParams.append(key, value)
     })
   }
+
 
   const data = shallowRef<T>()
   const websocket = new ReconnectingWebSocket(resurl.toString())

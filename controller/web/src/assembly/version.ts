@@ -142,31 +142,43 @@ const probeBackend = async (backend: Backend) => {
   // 探测期间用户可能又切了后端,过期结果直接丢弃。
   if (activeBackend.value?.uuid !== backend.uuid) return
 
-  // 验证 WebSocket 连通性（防止 Nginx 等反向代理漏配 Upgrade 导致实时流静默失效）
-  const wsUrl = getClashWsUrl(backend, 'traffic')
-  const wsProbe = await probeWebSocket(wsUrl, 3000)
-  if (!wsProbe.ok) {
-    clashAvailable.value = false
-    if (activeBackend.value?.uuid === backend.uuid) {
-      backendProbe.value = {
-        uuid: backend.uuid,
-        status: 'failed',
-        latency: 0,
-        message: wsProbe.message || 'WebSocket 握手失败（反向代理未配置 Upgrade 支持）',
+  if (backend.type === 'clash') {
+    // Clash 模式：验证 WebSocket 连通性（防止 Nginx 等反向代理漏配 Upgrade 导致实时流静默失效）
+    const wsUrl = getClashWsUrl(backend, 'traffic')
+    const wsProbe = await probeWebSocket(wsUrl, 3000)
+    if (!wsProbe.ok) {
+      clashAvailable.value = false
+      if (activeBackend.value?.uuid === backend.uuid) {
+        backendProbe.value = {
+          uuid: backend.uuid,
+          status: 'failed',
+          latency: 0,
+          message: wsProbe.message || 'WebSocket 握手失败（反向代理未配置 Upgrade 支持）',
+        }
       }
+      return
     }
-    return
+    clashAvailable.value = true
+  } else {
+    // sing-box gRPC 模式：异步静默探测 clash_api 是否可用（作为可选增强功能，不阻断主链路）
+    probeClashChannel(backend, 2000)
+      .then((res) => {
+        clashAvailable.value = res.ok
+      })
+      .catch(() => {
+        clashAvailable.value = false
+      })
   }
 
   version.value = data?.version || ''
   core.value = detectCore(version.value)
-  clashAvailable.value = true
   backendProbe.value = {
     uuid: backend.uuid,
     status: 'connected',
     latency: Date.now() - startAt,
     message: '',
   }
+
 
   if (!can('coreUpdateCheck') || !checkUpgradeCore.value || backend.disableUpgradeCore) return
 
