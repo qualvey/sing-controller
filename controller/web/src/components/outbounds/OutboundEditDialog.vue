@@ -368,6 +368,52 @@ const save = async () => {
   }
 }
 
+const handleDelete = async () => {
+  const targetTag = props.tag || form.tag
+  if (!targetTag) return
+
+  const first = await showConfirmDialog({
+    title: '删除确认',
+    message: `确定删除节点「${targetTag}」？该操作不可恢复。`,
+    confirmText: '删除',
+    confirmButtonClass: 'btn-error'
+  })
+  if (!first.confirmed) return
+
+  saving.value = true
+  try {
+    await api.deleteOutbound(targetTag)
+    showToast('删除成功', 'success')
+    emit('update:modelValue', false)
+    emit('saved', null)
+    await statusStore.refresh()
+  } catch (e) {
+    const err = e as Error & { references?: string[] }
+    if (err.references?.length) {
+      const second = await showConfirmDialog({
+        title: '被引用确认',
+        message: `该节点被以下对象引用：${err.references.join('、')}\n强制删除将自动从相关配置中移除引用。确认删除？`,
+        confirmText: '强制删除',
+        confirmButtonClass: 'btn-error'
+      })
+      if (!second.confirmed) return
+      try {
+        await api.deleteOutbound(targetTag, true)
+        showToast('删除成功（已移除引用）', 'success')
+        emit('update:modelValue', false)
+        emit('saved', null)
+        await statusStore.refresh()
+      } catch (e2) {
+        showToast((e2 as Error).message || '删除失败', 'error')
+      }
+      return
+    }
+    showToast(err.message || '删除失败', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
 const genUuid = async () => {
   generating.value = true
   try {
@@ -637,9 +683,22 @@ onMounted(() => {
           <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
         </TabsContent>
       </TabsRoot>
-      <div class="mt-5 flex justify-end gap-2">
-        <button class="btn btn-ghost btn-sm" @click="emit('update:modelValue', false)">取消</button>
-        <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">保存</button>
+      <div class="mt-5 flex items-center justify-between">
+        <div>
+          <button
+            v-if="isEdit"
+            type="button"
+            class="btn btn-error btn-outline btn-sm"
+            :disabled="saving"
+            @click="handleDelete"
+          >
+            删除
+          </button>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button class="btn btn-ghost btn-sm" @click="emit('update:modelValue', false)">取消</button>
+          <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">保存</button>
+        </div>
       </div>
     </DialogWrapper>
 

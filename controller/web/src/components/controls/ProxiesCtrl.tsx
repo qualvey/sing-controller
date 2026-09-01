@@ -10,6 +10,7 @@ import {
   updateProxyProviderAPI,
 } from '@/assembly/proxies'
 import { renderProxiesPageItems } from '@/composables/proxies'
+import { openCreateProxyModal } from '@/composables/proxyContextMenu'
 import { isProxyNodeSearchMode, toggleProxySearchMode } from '@/composables/proxySearch'
 import { useCtrlsBar } from '@/composables/useCtrlsBar'
 import { PROXY_SORT_TYPE, PROXY_TAB_TYPE, ROUTE_NAME, SETTINGS_MENU_KEY } from '@/constant'
@@ -35,6 +36,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   GlobeAltIcon,
+  PlusIcon,
   RectangleGroupIcon,
   WrenchScrewdriverIcon,
 } from '@heroicons/vue/24/outline'
@@ -230,6 +232,16 @@ export default defineComponent({
         </div>
       )
 
+      const createButton = (
+        <button
+          class="btn btn-circle btn-sm btn-primary"
+          title={t('createNode') || '新建节点'}
+          onClick={openCreateProxyModal}
+        >
+          <PlusIcon class="h-4 w-4" />
+        </button>
+      )
+
       const settingsModal = (
         <>
           <button
@@ -351,6 +363,7 @@ export default defineComponent({
           <div class="flex w-full gap-2">
             {modeSelect}
             {searchInput}
+            {createButton}
             {settingsModal}
             {toggleCollapseAll}
             {latencyTestAll}
@@ -361,6 +374,7 @@ export default defineComponent({
           {hasProviders.value && tabs}
           {modeSelect}
           <div class="flex flex-1">{searchInput}</div>
+          {createButton}
           {upgradeAllIcon}
           {settingsModal}
           {toggleCollapseAll}

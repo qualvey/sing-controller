@@ -6,7 +6,7 @@
       class="p-3"
       :style="padding"
     >
-      <!-- 入站表单视图 -->
+      <!-- 入站表格视图 -->
       <template v-if="inboundsTabShow === 'form'">
         <div
           v-if="loading && !inbounds.length"
@@ -17,42 +17,17 @@
         </div>
 
         <template v-else>
-          <!-- 桌面端表格呈现 -->
-          <div
-            v-if="!isMiddleScreen"
-            class="base-container"
-          >
+          <div class="base-container">
             <InboundTable :inbounds="renderInbounds" />
           </div>
-
-          <!-- 移动端卡片列表呈现 -->
-          <div
-            v-else
-            class="flex flex-col gap-3"
-          >
-            <div class="flex items-center justify-between px-1">
-              <span class="text-xs text-base-content/60">{{ renderInbounds.length }} {{ $t('inbounds') }}</span>
-              <button
-                class="btn btn-primary btn-sm gap-1.5"
-                @click="openCreateInboundModal"
-              >
-                <PlusIcon class="h-4 w-4" />
-                {{ $t('createInbound') }}
-              </button>
-            </div>
-            <InboundCard
-              v-for="row in renderInbounds"
-              :key="row.tag"
-              :inbound="row"
-            />
-            <div
-              v-if="!renderInbounds.length"
-              class="text-base-content/50 border-base-content/10 bg-base-100 rounded-lg border py-10 text-center text-sm"
-            >
-              {{ $t('noInboundsTip') }}
-            </div>
-          </div>
         </template>
+      </template>
+
+      <!-- 用户管理卡片网格视图 -->
+      <template v-else-if="inboundsTabShow === 'users'">
+        <div class="base-container">
+          <UserGrid :users="renderUsers" />
+        </div>
       </template>
 
       <!-- 证书管理视图 -->
@@ -76,8 +51,7 @@
     <!-- 新建/编辑 Inbound 弹窗 -->
     <InboundEditDialog />
 
-    <!-- 全局用户抽屉与编辑弹窗（内联收纳） -->
-    <UserDrawer />
+    <!-- 用户新建/编辑单条数据弹窗 -->
     <UserEditDialog />
   </div>
 </template>
@@ -93,32 +67,49 @@ import {
   loading,
   renderInbounds,
 } from '@/assembly/inbounds'
+import { fetchUsers, renderUsers } from '@/assembly/users'
 import InboundsCtrl from '@/components/controls/InboundsCtrl.vue'
 import CertManager from '@/components/inbounds/cert/CertManager.vue'
-import InboundCard from '@/components/inbounds/InboundCard.vue'
 import InboundEditDialog from '@/components/inbounds/InboundEditDialog.vue'
 import InboundTable from '@/components/inbounds/InboundTable.vue'
 import SourcePane from '@/components/SourcePane.vue'
-import UserDrawer from '@/components/users/UserDrawer.vue'
 import UserEditDialog from '@/components/users/UserEditDialog.vue'
+import UserGrid from '@/components/users/UserGrid.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
-import { openCreateInboundModal } from '@/composables/inboundManagement'
-import { isMiddleScreen } from '@/helper/utils'
-import { PlusIcon } from '@heroicons/vue/24/outline'
-import { onMounted } from 'vue'
+
+import { onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
+
+
+const route = useRoute()
 
 const { padding } = usePaddingForViews({
   offsetTop: 0,
   offsetBottom: 8,
 })
 
+watch(
+  () => route.query.tab,
+  (tab) => {
+    if (tab && typeof tab === 'string') {
+      inboundsTabShow.value = tab
+    }
+  },
+)
+
 onMounted(async () => {
+  if (route.query.tab && typeof route.query.tab === 'string') {
+    inboundsTabShow.value = route.query.tab
+  }
   await Promise.all([
     fetchInbounds(),
     fetchInboundTypes(),
     fetchPoolUsers(),
+    fetchUsers(),
     fetchCertProviders(),
   ])
 })
 </script>
+
+
 

@@ -130,11 +130,13 @@ export const renderRoutes = computed(() => {
   }
   return Object.values(ROUTE_NAME).filter((r) => {
     if (r === ROUTE_NAME.setup) return false
+    if (r === ROUTE_NAME.users) return false
     if (!splitOverviewPage.value && r === ROUTE_NAME.overview) return false
     if (r in routeCapable && routeCapable[r] === false) return false
     return true
   })
 })
+
 
 export const applyCustomThemes = () => {
   document.querySelectorAll('.custom-theme').forEach((style) => {

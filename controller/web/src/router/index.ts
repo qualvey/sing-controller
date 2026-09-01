@@ -54,9 +54,10 @@ const childrenRouter = [
   },
   {
     path: 'users',
-    name: ROUTE_NAME.users,
-    component: UsersPage
+    redirect: { name: ROUTE_NAME.inbounds, query: { tab: 'users' } }
   },
+
+
   {
     path: 'routes',
     name: ROUTE_NAME.routes,

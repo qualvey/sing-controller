@@ -8,11 +8,15 @@ import {
   closeProxyContextMenu,
   openProxyEditModal
 } from '@/composables/proxyContextMenu'
-import { proxyLatencyTest, getTestUrl } from '@/assembly/proxies'
+import { proxyLatencyTest, getTestUrl, fetchProxies } from '@/assembly/proxies'
+import { api } from '@/api'
 import { showToast } from '@/helper/toast'
-import { BoltIcon, PencilSquareIcon, DocumentDuplicateIcon } from '@heroicons/vue/24/outline'
+import { showConfirmDialog } from '@/helper/confirmDialog'
+import { useStatusStore } from '@/store/status'
+import { BoltIcon, PencilSquareIcon, DocumentDuplicateIcon, TrashIcon } from '@heroicons/vue/24/outline'
 
 const { t } = useI18n()
+const statusStore = useStatusStore()
 
 const target = computed(() => proxyContextMenuTarget.value)
 
@@ -57,6 +61,56 @@ const handleCopyName = async () => {
       showToast('复制失败', 'error')
     }
     document.body.removeChild(textArea)
+  }
+}
+
+const handleDeleteNode = async () => {
+  if (!target.value) return
+  const name = target.value.name
+  closeProxyContextMenu()
+
+  const first = await showConfirmDialog({
+    title: t('confirmDelete') || '删除确认',
+    message: t('confirmDeleteNode', { name }) || `确定删除节点「${name}」？该操作不可恢复。`,
+    confirmText: t('delete') || '删除',
+    confirmButtonClass: 'btn-error'
+  })
+  if (!first.confirmed) return
+
+  try {
+    await api.deleteOutbound(name)
+    showToast(t('deleteSuccess') || '删除成功', 'success')
+    await fetchProxies()
+    try {
+      await statusStore.refresh()
+    } catch {
+      // ignore
+    }
+  } catch (e) {
+    const err = e as Error & { references?: string[] }
+    if (err.references?.length) {
+      const second = await showConfirmDialog({
+        title: '被引用确认',
+        message: `该节点被以下对象引用：${err.references.join('、')}\n强制删除将自动从相关配置中移除引用。确认删除？`,
+        confirmText: '强制删除',
+        confirmButtonClass: 'btn-error'
+      })
+      if (!second.confirmed) return
+      try {
+        await api.deleteOutbound(name, true)
+        showToast('删除成功（已移除引用）', 'success')
+        await fetchProxies()
+        try {
+          await statusStore.refresh()
+        } catch {
+          // ignore
+        }
+      } catch (e2) {
+        showToast((e2 as Error).message || '删除失败', 'error')
+      }
+      return
+    }
+    showToast(err.message || '删除失败', 'error')
   }
 }
 
@@ -140,6 +194,16 @@ onBeforeUnmount(() => {
             >
               <DocumentDuplicateIcon class="h-4 w-4 shrink-0" />
               <span>{{ t('copyNodeName') }}</span>
+            </button>
+          </li>
+          <div class="h-px bg-base-200 dark:bg-base-300 my-0.5" />
+          <li>
+            <button
+              class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-error hover:bg-error/10 transition-colors text-left"
+              @click="handleDeleteNode"
+            >
+              <TrashIcon class="h-4 w-4 shrink-0" />
+              <span>{{ t('deleteNode') }}</span>
             </button>
           </li>
         </ul>
