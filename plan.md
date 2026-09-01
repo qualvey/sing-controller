@@ -131,9 +131,11 @@
   - 配置 npm 脚本：`pnpm gen:types`。
   - 调用 `json-schema-to-typescript` 读取 `/api/schema`（或 `sing-box schema` 二进制输出），一键生成 `src/types/gen/singbox.d.ts`。
   - 内核升级后，一行命令全量刷新前端 interface、类型守卫与枚举，彻底消灭人工编写 TS 类型的失误与滞后。
-- **Monaco Editor 智能代码视图**：
-  - WebUI 内置的 JSON / YAML 配置编辑器直接挂载 `/api/schema`。
-  - 用户在编辑配置时获得 IDE 级别的字段自动补全（IntelliSense）、Hover 字段文档说明和实时语法/类型标红校验。
+- **CodeMirror / JSONC 智能编辑体系 (IntelliSense & Diagnostics)**：
+  - **Schema 语义校验**：集成 Ajv 2020 与 AST 定位，实现不符合 Schema 规范字段的实时标红诊断。
+  - **键名智能补全**：根据 AST 路径与兄弟节点（如 `type: "vless"`）动态联想当前协议专属的合法属性，并自动去重。
+  - **枚举值联想**：在 `type`、`method`、`level`、`network` 等字段值位置，自动联想所有合法枚举项及说明。
+  - **悬浮字段文档 (Hover Tooltips)**：鼠标悬停在属性名上时弹出悬浮窗，展示官方 `description` 文档、类型约束、默认值与必填标识。
 
 ### 3. UI 表现层：“80/20 混合架构”
 - **核心协议 (80% 常用场景)**：针对 VLESS、Hysteria2、Shadowsocks、VMess、Direct、Selector 等常用出入站协议，前端手绘精致易用的专属卡片与开关表单。
@@ -147,9 +149,10 @@
 ## 六、 实施路线图 (Milestones)
 
 ### Phase 1: Schema 驱动与前端类型全自动流水线 (Schema & CodeGen)
-- [ ] 接入 `json-schema-to-typescript` 工具链，建立 `pnpm gen:types` 自动化构建脚本。
-- [ ] 将 `/api/schema` 挂载到 Monaco Editor，实现配置代码视图的智能补全与语法高亮校验。
-- [ ] 确保前端表单提交保留未建模字段（透传保护）。
+- [x] 接入 `json-schema-to-typescript` 工具链，建立 `pnpm gen:types` 自动化构建脚本并导出 `singbox.d.ts`。
+- [x] 在 CodeMirror 中接入 `Ajv 2020` 与 AST 节点映射，实现配置代码视图的 Schema 语义校验。
+- [x] 确保前端数据层全量重导出生成类型，并保证未知字段透传保护。
+- [ ] 在 CodeMirror 中基于 `jsonc-parser` + `schema.json` 接入**键名/枚举值智能补全 (Autocomplete)** 与 **悬浮字段文档 (Hover Tooltips)**。
 
 ### Phase 2: 进程管理器与日志管道 (Supervisor Engine)
 - [ ] 实现 Go `ProcessManager` 抽象，封装子进程启动、停止、重启与状态查询。
