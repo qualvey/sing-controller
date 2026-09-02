@@ -29,6 +29,7 @@ type Manager struct {
 	cfg         Config
 	state       State
 	cmd         *exec.Cmd
+	waitDone    chan struct{}
 	startedAt   *time.Time
 	stoppedAt   *time.Time
 	exitCode    int
@@ -186,6 +187,8 @@ func (m *Manager) startLocked(ctx context.Context) error {
 	}
 
 	now := time.Now()
+	waitDone := make(chan struct{})
+	m.waitDone = waitDone
 	m.cmd = cmd
 	m.startedAt = &now
 	m.state = StateRunning
@@ -199,7 +202,7 @@ func (m *Manager) startLocked(ctx context.Context) error {
 
 	go m.streamLogs(stdout, "stdout")
 	go m.streamLogs(stderr, "stderr")
-	go m.waitProcess(cmd)
+	go m.waitProcess(cmd, waitDone)
 
 	return nil
 }
@@ -216,8 +219,9 @@ func (m *Manager) streamLogs(r io.Reader, source string) {
 	}
 }
 
-func (m *Manager) waitProcess(cmd *exec.Cmd) {
+func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	err := cmd.Wait()
+	close(waitDone)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -241,7 +245,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd) {
 	m.exitCode = exitCode
 
 	// 判断是否为正常主动停止
-	if m.state == StateStopping {
+	if m.state == StateStopping || m.state == StateStopped {
 		m.state = StateStopped
 		m.broadcast(LogLine{
 			Timestamp: now,
@@ -328,44 +332,46 @@ func (m *Manager) generateCrashDump(exitCode int) {
 
 func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if m.state == StateStopped || m.cmd == nil || m.cmd.Process == nil {
 		m.state = StateStopped
+		m.mu.Unlock()
 		return nil
 	}
 
 	m.state = StateStopping
+	proc := m.cmd.Process
+	waitDone := m.waitDone
 	m.broadcast(LogLine{
 		Timestamp: time.Now(),
 		Source:    "system",
 		Message:   "[Supervisor] 正在停止 sing-box 内核...",
 	})
+	m.mu.Unlock()
 
 	// 优雅终止：发送中断信号
-	_ = m.cmd.Process.Signal(os.Interrupt)
+	_ = proc.Signal(os.Interrupt)
 
-	// 等待退出，超时强制杀死
-	done := make(chan error, 1)
-	go func() {
-		state, err := m.cmd.Process.Wait()
-		if err == nil && state != nil {
-			done <- nil
-		} else {
-			done <- err
+	// 等待 waitProcess 退出并关闭 waitDone，超时强制杀死
+	if waitDone != nil {
+		select {
+		case <-waitDone:
+		case <-time.After(3 * time.Second):
+			_ = proc.Kill()
+			select {
+			case <-waitDone:
+			case <-time.After(1 * time.Second):
+			}
+		case <-ctx.Done():
+			_ = proc.Kill()
+			return ctx.Err()
 		}
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		_ = m.cmd.Process.Kill()
-	case <-ctx.Done():
-		_ = m.cmd.Process.Kill()
-		return ctx.Err()
+	} else {
+		_ = proc.Kill()
 	}
 
+	m.mu.Lock()
 	m.state = StateStopped
+	m.mu.Unlock()
 	return nil
 }
 
