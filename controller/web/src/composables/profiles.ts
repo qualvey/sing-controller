@@ -78,6 +78,11 @@ export const refreshProvider = async (id: string) => {
     await controllerApi.refreshProvider(id)
     showNotification({ content: '订阅源已成功更新', type: 'alert-success' })
     await loadProfilesData()
+    const statusStore = useStatusStore()
+    await statusStore.refresh()
+    setTimeout(() => {
+      startBackendSession()
+    }, 600)
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '刷新订阅失败'
     showNotification({ content: msg, type: 'alert-error' })

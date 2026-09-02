@@ -99,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import {
@@ -121,6 +121,7 @@ import {
   deleteProvider,
 } from '@/composables/profiles'
 import { useStatusStore } from '@/store/status'
+import { startBackendSession } from '@/assembly/session'
 import { showNotification } from '@/helper/notification'
 import ProfileCardList from './ProfileCardList.vue'
 import ProviderTableList from './ProviderTableList.vue'
@@ -159,18 +160,43 @@ watch(
   },
 )
 
-// 当进入锁定状态时，自动切换到 providers 订阅源 tab
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const startPolling = () => {
+  if (pollTimer) return
+  pollTimer = setInterval(async () => {
+    await statusStore.refresh()
+    if (statusStore.status?.core_alive) {
+      await loadProfilesData()
+      startBackendSession()
+    }
+  }, 1200)
+}
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+// 当进入锁定状态时，自动切换到 providers 订阅源 tab 并开启自愈轮询
 watch(
   isLocked,
   (locked, oldLocked) => {
     if (locked) {
       activeProfilesTab.value = 'providers'
       isOpen.value = true
-    } else if (oldLocked && !locked) {
-      showNotification({
-        content: '🎉 sing-box 内核已成功启动并联通！引导锁定已解除。',
-        type: 'alert-success',
-      })
+      startPolling()
+    } else {
+      stopPolling()
+      if (oldLocked) {
+        showNotification({
+          content: '🎉 sing-box 内核已成功启动并联通！引导锁定已解除。',
+          type: 'alert-success',
+        })
+        startBackendSession()
+      }
     }
   },
   { immediate: true },
@@ -179,6 +205,10 @@ watch(
 onMounted(() => {
   loadProfilesData()
   void statusStore.refresh()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 
 // Profile 弹窗打开逻辑
