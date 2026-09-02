@@ -11,7 +11,7 @@ const forwarded = useForwardProps(props)
 <template>
   <TabsContent
     v-bind="forwarded"
-    :class="cn('tab-content-panel mt-2 min-h-[460px] outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]', props.class)"
+    :class="cn('tab-content-panel mt-2 min-h-[280px] outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]', props.class)"
   >
     <slot />
   </TabsContent>

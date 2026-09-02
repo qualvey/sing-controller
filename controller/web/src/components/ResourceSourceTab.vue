@@ -12,7 +12,15 @@ const { ext: themeExt, watchTheme } = useCmTheme()
 
 // 编辑 dialog 内的「源码」tab：显示/编辑单个资源对象 JSON（JSONC）
 // 父组件保存时：isDirty() 为 true 则用 getText() 解析作为提交体，否则用表单构建结果
-const props = defineProps<{ initial: string }>()
+const props = withDefaults(
+  defineProps<{
+    initial: string
+    height?: number
+  }>(),
+  {
+    height: 440,
+  }
+)
 const emit = defineEmits<{ update: [] }>()
 
 const editorHost = ref<HTMLElement>()
@@ -81,9 +89,13 @@ defineExpose({ getText, isDirty })
 </script>
 
 <template>
-  <div class="resource-source">
+  <div class="resource-source" :style="{ minHeight: `${props.height}px` }">
     <div v-if="dirty" class="src-hint">已手动修改，保存时将使用源码内容（覆盖表单）</div>
-    <div ref="editorHost" class="src-editor" />
+    <div
+      ref="editorHost"
+      class="src-editor"
+      :style="{ height: `${props.height}px`, minHeight: `${props.height}px` }"
+    />
   </div>
 </template>
 
@@ -92,7 +104,6 @@ defineExpose({ getText, isDirty })
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 460px;
 }
 .src-hint {
   font-size: 12px;
@@ -102,8 +113,6 @@ defineExpose({ getText, isDirty })
   border: 1px solid var(--color-base-border, #30363d);
   border-radius: 6px;
   overflow: hidden;
-  height: 460px;
-  min-height: 460px;
   text-align: left;
 }
 .src-editor :deep(.cm-editor) {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import { showToast } from '@/helper/toast'
 import { showConfirmDialog } from '@/helper/confirmDialog'
 import { ClipboardPasteIcon, KeyRoundIcon, LoaderIcon } from '@lucide/vue'
@@ -43,6 +44,15 @@ const generating = ref(false)
 const showPassword = ref(false)
 const validateMsg = ref('')
 const activeTab = ref('form')
+const formContentRef = ref<HTMLElement>()
+const sharedTabHeight = ref<number>(440)
+
+useResizeObserver(formContentRef, (entries) => {
+  const entry = entries[0]
+  if (entry && activeTab.value === 'form' && entry.contentRect.height > 60) {
+    sharedTabHeight.value = Math.max(300, Math.round(entry.contentRect.height))
+  }
+})
 
 interface OutboundForm {
   type: string
@@ -485,7 +495,8 @@ onMounted(() => {
           <TabsTrigger value="source">源码</TabsTrigger>
         </TabsList>
         <TabsContent value="form">
-          <div class="mb-4">
+          <div ref="formContentRef">
+            <div class="mb-4">
             <button class="btn btn-ghost btn-xs" @click="fillFromNode">
               <ClipboardPasteIcon class="h-3.5 w-3.5" />
               从 JSON / 节点链接导入
@@ -688,11 +699,11 @@ onMounted(() => {
                 </div>
               </div>
             </div>
+            <p v-if="validateMsg" class="mt-3 text-[0.8rem] font-medium text-destructive">{{ validateMsg }}</p>
           </div>
-          <p v-if="validateMsg" class="mt-3 text-[0.8rem] font-medium text-destructive">{{ validateMsg }}</p>
         </TabsContent>
         <TabsContent value="source">
-          <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+          <ResourceSourceTab ref="srcTab" :initial="sourceJson" :height="sharedTabHeight" />
         </TabsContent>
       </TabsRoot>
       <template #footer>
