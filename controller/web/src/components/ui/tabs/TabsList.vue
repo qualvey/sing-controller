@@ -72,13 +72,13 @@ onMounted(() => {
     ref="listRef"
     v-bind="forwarded"
     :class="cn(
-      'bg-muted text-muted-foreground relative inline-flex h-9 w-max items-center justify-center rounded-lg p-1',
+      'bg-base-300/50 relative inline-flex h-9 items-center justify-center rounded-[0.625rem] p-[3px]',
       props.class
     )"
   >
     <!-- 滑动背景指示条 -->
     <div
-      class="tab-sliding-indicator bg-background pointer-events-none absolute top-1 bottom-1 left-0 rounded-md shadow-xs"
+      class="tab-sliding-indicator bg-base-100 ring-base-content/5 pointer-events-none absolute top-[3px] bottom-[3px] left-0 rounded-[0.5rem] shadow-sm ring-1"
       :class="ready ? 'tab-indicator-ready' : 'opacity-0'"
       :style="indicatorStyle"
     />
