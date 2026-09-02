@@ -302,6 +302,9 @@ export const api = {
     http.post<{ success: boolean; message: string }>(`/profiles/${encodeURIComponent(id)}/apply`).then((r) => r.data),
 }
 
+export const controllerApi = api
+export default api
+
 export interface NodeProvider {
   id: string
   tag: string

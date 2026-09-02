@@ -11,6 +11,7 @@ import {
 } from '@/assembly/proxies'
 import { renderProxiesPageItems } from '@/composables/proxies'
 import { openCreateProxyModal } from '@/composables/proxyContextMenu'
+import { openProfileModal } from '@/composables/profiles'
 import { isProxyNodeSearchMode, toggleProxySearchMode } from '@/composables/proxySearch'
 import { useCtrlsBar } from '@/composables/useCtrlsBar'
 import { PROXY_SORT_TYPE, PROXY_TAB_TYPE, ROUTE_NAME, SETTINGS_MENU_KEY } from '@/constant'
@@ -242,6 +243,16 @@ export default defineComponent({
         </button>
       )
 
+      const profileButton = (
+        <button
+          class="btn btn-circle btn-sm btn-outline"
+          title="配置方案与订阅管理 (Profiles & Providers)"
+          onClick={openProfileModal}
+        >
+          <RectangleGroupIcon class="h-4 w-4" />
+        </button>
+      )
+
       const settingsModal = (
         <>
           <button
@@ -364,6 +375,7 @@ export default defineComponent({
             {modeSelect}
             {searchInput}
             {createButton}
+            {profileButton}
             {settingsModal}
             {toggleCollapseAll}
             {latencyTestAll}
@@ -375,6 +387,7 @@ export default defineComponent({
           {modeSelect}
           <div class="flex flex-1">{searchInput}</div>
           {createButton}
+          {profileButton}
           {upgradeAllIcon}
           {settingsModal}
           {toggleCollapseAll}
