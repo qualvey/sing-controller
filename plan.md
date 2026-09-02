@@ -77,32 +77,49 @@
 
 ---
 
-## 四、 Config URL 远程配置与订阅管理
+## 四、 配置组、多配置片段与远程订阅管理 (Config Profiles & Multi-Config Merging)
+
+### 1. 架构定位：全量基础配置 + 节点片段模块化
+
+sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `-C <conf_dir>`）。利用该能力，我们将传统的单一大配置解耦为 **“基础框架 (Base)”** 与 **“节点/规则片段 (Fragments / Providers)”**：
 
 ```
-[Remote URL / Subscription] ──► [HTTP Fetch (ETag 校验)]
-                                          │
-                                          ▼
-                               [sing-box check (Dry Run)]
-                                    │             │
-                             (校验失败)         (校验成功)
-                                    │             │
-                                    ▼             ▼
-                           [保留旧配置+报警]    [备份当前配置 + 原子覆写 + Reload]
++-------------------------------------------------------------------------------+
+|                             配置组 (Active Profile)                           |
+|                                                                               |
+|  [00-base.json]               [10-sub-airport.json]    [20-nodes-vps.json]   |
+|  (Inbound/DNS/Route/Services) (机场 A 订阅节点池)       (自建 VPS 节点池)      |
+|           │                            │                        │             |
+|           └────────────────────────────┼────────────────────────┘             |
+|                                        ▼                                      |
+|                       Controller 编译合并 / 多文件挂载                         |
+|                                        │                                      |
+|                                        ▼                                      |
+|                          [sing-box check (Dry Run 预检)]                      |
+|                                   │             │                             |
+|                            (校验失败)         (校验成功)                      |
+|                                   │             │                             |
+|                                   ▼             ▼                             |
+|                          [保留旧方案+报警]   [原子切换 + Supervisor 平滑重载]  |
++-------------------------------------------------------------------------------+
 ```
 
-1. **拉取与缓存策略**：
-   - 支持手动触发与定时自动轮询更新。
-   - 请求头携带 `If-None-Match` (ETag) 与 `If-Modified-Since`，无变更时跳过下载节省流量。
-2. **安全预检 (Dry-Run Check)**：
-   - 配置写入前，Controller 调用 `sing-box check -c <temp_path>` 进行语法和规则校验。
-   - 校验通过才执行替换；校验失败则保留旧配置，并将详细报错信息返回给 WebUI。
-3. **原子替换与版本回滚**：
-   - 采用临时文件 + `os.Rename` 原子覆盖目标配置文件。
-   - 自动备份最近 N 份历史配置（`config.backup.<timestamp>.json`），支持 WebUI 一键回滚。
-4. **平滑重载**：
-   - 优先通过 SIGHUP 信号或 sing-box 内部热重载接口触发配置刷新；不支持热重载的模块则执行进程重启。
-
+### 2. 核心模块与概念设计
+1. **基础全量配置 (Base Config)**：
+   - 包含系统的基础框架：`log`, `dns`, `inbounds`（如 `mixed 2080`, `tun` 模式网卡）, `route` 基础分流骨架, `services` (gRPC API), `experimental` 等。
+   - 基础配置稳定，用户可通过 WebUI 可视化设置或 JSONC 智能编辑器按需调整。
+2. **节点配置片段与订阅源 (Node Providers & Subscriptions)**：
+   - **远程订阅源**：支持机场订阅 URL（sing-box JSON / Clash YAML / Base64），具备 Cron 定时拉取与 ETag / Last-Modified 差量更新；
+   - **自建节点片段**：用户在 WebUI 录入的私有节点池，独立落盘为 `nodes-custom.json`；
+   - **动态策略组归并**：节点拉取/导入后，可根据正则筛选或标签规则，自动注入到 Base 配置中的 `selector`（如 `Proxy`、`Auto`）和 `urltest` 成员列表中。
+3. **配置组 (Profile & Config Group)**：
+   - 用户可创建和保存多个方案（如：`默认分流模式`、`游戏低延迟方案`、`出差备用模式`、`直连纯净模式`）；
+   - 每个配置组记录：引用的 Base 配置文件 + 启用的若干订阅源/节点片段列表；
+   - WebUI 顶部/侧边栏提供 **一键方案切换 (Profile Switcher)**，切换时自动完成预检与内核平滑重载。
+4. **安全预检 (sing-box check) 与版本回滚**：
+   - 任何配置合并或订阅更新后，均先调用 `sing-box check` 预检；
+   - 预检通过才原子覆写并触发内核重载；失败则阻断并生成诊断日志；
+   - 自动备份历史版本（`profiles/backup/<timestamp>/`），支持一键回滚。
 ---
 
 ## 五、 上游内核跟进与 Schema 驱动契约体系 (Zero-Maintenance Upstream Sync)

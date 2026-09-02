@@ -1,6 +1,6 @@
 # Idea But Not Plan
 
-地球页面，目前的旋转方向，并不能上下左右自由旋转，而是yi
+地球页面，目前用鼠标控制旋转方向，并不能上下左右自由旋转，而是以一种很别扭的方式旋转。
 
 > 💡 **已评审并落地为规划方案**：完整架构与实施方案请查阅 [plan.md](file:///C:/Users/Ryu/Documents/sing-box-webui/plan.md)。
 
