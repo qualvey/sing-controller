@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/qualvey/sing-controller/internal/logger"
+	"github.com/qualvey/sing-controller/internal/provider"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
 	"github.com/qualvey/sing-controller/internal/supervisor"
@@ -29,22 +30,24 @@ import (
 )
 
 type HandlerOptions struct {
-	Store      *store.Store
-	Settings   *settings.Manager
-	Supervisor *supervisor.Manager
-	Secret     string
-	Version    string
+	Store       *store.Store
+	Settings    *settings.Manager
+	Supervisor  *supervisor.Manager
+	ProviderMgr *provider.Manager
+	Secret      string
+	Version     string
 	// Static 嵌入的 webui 静态资源（SPA）；nil 时根路径返回服务信息 JSON（API-only 模式）
 	Static http.Handler
 }
 
 type Handler struct {
-	store      *store.Store
-	settings   *settings.Manager
-	supervisor *supervisor.Manager
-	secret     string
-	version    string
-	static     http.Handler
+	store       *store.Store
+	settings    *settings.Manager
+	supervisor  *supervisor.Manager
+	providerMgr *provider.Manager
+	secret      string
+	version     string
+	static      http.Handler
 
 	schemaOnce sync.Once
 	schemaJSON []byte
@@ -59,13 +62,14 @@ type metaType = store.Meta
 func NewHandler(opts HandlerOptions) http.Handler {
 	logger.Debug("New handler initing")
 	h := &Handler{
-		store:      opts.Store,
-		settings:   opts.Settings,
-		supervisor: opts.Supervisor,
-		secret:     opts.Secret,
-		version:    opts.Version,
-		static:     opts.Static,
-		proxies:    newProxyCache(),
+		store:       opts.Store,
+		settings:    opts.Settings,
+		supervisor:  opts.Supervisor,
+		providerMgr: opts.ProviderMgr,
+		secret:      opts.Secret,
+		version:     opts.Version,
+		static:      opts.Static,
+		proxies:     newProxyCache(),
 	}
 	mux := http.NewServeMux()
 
@@ -96,6 +100,22 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("POST /api/core/restart", h.handleCoreRestart)
 	mux.HandleFunc("GET /api/core/logs", h.handleCoreLogs)
 	mux.HandleFunc("GET /api/core/logs/stream", h.handleCoreLogsStream)
+
+	// Provider & Profile (节点订阅源与配置组)
+	mux.HandleFunc("GET /api/providers", h.handleListProviders)
+	mux.HandleFunc("POST /api/providers", h.handleCreateProvider)
+	mux.HandleFunc("GET /api/providers/{id}", h.handleGetProvider)
+	mux.HandleFunc("PUT /api/providers/{id}", h.handleUpdateProvider)
+	mux.HandleFunc("DELETE /api/providers/{id}", h.handleDeleteProvider)
+	mux.HandleFunc("POST /api/providers/{id}/refresh", h.handleRefreshProvider)
+	mux.HandleFunc("GET /api/providers/{tag}/nodes", h.handleGetProviderNodes)
+
+	mux.HandleFunc("GET /api/profiles", h.handleListProfiles)
+	mux.HandleFunc("POST /api/profiles", h.handleCreateProfile)
+	mux.HandleFunc("GET /api/profiles/{id}", h.handleGetProfile)
+	mux.HandleFunc("PUT /api/profiles/{id}", h.handleUpdateProfile)
+	mux.HandleFunc("DELETE /api/profiles/{id}", h.handleDeleteProfile)
+	mux.HandleFunc("POST /api/profiles/{id}/apply", h.handleApplyProfile)
 
 	// 用户池（全局用户，多对多绑定入站）
 	mux.HandleFunc("GET /api/users", h.handleListUsers)

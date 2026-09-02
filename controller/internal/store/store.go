@@ -97,6 +97,7 @@ func Parse(ctx context.Context, content []byte) (option.Options, error) {
 
 // Validate 完整校验：解码 + box.New 干跑（复用 daemon.CheckConfig 模式）。
 func Validate(ctx context.Context, content []byte) error {
+	ctx = include.Context(ctx)
 	options, err := Parse(ctx, content)
 	if err != nil {
 		return err
@@ -188,7 +189,9 @@ func (s *Store) Content(ctx context.Context) ([]byte, error) {
 	return marshalOptions(ctx, s.Options)
 }
 
-func marshalOptions(ctx context.Context, options option.Options) ([]byte, error) {
+// MarshalOptions 使用 sing-box 扩展上下文将 Options 序列化为规范 JSON
+func MarshalOptions(ctx context.Context, options option.Options) ([]byte, error) {
+	ctx = include.Context(ctx)
 	var buffer bytes.Buffer
 	encoder := sjson.NewEncoderContext(ctx, &buffer)
 	encoder.SetIndent("", "  ")
@@ -196,6 +199,10 @@ func marshalOptions(ctx context.Context, options option.Options) ([]byte, error)
 		return nil, err
 	}
 	return buffer.Bytes(), nil
+}
+
+func marshalOptions(ctx context.Context, options option.Options) ([]byte, error) {
+	return MarshalOptions(ctx, options)
 }
 
 // Save 将当前内存中的 Options 原子写盘（temp + rename），保留 .bak 备份。

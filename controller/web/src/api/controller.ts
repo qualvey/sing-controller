@@ -276,6 +276,60 @@ export const api = {
   coreRestart: () => http.post<{ success: boolean; message: string }>('/core/restart').then((r) => r.data),
   coreLogs: (limit = 100) =>
     http.get<{ logs: CoreLogLine[]; count: number }>(`/core/logs?limit=${limit}`).then((r) => r.data),
+
+  // Provider (节点源与订阅管理)
+  providers: () => http.get<{ providers: NodeProvider[] }>('/providers').then((r) => r.data.providers),
+  getProvider: (id: string) => http.get<NodeProvider>(`/providers/${encodeURIComponent(id)}`).then((r) => r.data),
+  createProvider: (p: Partial<NodeProvider>) => http.post<NodeProvider>('/providers', p).then((r) => r.data),
+  updateProvider: (id: string, p: Partial<NodeProvider>) =>
+    http.put(`/providers/${encodeURIComponent(id)}`, p).then((r) => r.data),
+  deleteProvider: (id: string) =>
+    http.delete(`/providers/${encodeURIComponent(id)}`).then((r) => r.data),
+  refreshProvider: (id: string) =>
+    http.post<{ success: boolean; node_count: number }>(`/providers/${encodeURIComponent(id)}/refresh`).then((r) => r.data),
+  getProviderNodes: (tag: string) =>
+    http.get<{ tag: string; count: number; outbounds: any[] }>(`/providers/${encodeURIComponent(tag)}/nodes`).then((r) => r.data),
+
+  // Profile (配置组方案)
+  profiles: () => http.get<{ profiles: ConfigProfile[] }>('/profiles').then((r) => r.data.profiles),
+  getProfile: (id: string) => http.get<ConfigProfile>(`/profiles/${encodeURIComponent(id)}`).then((r) => r.data),
+  createProfile: (p: Partial<ConfigProfile>) => http.post<ConfigProfile>('/profiles', p).then((r) => r.data),
+  updateProfile: (id: string, p: Partial<ConfigProfile>) =>
+    http.put(`/profiles/${encodeURIComponent(id)}`, p).then((r) => r.data),
+  deleteProfile: (id: string) =>
+    http.delete(`/profiles/${encodeURIComponent(id)}`).then((r) => r.data),
+  applyProfile: (id: string) =>
+    http.post<{ success: boolean; message: string }>(`/profiles/${encodeURIComponent(id)}/apply`).then((r) => r.data),
+}
+
+export interface NodeProvider {
+  id: string
+  tag: string
+  name: string
+  type: 'remote' | 'file' | 'inline'
+  url?: string
+  format: 'auto' | 'sing-box' | 'clash' | 'base64'
+  update_interval_min: number
+  last_updated?: string
+  last_etag?: string
+  node_count: number
+  enabled: boolean
+  last_error?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ConfigProfile {
+  id: string
+  tag: string
+  name: string
+  description?: string
+  provider_tags: string[]
+  target_selectors: string[]
+  auto_reload: boolean
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface CoreSupervisorStatus {
@@ -297,3 +351,4 @@ export interface CoreLogLine {
   source: 'stdout' | 'stderr' | 'system'
   message: string
 }
+

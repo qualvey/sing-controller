@@ -18,6 +18,7 @@ import (
 	"github.com/qualvey/sing-controller/internal/api"
 	"github.com/qualvey/sing-controller/internal/collector"
 	"github.com/qualvey/sing-controller/internal/logger"
+	"github.com/qualvey/sing-controller/internal/provider"
 	"github.com/qualvey/sing-controller/internal/realtime"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
@@ -123,6 +124,12 @@ func main() {
 		}
 	}
 
+	// 初始化 Provider & Profile 管理器
+	provMgr, err := provider.NewManager("providers", cfgStore, sup)
+	if err != nil {
+		slog.Warn("provider manager init failed", "error", err)
+	}
+
 	// 嵌入 webui（web/dist 已构建时）；构建失败仅影响页面，API 照常
 	var staticHandler http.Handler
 	if builtHandler, err := webHandler(); err == nil {
@@ -131,12 +138,13 @@ func main() {
 		slog.Warn("webui static handler init failed, API-only mode", "error", err)
 	}
 	handler := api.NewHandler(api.HandlerOptions{
-		Store:      cfgStore,
-		Settings:   cfg,
-		Supervisor: sup,
-		Secret:     secret,
-		Version:    version,
-		Static:     staticHandler,
+		Store:       cfgStore,
+		Settings:    cfg,
+		Supervisor:  sup,
+		ProviderMgr: provMgr,
+		Secret:      secret,
+		Version:     version,
+		Static:      staticHandler,
 	})
 	slog.Info("sing-box-controller started",
 		"listen", listenAddr,
