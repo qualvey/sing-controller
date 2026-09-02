@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useResizeObserver } from '@vueuse/core'
 import { showToast } from '@/helper/toast'
 import { showConfirmDialog } from '@/helper/confirmDialog'
@@ -14,6 +15,8 @@ import { api } from '@/api'
 import ResourceSourceTab from '@/components/ResourceSourceTab.vue'
 import type { Outbound } from '@/api'
 import { useStatusStore } from '@/store/status'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -127,6 +130,12 @@ const networkOptionsAll = computed(() =>
   form.network && !networkOptions.includes(form.network) ? [...networkOptions, form.network] : networkOptions
 )
 
+const flowOptions = computed(() => [
+  { value: 'none', label: t('outboundsDialog.flowNone') },
+  { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' },
+  { value: 'xtls-rprx-vision-udp443', label: 'xtls-rprx-vision-udp443' }
+])
+
 function str(v: unknown): string {
   return typeof v === 'string' ? v : ''
 }
@@ -136,22 +145,22 @@ function num(v: unknown): number | undefined {
 }
 
 function validateForm(): string {
-  if (!form.tag.trim()) return 'tag 必填'
+  if (!form.tag.trim()) return t('outboundsDialog.tagRequired')
   if (!isSelector.value && !isUrlTest.value) {
-    if (!form.server.trim()) return 'server 必填'
+    if (!form.server.trim()) return t('outboundsDialog.serverRequired')
     if (typeof form.server_port !== 'number' || form.server_port < 1 || form.server_port > 65535) {
-      return 'server_port 必填（1-65535）'
+      return t('outboundsDialog.serverPortRequired')
     }
   }
   if (isVless.value || isTuic.value) {
-    if (!form.uuid.trim()) return 'uuid 必填'
-    if (isTuic.value && !form.password) return 'password 必填'
+    if (!form.uuid.trim()) return t('outboundsDialog.uuidRequired')
+    if (isTuic.value && !form.password) return t('outboundsDialog.passwordRequired')
   }
   if (isSelector.value || isUrlTest.value) {
-    if (!form.outbounds.length) return '至少选择一个成员 outbound'
+    if (!form.outbounds.length) return t('outboundsDialog.memberRequired')
   }
-  if (form.tls.enabled && !form.tls.server_name.trim()) return '启用 TLS 时 server_name 必填'
-  if (form.tls.reality.enabled && !form.tls.reality.public_key.trim()) return '启用 Reality 时 public_key 必填'
+  if (form.tls.enabled && !form.tls.server_name.trim()) return t('outboundsDialog.serverNameRequired')
+  if (form.tls.reality.enabled && !form.tls.reality.public_key.trim()) return t('outboundsDialog.realityKeyRequired')
   return ''
 }
 
@@ -221,8 +230,8 @@ function fillForm(obj: Outbound) {
 
 const loadTypesAndCandidates = async () => {
   try {
-    const [t, obs] = await Promise.all([api.types(), api.outbounds()])
-    outboundTypes.value = t.outbounds || []
+    const [tTypes, obs] = await Promise.all([api.types(), api.outbounds()])
+    outboundTypes.value = tTypes.outbounds || []
     outbounds.value = obs
   } catch {
     // ignore
@@ -245,7 +254,7 @@ const openEdit = async (targetTag: string) => {
     sourceJson.value = JSON.stringify(data, null, 2)
     fillForm(data)
   } catch (e) {
-    showToast((e as Error).message || '加载节点配置失败', 'error')
+    showToast((e as Error).message || t('outboundsDialog.loadConfigFailed'), 'error')
     emit('update:modelValue', false)
   }
 }
@@ -305,9 +314,9 @@ const doFillFromNode = async () => {
     const res = await api.parseNode(nodeImportText.value)
     fillForm(res.data as Outbound)
     nodeImportDialog.value = false
-    showToast('已解析并填充，请检查表单', 'success')
+    showToast(t('outboundsDialog.parseAndFillSuccess'), 'success')
   } catch (e) {
-    showToast((e as Error).message || '解析失败', 'error')
+    showToast((e as Error).message || t('outboundsDialog.parseFailed'), 'error')
   }
 }
 
@@ -366,9 +375,9 @@ function buildBody(): Outbound {
 const handleResult = (res: unknown) => {
   const r = (res ?? {}) as { reload_error?: string; message?: string }
   if (r.reload_error) {
-    showToast(r.message || `配置已保存，但实例重载失败：${r.reload_error}`, 'warning')
+    showToast(r.message || t('outboundsDialog.saveSuccessReloadFailed', { error: r.reload_error }), 'warning')
   } else {
-    showToast('保存成功', 'success')
+    showToast(t('outboundsDialog.saveSuccess'), 'success')
   }
 }
 
@@ -384,7 +393,7 @@ const save = async () => {
     emit('saved', res)
     await statusStore.refresh()
   } catch (e) {
-    showToast((e as Error).message || '操作失败', 'error')
+    showToast((e as Error).message || t('outboundsDialog.operationFailed'), 'error')
   } finally {
     saving.value = false
   }
@@ -395,9 +404,9 @@ const handleDelete = async () => {
   if (!targetTag) return
 
   const first = await showConfirmDialog({
-    title: '删除确认',
-    message: `确定删除节点「${targetTag}」？该操作不可恢复。`,
-    confirmText: '删除',
+    title: t('outboundsDialog.deleteConfirmTitle'),
+    message: t('outboundsDialog.deleteConfirmMsg', { tag: targetTag }),
+    confirmText: t('outboundsDialog.deleteBtn'),
     confirmButtonClass: 'btn-error'
   })
   if (!first.confirmed) return
@@ -405,7 +414,7 @@ const handleDelete = async () => {
   saving.value = true
   try {
     await api.deleteOutbound(targetTag)
-    showToast('删除成功', 'success')
+    showToast(t('outboundsDialog.deleteSuccess'), 'success')
     emit('update:modelValue', false)
     emit('saved', null)
     await statusStore.refresh()
@@ -413,24 +422,24 @@ const handleDelete = async () => {
     const err = e as Error & { references?: string[] }
     if (err.references?.length) {
       const second = await showConfirmDialog({
-        title: '被引用确认',
-        message: `该节点被以下对象引用：${err.references.join('、')}\n强制删除将自动从相关配置中移除引用。确认删除？`,
-        confirmText: '强制删除',
+        title: t('outboundsDialog.referencedTitle'),
+        message: t('outboundsDialog.referencedMsg', { references: err.references.join('、') }),
+        confirmText: t('outboundsDialog.forceDelete'),
         confirmButtonClass: 'btn-error'
       })
       if (!second.confirmed) return
       try {
         await api.deleteOutbound(targetTag, true)
-        showToast('删除成功（已移除引用）', 'success')
+        showToast(t('outboundsDialog.deleteSuccessCleanedRef'), 'success')
         emit('update:modelValue', false)
         emit('saved', null)
         await statusStore.refresh()
       } catch (e2) {
-        showToast((e2 as Error).message || '删除失败', 'error')
+        showToast((e2 as Error).message || t('outboundsDialog.deleteFailed'), 'error')
       }
       return
     }
-    showToast(err.message || '删除失败', 'error')
+    showToast(err.message || t('outboundsDialog.deleteFailed'), 'error')
   } finally {
     saving.value = false
   }
@@ -441,7 +450,7 @@ const genUuid = async () => {
   try {
     form.uuid = await api.genUuid()
   } catch (e) {
-    showToast((e as Error).message || 'UUID 生成失败', 'error')
+    showToast((e as Error).message || t('outboundsDialog.uuidGenFailed'), 'error')
   } finally {
     generating.value = false
   }
@@ -453,12 +462,12 @@ const genKeypair = async () => {
     const kp = await api.genRealityKeypair()
     form.tls.reality.public_key = kp.public_key
     await showConfirmDialog({
-      title: 'Reality 密钥对已生成',
-      message: `private_key（仅展示一次，请妥善保存）：\n\n${kp.private_key}\n\npublic_key 已自动填入表单。`,
-      confirmText: '我已保存'
+      title: t('outboundsDialog.realityKeypairGenTitle'),
+      message: t('outboundsDialog.realityKeypairGenMsg', { privateKey: kp.private_key }),
+      confirmText: t('outboundsDialog.savedKeypairAck')
     })
   } catch (e) {
-    showToast((e as Error).message || '密钥对生成失败', 'error')
+    showToast((e as Error).message || t('outboundsDialog.keypairGenFailed'), 'error')
   } finally {
     generating.value = false
   }
@@ -469,7 +478,7 @@ const genPassword = async () => {
   try {
     form.password = await api.genPassword()
   } catch (e) {
-    showToast((e as Error).message || '密码生成失败', 'error')
+    showToast((e as Error).message || t('outboundsDialog.passwordGenFailed'), 'error')
   } finally {
     generating.value = false
   }
@@ -485,42 +494,42 @@ onMounted(() => {
     <!-- 新建/编辑弹窗 -->
     <DialogWrapper
       :model-value="modelValue"
-      :title="isEdit ? '编辑 Outbound' : '新建 Outbound'"
+      :title="isEdit ? $t('outboundsDialog.editTitle') : $t('outboundsDialog.createTitle')"
       box-class="max-w-[720px]"
       @update:model-value="(val) => emit('update:modelValue', !!val)"
     >
       <TabsRoot v-model="activeTab">
         <TabsList>
-          <TabsTrigger value="form">表单</TabsTrigger>
-          <TabsTrigger value="source">源码</TabsTrigger>
+          <TabsTrigger value="form">{{ $t('form') }}</TabsTrigger>
+          <TabsTrigger value="source">{{ $t('source') }}</TabsTrigger>
         </TabsList>
         <TabsContent value="form">
           <div ref="formContentRef">
             <div class="mb-4">
               <button class="btn btn-ghost btn-xs" @click="fillFromNode">
                 <ClipboardPasteIcon class="h-3.5 w-3.5" />
-                从 JSON / 节点链接导入
+                {{ $t('outboundsDialog.importFromNode') }}
               </button>
-              <span class="ml-2 text-xs text-[#909399]">支持粘贴 vless://、vmess://、ss:// 等链接或 JSON 节点配置</span>
+              <span class="ml-2 text-xs text-base-content/60">{{ $t('outboundsDialog.importTip') }}</span>
             </div>
             <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
+            <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.type') }}</label>
             <template v-if="outboundTypes.length">
               <!-- 类型允许随时修改 -->
               <SelectField v-model="form.type" :options="outboundTypes" />
             </template>
-            <div v-else class="alert alert-warning py-2 text-xs">当前没有后端连接，无法使用该功能</div>
+            <div v-else class="alert alert-warning py-2 text-xs">{{ $t('outboundsDialog.noBackendWarn') }}</div>
 
-            <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tag <span class="text-destructive">*</span></label>
-            <input v-model="form.tag" type="text" class="input input-bordered input-sm w-full" placeholder="唯一标识，如 vless-out" />
+            <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.tag') }} <span class="text-destructive">*</span></label>
+            <input v-model="form.tag" type="text" class="input input-bordered input-sm w-full" :placeholder="$t('outboundsDialog.tagPlaceholder')" />
 
             <!-- server / server_port 区域（带展开折叠动画） -->
             <div class="col-span-2 collapse-row" :class="{ 'is-open': !isSelector && !isUrlTest }">
               <div class="collapse-inner">
                 <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server <span class="text-destructive">*</span></label>
-                  <input v-model="form.server" type="text" class="input input-bordered input-sm w-full" placeholder="服务器地址 / IP" />
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">server_port <span class="text-destructive">*</span></label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.server') }} <span class="text-destructive">*</span></label>
+                  <input v-model="form.server" type="text" class="input input-bordered input-sm w-full" :placeholder="$t('outboundsDialog.serverPlaceholder')" />
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.serverPort') }} <span class="text-destructive">*</span></label>
                   <input v-model.number="form.server_port" type="number" min="1" max="65535" class="input input-bordered input-sm w-40" />
                 </div>
               </div>
@@ -530,69 +539,65 @@ onMounted(() => {
             <div class="col-span-2 collapse-row" :class="{ 'is-open': isVless }">
               <div class="collapse-inner">
                 <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">uuid <span class="text-destructive">*</span></label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.uuid') }} <span class="text-destructive">*</span></label>
                   <div class="flex gap-2">
                     <input v-model="form.uuid" type="text" class="input input-bordered input-sm w-full font-mono" placeholder="UUID" />
                     <button class="btn btn-ghost btn-sm shrink-0" :disabled="generating" @click="genUuid">
                       <KeyRoundIcon class="h-4 w-4" />
-                      生成
+                      {{ $t('outboundsDialog.generate') }}
                     </button>
                   </div>
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">flow</label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.flow') }}</label>
                   <SelectField
                     v-model="form.flow"
-                    :options="[
-                      { value: 'none', label: '（无）' },
-                      { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' },
-                      { value: 'xtls-rprx-vision-udp443', label: 'xtls-rprx-vision-udp443' }
-                    ]"
-                    placeholder="留空则不启用"
+                    :options="flowOptions"
+                    :placeholder="$t('outboundsDialog.flowPlaceholder')"
                   />
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">network</label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.network') }}</label>
                   <SelectField v-model="form.network" :options="networkOptionsAll" />
 
-                  <div class="flex items-center gap-2 text-[13px] font-semibold text-[#303133] dark:text-[#e5eaf3]" style="grid-column: 1 / -1">
-                    <span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />TLS<span class="h-px flex-1 bg-[#e4e7ed] dark:bg-[#303030]" />
+                  <div class="flex items-center gap-2 text-[13px] font-semibold text-base-content" style="grid-column: 1 / -1">
+                    <span class="h-px flex-1 bg-base-300" />{{ $t('outboundsDialog.tls') }}<span class="h-px flex-1 bg-base-300" />
                   </div>
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.enabled</label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.tlsEnabled') }}</label>
                   <Switch v-model="form.tls.enabled" class="self-center" />
 
                   <!-- TLS 展开内容（嵌套动画） -->
                   <div class="col-span-2 collapse-row" :class="{ 'is-open': form.tls.enabled }">
                     <div class="collapse-inner">
                       <div class="grid gap-x-4 gap-y-4 pt-2" style="grid-template-columns: 170px minmax(0, 1fr)">
-                        <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.server_name <span class="text-destructive">*</span></label>
-                        <input v-model="form.tls.server_name" type="text" class="input input-bordered input-sm w-full" placeholder="SNI，如 www.example.com" />
-                        <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.utls.enabled</label>
+                        <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.serverName') }} <span class="text-destructive">*</span></label>
+                        <input v-model="form.tls.server_name" type="text" class="input input-bordered input-sm w-full" :placeholder="$t('outboundsDialog.serverNamePlaceholder')" />
+                        <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.utlsEnabled') }}</label>
                         <Switch v-model="form.tls.utls.enabled" class="self-center" />
 
                         <!-- UTLS 展开内容 -->
                         <div class="col-span-2 collapse-row" :class="{ 'is-open': form.tls.utls.enabled }">
                           <div class="collapse-inner">
                             <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-                              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.utls.fingerprint</label>
+                              <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.utlsFingerprint') }}</label>
                               <SelectField v-model="form.tls.utls.fingerprint" :options="fingerprintOptions" />
                             </div>
                           </div>
                         </div>
 
-                        <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.reality.enabled</label>
+                        <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.realityEnabled') }}</label>
                         <Switch v-model="form.tls.reality.enabled" class="self-center" />
 
                         <!-- Reality 展开内容 -->
                         <div class="col-span-2 collapse-row" :class="{ 'is-open': form.tls.reality.enabled }">
                           <div class="collapse-inner">
                             <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-                              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.reality.public_key <span class="text-destructive">*</span></label>
+                              <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.realityPublicKey') }} <span class="text-destructive">*</span></label>
                               <div class="flex gap-2">
-                                <input v-model="form.tls.reality.public_key" type="text" class="input input-bordered input-sm w-full font-mono" placeholder="Reality 公钥" />
+                                <input v-model="form.tls.reality.public_key" type="text" class="input input-bordered input-sm w-full font-mono" :placeholder="$t('outboundsDialog.realityPublicKeyPlaceholder')" />
                                 <button class="btn btn-ghost btn-sm shrink-0" :disabled="generating" @click="genKeypair">
                                   <LoaderIcon class="h-4 w-4" />
-                                  生成密钥对
+                                  {{ $t('outboundsDialog.genKeypair') }}
                                 </button>
                               </div>
-                              <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.reality.short_id</label>
-                              <input v-model="form.tls.reality.short_id" type="text" class="input input-bordered input-sm w-full" placeholder="short_id，可为空" />
+                              <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.realityShortId') }}</label>
+                              <input v-model="form.tls.reality.short_id" type="text" class="input input-bordered input-sm w-full" :placeholder="$t('outboundsDialog.realityShortIdPlaceholder')" />
                             </div>
                           </div>
                         </div>
@@ -607,26 +612,26 @@ onMounted(() => {
             <div class="col-span-2 collapse-row" :class="{ 'is-open': isTuic }">
               <div class="collapse-inner">
                 <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">uuid <span class="text-destructive">*</span></label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.uuid') }} <span class="text-destructive">*</span></label>
                   <div class="flex gap-2">
                     <input v-model="form.uuid" type="text" class="input input-bordered input-sm w-full font-mono" placeholder="UUID" />
                     <button class="btn btn-ghost btn-sm shrink-0" :disabled="generating" @click="genUuid">
                       <KeyRoundIcon class="h-4 w-4" />
-                      生成
+                      {{ $t('outboundsDialog.generate') }}
                     </button>
                   </div>
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">password <span class="text-destructive">*</span></label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.password') }} <span class="text-destructive">*</span></label>
                   <div class="flex gap-2">
                     <input
                       v-model="form.password"
                       :type="showPassword ? 'text' : 'password'"
                       class="input input-bordered input-sm w-full font-mono"
-                      placeholder="tuic 密码"
+                      :placeholder="$t('outboundsDialog.passwordPlaceholder')"
                     />
                     <button
                       type="button"
                       class="btn btn-ghost btn-sm shrink-0"
-                      :title="showPassword ? '隐藏密码' : '显示明文'"
+                      :title="showPassword ? $t('outboundsDialog.hidePassword') : $t('outboundsDialog.showPassword')"
                       @click="showPassword = !showPassword"
                     >
                       <EyeSlashIcon v-if="showPassword" class="h-4 w-4" />
@@ -639,26 +644,26 @@ onMounted(() => {
                       @click="genPassword"
                     >
                       <KeyRoundIcon class="h-4 w-4" />
-                      生成
+                      {{ $t('outboundsDialog.generate') }}
                     </button>
                   </div>
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">congestion_control</label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.congestionControl') }}</label>
                   <SelectField v-model="form.congestion_control" :options="congestionOptions" />
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">udp_relay_mode</label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.udpRelayMode') }}</label>
                   <SelectField v-model="form.udp_relay_mode" :options="udpRelayOptions" />
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">zero_rtt_handshake</label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.zeroRttHandshake') }}</label>
                   <Switch v-model="form.zero_rtt_handshake" class="self-center" />
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.enabled</label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.tlsEnabled') }}</label>
                   <Switch v-model="form.tls.enabled" class="self-center" />
 
                   <!-- TUIC TLS 展开内容 -->
                   <div class="col-span-2 collapse-row" :class="{ 'is-open': form.tls.enabled }">
                     <div class="collapse-inner">
                       <div class="grid gap-x-4 gap-y-4 pt-2" style="grid-template-columns: 170px minmax(0, 1fr)">
-                        <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.server_name <span class="text-destructive">*</span></label>
-                        <input v-model="form.tls.server_name" type="text" class="input input-bordered input-sm w-full" placeholder="SNI，如 www.example.com" />
-                        <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tls.alpn</label>
-                        <ChipInput v-model="form.tls.alpn" :suggestions="alpnOptions" placeholder="ALPN（回车添加）" />
+                        <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.serverName') }} <span class="text-destructive">*</span></label>
+                        <input v-model="form.tls.server_name" type="text" class="input input-bordered input-sm w-full" :placeholder="$t('outboundsDialog.serverNamePlaceholder')" />
+                        <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.alpn') }}</label>
+                        <ChipInput v-model="form.tls.alpn" :suggestions="alpnOptions" :placeholder="$t('outboundsDialog.alpnPlaceholder')" />
                       </div>
                     </div>
                   </div>
@@ -670,21 +675,21 @@ onMounted(() => {
             <div class="col-span-2 collapse-row" :class="{ 'is-open': isSelector || isUrlTest }">
               <div class="collapse-inner">
                 <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">成员 outbounds <span class="text-destructive">*</span></label>
-                  <ChipInput v-model="form.outbounds" :suggestions="groupCandidates" placeholder="选择组成员（回车添加，可多选）" />
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.memberOutbounds') }} <span class="text-destructive">*</span></label>
+                  <ChipInput v-model="form.outbounds" :suggestions="groupCandidates" :placeholder="$t('outboundsDialog.memberOutboundsPlaceholder')" />
                   <template v-if="isSelector">
-                    <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">default</label>
-                    <SelectField v-model="form.default_out" :options="form.outbounds" placeholder="可选，默认选中项" />
+                    <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.defaultOutbound') }}</label>
+                    <SelectField v-model="form.default_out" :options="form.outbounds" :placeholder="$t('outboundsDialog.defaultOutboundPlaceholder')" />
                   </template>
                   <template v-if="isUrlTest">
-                    <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">url</label>
-                    <input v-model="form.url" type="text" class="input input-bordered input-sm w-full" placeholder="测试地址，默认 https://www.gstatic.com/generate_204" />
-                    <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">interval</label>
-                    <input v-model="form.interval" type="text" class="input input-bordered input-sm w-full" placeholder="测试间隔，如 3m / 300s" />
-                    <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">tolerance</label>
+                    <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.testUrl') }}</label>
+                    <input v-model="form.url" type="text" class="input input-bordered input-sm w-full" :placeholder="$t('outboundsDialog.testUrlPlaceholder')" />
+                    <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.interval') }}</label>
+                    <input v-model="form.interval" type="text" class="input input-bordered input-sm w-full" :placeholder="$t('outboundsDialog.intervalPlaceholder')" />
+                    <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.tolerance') }}</label>
                     <input v-model.number="form.tolerance" type="number" min="0" max="65535" class="input input-bordered input-sm w-40" />
                   </template>
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">interrupt_exist_connections</label>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.interruptExistConnections') }}</label>
                   <Switch v-model="form.interrupt_exist_connections" class="self-center" />
                 </div>
               </div>
@@ -694,8 +699,8 @@ onMounted(() => {
             <div class="col-span-2 collapse-row" :class="{ 'is-open': !isVless && !isTuic && !isSelector && !isUrlTest }">
               <div class="collapse-inner">
                 <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-                  <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">其他字段</label>
-                  <p class="text-xs leading-relaxed text-[#909399]">该类型无专属表单，请在「源码」tab 直接编辑完整 JSON（如 users/network 等字段）。</p>
+                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.otherFields') }}</label>
+                  <p class="text-xs leading-relaxed text-base-content/60">{{ $t('outboundsDialog.otherFieldsTip') }}</p>
                 </div>
               </div>
             </div>
@@ -717,30 +722,30 @@ onMounted(() => {
               :disabled="saving"
               @click="handleDelete"
             >
-              删除
+              {{ $t('outboundsDialog.deleteBtn') }}
             </button>
           </div>
           <div class="flex justify-end gap-2">
-            <button class="btn btn-ghost btn-sm" @click="emit('update:modelValue', false)">取消</button>
-            <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">保存</button>
+            <button class="btn btn-ghost btn-sm" @click="emit('update:modelValue', false)">{{ $t('cancel') }}</button>
+            <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">{{ $t('save') }}</button>
           </div>
         </div>
       </template>
     </DialogWrapper>
 
     <!-- 从 JSON / 节点链接导入弹窗 -->
-    <DialogWrapper v-model="nodeImportDialog" title="从 JSON / 节点链接导入" box-class="max-w-[560px]">
+    <DialogWrapper v-model="nodeImportDialog" :title="$t('outboundsDialog.importDialogTitle')" box-class="max-w-[560px]">
       <textarea
         v-model="nodeImportText"
         rows="10"
         class="textarea textarea-bordered w-full font-mono text-xs"
-        placeholder="支持粘贴 vless://...、vmess://...、ss://... 或完整 JSON 节点配置"
+        :placeholder="$t('outboundsDialog.importDialogPlaceholder')"
       />
-      <p class="mt-1 text-xs text-[#909399]">解析成功后将自动填充表单字段（若节点类型变化会重置表单，请最后检查确认）</p>
+      <p class="mt-1 text-xs text-base-content/60">{{ $t('outboundsDialog.importDialogTip') }}</p>
       <template #footer>
         <div class="flex justify-end gap-2 w-full">
-          <button class="btn btn-ghost btn-sm" @click="nodeImportDialog = false">取消</button>
-          <button class="btn btn-primary btn-sm" @click="doFillFromNode">解析并填充</button>
+          <button class="btn btn-ghost btn-sm" @click="nodeImportDialog = false">{{ $t('cancel') }}</button>
+          <button class="btn btn-primary btn-sm" @click="doFillFromNode">{{ $t('outboundsDialog.parseAndFill') }}</button>
         </div>
       </template>
     </DialogWrapper>
