@@ -18,6 +18,9 @@ go.work
 dist/
 *.deb
 *.tar.gz
+*.db
+*.exe
+pkg_test/
 go.work.sum
 
 !controller/web/dist/.gitkeep
