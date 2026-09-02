@@ -295,7 +295,7 @@ export const checkUIUpdate = async () => {
 }
 
 export const restartCoreAPI = async () => {
-  if (activeBackend.value?.type === 'controller' || channel.value === Channel.Singbox) {
+  if (channel.value === Channel.Singbox) {
     return controllerApi.coreRestart()
   }
   return clashRestartCoreAPI()

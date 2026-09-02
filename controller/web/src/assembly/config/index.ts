@@ -40,10 +40,8 @@ import {
   updateConfigsAPI,
   updateGeoDataAPI,
 } from '@/api/clash'
-import { activeBackend } from '@/store/setup'
-
 export const reloadConfigsAPI = async () => {
-  if (activeBackend.value?.type === 'controller' || channel.value === Channel.Singbox) {
+  if (channel.value === Channel.Singbox) {
     return controllerApi.reload()
   }
   return clashReloadConfigsAPI()
