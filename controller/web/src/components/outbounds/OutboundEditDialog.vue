@@ -684,23 +684,25 @@ onMounted(() => {
           <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
         </TabsContent>
       </TabsRoot>
-      <div class="mt-5 flex items-center justify-between">
-        <div>
-          <button
-            v-if="isEdit"
-            type="button"
-            class="btn btn-error btn-outline btn-sm"
-            :disabled="saving"
-            @click="handleDelete"
-          >
-            删除
-          </button>
+      <template #footer>
+        <div class="flex items-center justify-between w-full">
+          <div>
+            <button
+              v-if="isEdit"
+              type="button"
+              class="btn btn-error btn-outline btn-sm"
+              :disabled="saving"
+              @click="handleDelete"
+            >
+              删除
+            </button>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button class="btn btn-ghost btn-sm" @click="emit('update:modelValue', false)">取消</button>
+            <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">保存</button>
+          </div>
         </div>
-        <div class="flex justify-end gap-2">
-          <button class="btn btn-ghost btn-sm" @click="emit('update:modelValue', false)">取消</button>
-          <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">保存</button>
-        </div>
-      </div>
+      </template>
     </DialogWrapper>
 
     <!-- 从 JSON / 节点链接导入弹窗 -->
@@ -712,10 +714,12 @@ onMounted(() => {
         placeholder="支持粘贴 vless://...、vmess://...、ss://... 或完整 JSON 节点配置"
       />
       <p class="mt-1 text-xs text-[#909399]">解析成功后将自动填充表单字段（若节点类型变化会重置表单，请最后检查确认）</p>
-      <div class="mt-4 flex justify-end gap-2">
-        <button class="btn btn-ghost btn-sm" @click="nodeImportDialog = false">取消</button>
-        <button class="btn btn-primary btn-sm" @click="doFillFromNode">解析并填充</button>
-      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2 w-full">
+          <button class="btn btn-ghost btn-sm" @click="nodeImportDialog = false">取消</button>
+          <button class="btn btn-primary btn-sm" @click="doFillFromNode">解析并填充</button>
+        </div>
+      </template>
     </DialogWrapper>
   </div>
 </template>

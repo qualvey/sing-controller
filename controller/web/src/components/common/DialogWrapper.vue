@@ -25,7 +25,7 @@
         <!-- 弹窗主体：内容区自行滚动，标题/按钮区固定 -->
         <div
           ref="modalBoxRef"
-          class="modal-box bg-base-100 relative flex flex-col overflow-hidden p-0 outline-none max-md:max-h-[85dvh] max-md:min-h-[calc(var(--dialog-viewport-height,100dvh)*0.4)]"
+          class="modal-box bg-base-100 relative flex flex-col overflow-hidden p-0 outline-none max-md:max-h-[85dvh] max-md:min-h-[calc(var(--dialog-viewport-height,100dvh)*0.4)] md:max-h-[85vh]"
           :class="[
             boxClass,
             size === 'large' ? 'max-w-4xl w-11/12' : size === 'small' ? 'max-w-sm' : ''
@@ -54,7 +54,7 @@
           </div>
           <div
             v-if="isOpen"
-            class="min-h-0 overflow-y-auto max-md:flex-1 md:max-h-[90dvh]"
+            class="min-h-0 flex-1 overflow-y-auto"
             :class="
               noPadding
                 ? 'p-0 max-md:pb-[env(safe-area-inset-bottom)]'
@@ -62,6 +62,12 @@
             "
           >
             <slot />
+          </div>
+          <div
+            v-if="$slots.footer && isOpen"
+            class="border-base-content/10 bg-base-100/90 relative shrink-0 border-t px-4 py-3"
+          >
+            <slot name="footer" />
           </div>
         </div>
       </div>
