@@ -112,6 +112,10 @@ func (m *Manager) providerOutboundPath(tag string) string {
 	return filepath.Join(m.dir, fmt.Sprintf("outbound-%s.json", tag))
 }
 
+func (m *Manager) providerFullPath(tag string) string {
+	return filepath.Join(m.dir, fmt.Sprintf("full-%s.json", tag))
+}
+
 func (m *Manager) loadProviders() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -424,6 +428,11 @@ func (m *Manager) RefreshProvider(ctx context.Context, id string) ([]option.Outb
 		return nil, fmt.Errorf("写入节点片段文件失败: %w", err)
 	}
 
+	// 若为全量 sing-box 配置，额外持久化为 full-<tag>.json 供全量使用
+	if fullOpts, err := store.Parse(ctx, body); err == nil && (len(fullOpts.Inbounds) > 0 || fullOpts.Route != nil || fullOpts.DNS != nil) {
+		_ = os.WriteFile(m.providerFullPath(tag), body, 0o644)
+	}
+
 	// 更新元数据
 	m.mu.Lock()
 	if existing, ok := m.providers[id]; ok {
@@ -581,11 +590,23 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		return nil, errors.New("store 未初始化")
 	}
 
-	// 1. 读取基础配置副本并解析（若文件尚不存在，使用内存中的默认骨架）
+	// 1. 读取基础配置副本并解析（若文件尚不存在，优先使用订阅源的全量配置）
 	var baseOpts option.Options
 	baseContent, err := os.ReadFile(m.store.Path())
 	if errors.Is(err, os.ErrNotExist) {
-		baseOpts = m.store.Options
+		var fullLoaded bool
+		for _, pTag := range prof.ProviderTags {
+			if fullData, err := os.ReadFile(m.providerFullPath(pTag)); err == nil {
+				if parsedFull, err := store.Parse(ctx, fullData); err == nil {
+					baseOpts = parsedFull
+					fullLoaded = true
+					break
+				}
+			}
+		}
+		if !fullLoaded {
+			baseOpts = m.store.Options
+		}
 	} else if err != nil {
 		return nil, fmt.Errorf("读取主配置失败: %w", err)
 	} else {
@@ -594,6 +615,21 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 			return nil, fmt.Errorf("解析主配置失败: %w", err)
 		}
 		baseOpts = parsedOpts
+	}
+
+	// 保证存在 controller 必须的 api service（用于探活与控制），不影响其余原有配置
+	hasAPI := false
+	for _, s := range baseOpts.Services {
+		if s.Type == "api" {
+			hasAPI = true
+			break
+		}
+	}
+	if !hasAPI {
+		apiServiceJSON := []byte(`{"type": "api", "listen": "127.0.0.1", "listen_port": 9900}`)
+		if apiService, err := sjson.UnmarshalExtendedContext[option.Service](include.Context(ctx), apiServiceJSON); err == nil {
+			baseOpts.Services = append(baseOpts.Services, apiService)
+		}
 	}
 
 	// 2. 收集所有历史上注入过或属于任何 provider 的节点 tag，用于彻底清除旧节点
