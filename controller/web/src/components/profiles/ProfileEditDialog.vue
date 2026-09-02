@@ -176,16 +176,16 @@ const handleSave = async () => {
   try {
     if (form.id) {
       await controllerApi.updateProfile(form.id, form)
-      showNotification(t('profiles.profileUpdated', '配置方案已更新'), 'alert-success')
+      showNotification({ content: t('profiles.profileUpdated', '配置方案已更新'), type: 'alert-success' })
     } else {
       await controllerApi.createProfile(form)
-      showNotification(t('profiles.profileCreated', '配置方案已创建'), 'alert-success')
+      showNotification({ content: t('profiles.profileCreated', '配置方案已创建'), type: 'alert-success' })
     }
     isOpen.value = false
     emit('saved')
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '保存方案失败'
-    showNotification(msg, 'alert-error')
+    showNotification({ content: msg, type: 'alert-error' })
   } finally {
     isSaving.value = false
   }

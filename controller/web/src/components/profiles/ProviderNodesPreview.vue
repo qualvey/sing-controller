@@ -81,7 +81,7 @@ const fetchNodes = async () => {
     nodes.value = res?.outbounds || []
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '获取节点列表失败'
-    showNotification(msg, 'alert-error')
+    showNotification({ content: msg, type: 'alert-error' })
   } finally {
     isLoading.value = false
   }

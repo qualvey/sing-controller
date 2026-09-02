@@ -177,16 +177,16 @@ const handleSave = async () => {
   try {
     if (form.id) {
       await controllerApi.updateProvider(form.id, form)
-      showNotification(t('profiles.providerUpdated', '订阅源已更新'), 'alert-success')
+      showNotification({ content: t('profiles.providerUpdated', '订阅源已更新'), type: 'alert-success' })
     } else {
       await controllerApi.createProvider(form)
-      showNotification(t('profiles.providerCreated', '订阅源已保存并拉取'), 'alert-success')
+      showNotification({ content: t('profiles.providerCreated', '订阅源已保存并拉取'), type: 'alert-success' })
     }
     isOpen.value = false
     emit('saved')
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '保存订阅源失败'
-    showNotification(msg, 'alert-error')
+    showNotification({ content: msg, type: 'alert-error' })
   } finally {
     isSaving.value = false
   }
