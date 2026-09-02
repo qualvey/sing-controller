@@ -1,4 +1,4 @@
-import type { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import type { EarthControls } from './earthControls'
 import { CSS2DObject, type CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import * as THREE from 'three/webgpu'
 import type { EarthRenderEndpoint } from './rendererTypes'
@@ -23,7 +23,7 @@ interface ProjectedCityLabel {
 interface CityLabelLayerOptions {
   earthGroup: THREE.Group
   camera: THREE.Camera
-  controls: OrbitControls
+  controls: EarthControls
   labelRenderer: CSS2DRenderer
 }
 
