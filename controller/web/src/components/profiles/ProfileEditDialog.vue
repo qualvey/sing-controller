@@ -5,22 +5,36 @@
     size="medium"
   >
     <div class="flex flex-col gap-3 py-2 text-xs">
-      <TextInput
-        v-model="form.name"
-        :label="t('profiles.profileName', '方案名称')"
-        placeholder="例如：家庭主力分流 / 游戏低延迟模式"
-      />
-      <TextInput
-        v-model="form.tag"
-        :label="t('profiles.profileTag', '标识 (Tag)')"
-        placeholder="例如：gaming / travel"
-        :disabled="isEdit"
-      />
-      <TextInput
-        v-model="form.description"
-        :label="t('profiles.profileDesc', '方案描述')"
-        placeholder="可选描述说明"
-      />
+      <div class="flex flex-col gap-1">
+        <label class="font-medium text-base-content/80">
+          {{ t('profiles.profileName', '方案名称') }}
+          <span class="text-error">*</span>
+        </label>
+        <TextInput
+          v-model="form.name"
+          placeholder="例如：家庭主力分流 / 游戏低延迟模式"
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="font-medium text-base-content/80">
+          {{ t('profiles.profileTag', '标识 (Tag)') }}
+          <span class="text-error">*</span>
+        </label>
+        <TextInput
+          v-model="form.tag"
+          placeholder="例如：gaming / travel"
+          :disabled="isEdit"
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="font-medium text-base-content/80">
+          {{ t('profiles.profileDesc', '方案描述') }}
+        </label>
+        <TextInput
+          v-model="form.description"
+          placeholder="可选描述说明"
+        />
+      </div>
 
       <div class="flex flex-col gap-1.5">
         <label class="font-medium text-base-content/80">

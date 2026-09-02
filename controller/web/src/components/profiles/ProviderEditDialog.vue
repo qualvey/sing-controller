@@ -5,39 +5,63 @@
     size="medium"
   >
     <div class="flex flex-col gap-3 py-2 text-xs">
-      <TextInput
-        v-model="form.name"
-        :label="t('profiles.providerName', '订阅名称')"
-        placeholder="例如：主力机场 A"
-      />
-      <TextInput
-        v-model="form.tag"
-        :label="t('profiles.providerTag', '标识 (Tag)')"
-        placeholder="例如：airport-a (用于生成 outbound-airport-a.json)"
-        :disabled="isEdit"
-      />
-      <TextInput
-        v-model="form.url"
-        :label="t('profiles.providerUrl', '订阅 URL')"
-        placeholder="https://example.com/api/v1/client/subscribe?token=..."
-      />
-      <div class="grid grid-cols-2 gap-2">
-        <SelectInput
-          v-model="form.format"
-          :label="t('profiles.providerFormat', '订阅格式')"
-          :options="[
-            { label: '自动检测 (Auto)', value: 'auto' },
-            { label: 'Clash YAML (proxies 数组)', value: 'clash' },
-            { label: 'sing-box JSON (outbounds 格式)', value: 'sing-box' },
-            { label: 'Base64 节点 URI', value: 'base64' },
-          ]"
-        />
+      <div class="flex flex-col gap-1">
+        <label class="font-medium text-base-content/80">
+          {{ t('profiles.providerName', '订阅名称') }}
+        </label>
         <TextInput
-          v-model.number="form.update_interval_min"
-          type="number"
-          :label="t('profiles.updateInterval', '自动更新间隔 (分钟)')"
-          placeholder="0 表示不自动更新"
+          v-model="form.name"
+          placeholder="例如：主力机场 A"
         />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="font-medium text-base-content/80">
+          {{ t('profiles.providerTag', '标识 (Tag)') }}
+          <span class="text-error">*</span>
+        </label>
+        <TextInput
+          v-model="form.tag"
+          placeholder="例如：airport-a (用于生成 outbound-airport-a.json)"
+          :disabled="isEdit"
+        />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="font-medium text-base-content/80">
+          {{ t('profiles.providerUrl', '订阅 URL') }}
+          <span class="text-error">*</span>
+        </label>
+        <TextInput
+          v-model="form.url"
+          placeholder="https://example.com/api/v1/client/subscribe?token=..."
+        />
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="flex flex-col gap-1">
+          <label class="font-medium text-base-content/80">
+            {{ t('profiles.providerFormat', '订阅格式') }}
+          </label>
+          <SelectInput
+            v-model="form.format"
+            :options="[
+              { label: '自动检测 (Auto)', value: 'auto' },
+              { label: 'Clash YAML (proxies 数组)', value: 'clash' },
+              { label: 'sing-box JSON (outbounds 格式)', value: 'sing-box' },
+              { label: 'Base64 节点 URI', value: 'base64' },
+            ]"
+          />
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="font-medium text-base-content/80">
+            {{ t('profiles.updateInterval', '自动更新间隔 (分钟)') }}
+          </label>
+          <input
+            v-model.number="form.update_interval_min"
+            type="number"
+            min="0"
+            class="input input-sm input-bordered w-full"
+            placeholder="0 表示不自动更新"
+          />
+        </div>
       </div>
       <div class="form-control">
         <label class="label cursor-pointer justify-start gap-2">
