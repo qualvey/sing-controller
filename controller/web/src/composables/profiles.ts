@@ -80,6 +80,16 @@ export const refreshProvider = async (id: string) => {
     await loadProfilesData()
     const statusStore = useStatusStore()
     await statusStore.refresh()
+
+    // 若当前处于冷启动待初始化状态（尚未生成主配置），自动应用默认方案
+    if (statusStore.status?.config_exists === false) {
+      const activeProf = profilesList.value.find(p => p.is_active) || profilesList.value[0]
+      if (activeProf) {
+        await applyProfile(activeProf.id)
+        return
+      }
+    }
+
     setTimeout(() => {
       startBackendSession()
     }, 600)

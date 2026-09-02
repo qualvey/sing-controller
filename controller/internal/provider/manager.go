@@ -793,15 +793,19 @@ func (m *Manager) ApplyProfile(ctx context.Context, id string) error {
 		return errors.New("profile not found")
 	}
 
+	logger.Info("[Profile] 正在应用方案 %s (%s)...", prof.Name, id)
 	finalJSON, err := m.MergeAndValidateProfile(ctx, *prof)
 	if err != nil {
+		logger.Error("[Profile] 方案 %s 合并校验失败: %v", prof.Name, err)
 		return err
 	}
 
 	// 原子写盘
 	if err := m.store.RawSave(ctx, finalJSON); err != nil {
+		logger.Error("[Profile] 保存主配置失败: %v", err)
 		return fmt.Errorf("保存配置失败: %w", err)
 	}
+	logger.Info("[Profile] 主配置 %s 已成功写入 (大小: %d 字节)", m.store.Path(), len(finalJSON))
 
 	// 标记活动方案
 	m.mu.Lock()
@@ -814,8 +818,9 @@ func (m *Manager) ApplyProfile(ctx context.Context, id string) error {
 
 	// 若启用了自动重载且 Supervisor 存在，立即重启内核
 	if prof.AutoReload && m.supervisor != nil {
+		logger.Info("[Profile] 正在通知 Supervisor 启动/重启 sing-box 内核...")
 		if err := m.supervisor.Restart(ctx); err != nil {
-			logger.Warn("[Profile] 切换方案后重载内核失败: %v", err)
+			logger.Warn("[Profile] 内核重启失败: %v", err)
 		}
 	}
 

@@ -211,6 +211,7 @@ func (m *Manager) streamLogs(r io.Reader, source string) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		text := scanner.Text()
+		logger.Info("[Core/%s] %s", source, text)
 		m.broadcast(LogLine{
 			Timestamp: time.Now(),
 			Source:    source,
@@ -247,6 +248,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	// 判断是否为正常主动停止
 	if m.state == StateStopping || m.state == StateStopped {
 		m.state = StateStopped
+		logger.Info("[Supervisor] sing-box 内核已正常停止 (ExitCode: %d)", exitCode)
 		m.broadcast(LogLine{
 			Timestamp: now,
 			Source:    "system",
@@ -258,6 +260,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	// 异常退出 / Crash 诊断
 	m.state = StateCrashed
 	m.lastError = fmt.Sprintf("内核异常退出 (ExitCode: %d)", exitCode)
+	logger.Error("[Supervisor] ⚠️ 警告: sing-box 内核异常退出! (ExitCode: %d)", exitCode)
 	m.broadcast(LogLine{
 		Timestamp: now,
 		Source:    "system",
@@ -274,6 +277,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	if len(m.recentExits) >= 3 {
 		m.state = StateError
 		m.lastError = "内核在短时间内频繁崩溃，已暂停自动拉起以防止系统雪崩"
+		logger.Error("[Supervisor] 🛑 内核在 10 秒内连续崩溃 3 次，熔断暂停自动重启")
 		m.broadcast(LogLine{
 			Timestamp: now,
 			Source:    "system",
