@@ -9,19 +9,19 @@
         :animation="150"
         ghost-class="ghost"
         handle=".drag-handle"
-        :item-key="(card: string) => card"
+        item-key="card"
       >
-        <template #item="{ element: cardKey }">
+        <template #item="{ element: cardItem }">
           <div class="setting-item mb-2">
             <Bars3Icon class="drag-handle text-base-content/50 h-5 w-5 shrink-0 cursor-move" />
             <div class="setting-item-label">
-              {{ $t(cardKeyToLabelMap[cardKey.card] || cardKey.card) }}
+              {{ getCardLabel(cardItem) }}
             </div>
             <input
               type="checkbox"
               class="toggle"
-              :checked="cardKey.visible"
-              @change="cardKey.visible = !cardKey.visible"
+              :checked="cardItem?.visible"
+              @change="cardItem.visible = !cardItem.visible"
             />
           </div>
         </template>
@@ -36,9 +36,11 @@ import { OVERVIEW_CARD } from '@/constant'
 import { overviewCardOrder } from '@/store/settings'
 import { Bars3Icon } from '@heroicons/vue/24/outline'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Draggable from 'vuedraggable'
 
 const isOpen = defineModel<boolean>({ required: true })
+const { t, te } = useI18n()
 
 const cardKeyToLabelMap: Record<string, string> = {
   CoreControlCard: 'coreControlCard',
@@ -49,6 +51,13 @@ const cardKeyToLabelMap: Record<string, string> = {
   EarthGlobeCard: 'earthGlobeCard',
   ConnectionHistory: 'connectionHistory',
   RuleHitCountCard: 'ruleHitCountCard',
+}
+
+const getCardLabel = (item: { card?: OVERVIEW_CARD } | string) => {
+  const cardKey = typeof item === 'string' ? item : item?.card
+  if (!cardKey) return ''
+  const labelKey = cardKeyToLabelMap[cardKey] || cardKey
+  return te(labelKey) ? t(labelKey) : labelKey
 }
 
 const orderedCards = computed({

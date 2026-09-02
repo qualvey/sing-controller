@@ -7,7 +7,7 @@
     <div class="flex flex-col gap-3 p-3">
       <component
         v-for="item in visibleCards"
-        :key="item"
+        :key="item.card"
         :is="cardComponents[item.card]"
       />
     </div>

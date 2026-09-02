@@ -8,10 +8,10 @@
         </div>
         <div>
           <div class="font-semibold text-sm flex items-center gap-2">
-            <span>{{ t('coreControl.title', '内核与运行控制') }}</span>
+            <span>{{ t('coreControl.title') }}</span>
             <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-success/15 text-success">
               <span class="size-1.5 rounded-full bg-success animate-pulse" />
-              {{ t('coreControl.running', '正常运行') }}
+              {{ t('coreControl.running') }}
             </span>
           </div>
           <div class="text-xs text-base-content/50 mt-0.5">
@@ -26,7 +26,7 @@
         @click="openProfileModal"
       >
         <RectangleGroupIcon class="size-4 text-primary" />
-        <span class="text-base-content/60">{{ t('coreControl.currentProfile', '当前方案') }}:</span>
+        <span class="text-base-content/60">{{ t('coreControl.currentProfile') }}:</span>
         <span class="text-base-content font-semibold">{{ activeProfileName }}</span>
       </div>
     </div>
@@ -38,10 +38,10 @@
         <div class="flex items-start justify-between">
           <div>
             <div class="text-xs font-semibold text-base-content/80">
-              {{ t('coreControl.reloadConfig', '平滑重载配置') }}
+              {{ t('coreControl.reloadConfig') }}
             </div>
             <div class="text-[11px] text-base-content/50 mt-0.5">
-              {{ t('coreControl.reloadDesc', '热加载规则与路由，不断开网络连接') }}
+              {{ t('coreControl.reloadDesc') }}
             </div>
           </div>
           <div class="p-1.5 rounded-lg bg-info/10 text-info">
@@ -61,7 +61,7 @@
             v-else
             class="size-4"
           />
-          <span>{{ isReloading ? t('coreControl.reloading', '重载中...') : t('coreControl.doReload', '执行重载') }}</span>
+          <span>{{ isReloading ? t('coreControl.reloading') : t('coreControl.doReload') }}</span>
         </button>
       </div>
 
@@ -70,10 +70,10 @@
         <div class="flex items-start justify-between">
           <div>
             <div class="text-xs font-semibold text-base-content/80">
-              {{ t('coreControl.restartCore', '重启内核进程') }}
+              {{ t('coreControl.restartCore') }}
             </div>
             <div class="text-[11px] text-base-content/50 mt-0.5">
-              {{ t('coreControl.restartDesc', '由 Supervisor 重新拉起 sing-box 进程') }}
+              {{ t('coreControl.restartDesc') }}
             </div>
           </div>
           <div class="p-1.5 rounded-lg bg-warning/10 text-warning">
@@ -93,7 +93,7 @@
             v-else
             class="size-4"
           />
-          <span>{{ isRestarting ? t('coreControl.restarting', '重启中...') : t('coreControl.doRestart', '执行重启') }}</span>
+          <span>{{ isRestarting ? t('coreControl.restarting') : t('coreControl.doRestart') }}</span>
         </button>
       </div>
 
@@ -102,10 +102,10 @@
         <div class="flex items-start justify-between">
           <div>
             <div class="text-xs font-semibold text-base-content/80">
-              {{ t('coreControl.profileManager', '配置组与订阅源') }}
+              {{ t('coreControl.profileManager') }}
             </div>
             <div class="text-[11px] text-base-content/50 mt-0.5">
-              {{ t('coreControl.profileDesc', '管理多套配置方案及外部节点订阅') }}
+              {{ t('coreControl.profileDesc') }}
             </div>
           </div>
           <div class="p-1.5 rounded-lg bg-primary/10 text-primary">
@@ -117,7 +117,7 @@
           @click="openProfileModal"
         >
           <RectangleGroupIcon class="size-4" />
-          <span>{{ t('coreControl.openManager', '管理方案 / 订阅') }}</span>
+          <span>{{ t('coreControl.openManager') }}</span>
         </button>
       </div>
     </div>
@@ -143,7 +143,7 @@ import {
 import { showNotification } from '@/helper/notification'
 import { notifyRequestError } from '@/helper/requestError'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const isReloading = ref(false)
 const isRestarting = ref(false)
@@ -153,7 +153,7 @@ const coreVersionText = computed(() => version.value || 'v1.11.x')
 
 const activeProfileName = computed(() => {
   const active = profilesList.value.find((p) => p.is_active)
-  return active?.name || t('profiles.defaultProfileName', '默认方案')
+  return active?.name || (te('profiles.defaultProfileName') ? t('profiles.defaultProfileName') : '默认方案')
 })
 
 const handleReloadConfig = async () => {
@@ -162,7 +162,7 @@ const handleReloadConfig = async () => {
   try {
     await reloadConfigsAPI()
     showNotification({
-      content: t('coreControl.reloadSuccess', '配置重载成功'),
+      content: t('coreControl.reloadSuccess'),
       type: 'alert-success',
     })
   } catch (err: unknown) {
@@ -178,7 +178,7 @@ const handleRestartCore = async () => {
   try {
     await restartCoreAPI()
     showNotification({
-      content: t('coreControl.restartSuccess', '内核重启命令已发送'),
+      content: t('coreControl.restartSuccess'),
       type: 'alert-success',
     })
   } catch (err: unknown) {

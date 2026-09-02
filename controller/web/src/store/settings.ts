@@ -274,10 +274,6 @@ const defaultOverviewCardOrder: { card: OVERVIEW_CARD; visible: boolean }[] = [
     card: OVERVIEW_CARD.RuleHitCountCard,
     visible: true,
   },
-  {
-    card: OVERVIEW_CARD.HonkStatsCard,
-    visible: true,
-  },
 ]
 
 export const overviewCardOrder = useStorage<{ card: OVERVIEW_CARD; visible: boolean }[]>(
@@ -285,28 +281,50 @@ export const overviewCardOrder = useStorage<{ card: OVERVIEW_CARD; visible: bool
   defaultOverviewCardOrder,
 )
 
-// 确保所有卡片都在配置中。存量配置首次补入全球连接时放在连接拓扑前；
-// 其他缺失卡片仍追加到末尾，已有全球连接的自定义顺序不改。
+// 归一化并确保所有卡片配置有效：
+// 1. 处理存量配置可能为 string 数组或损坏对象的情况
+// 2. 补齐新卡片并将 CoreControlCard 置顶到最前面
 const allCardTypes = Object.values(OVERVIEW_CARD)
-const existingCardTypes = new Set(overviewCardOrder.value.map((item) => item.card))
-const missingCards = allCardTypes.filter((card) => !existingCardTypes.has(card))
+const rawOrder = overviewCardOrder.value
 
-if (missingCards.length > 0) {
-  const nextOrder = [...overviewCardOrder.value]
+const normalizedOrder: { card: OVERVIEW_CARD; visible: boolean }[] = []
+const seenCards = new Set<OVERVIEW_CARD>()
 
-  for (const card of missingCards) {
-    const item = { card, visible: true }
-
-    if (card === OVERVIEW_CARD.EarthGlobeCard) {
-      const topologyIndex = nextOrder.findIndex(({ card }) => card === OVERVIEW_CARD.TopologyCharts)
-      nextOrder.splice(topologyIndex === -1 ? nextOrder.length : topologyIndex, 0, item)
-    } else {
-      nextOrder.push(item)
+if (Array.isArray(rawOrder)) {
+  for (const item of rawOrder) {
+    const cardType = (typeof item === 'string' ? item : item?.card) as OVERVIEW_CARD
+    if (cardType && allCardTypes.includes(cardType) && !seenCards.has(cardType)) {
+      seenCards.add(cardType)
+      normalizedOrder.push({
+        card: cardType,
+        visible: typeof item === 'object' && item !== null && 'visible' in item ? Boolean(item.visible) : true,
+      })
     }
   }
-
-  overviewCardOrder.value = nextOrder
 }
+
+// 补齐缺失卡片
+const missingCards = allCardTypes.filter((card) => !seenCards.has(card))
+for (const card of missingCards) {
+  const item = { card, visible: true }
+  if (card === OVERVIEW_CARD.CoreControlCard) {
+    normalizedOrder.unshift(item)
+  } else if (card === OVERVIEW_CARD.EarthGlobeCard) {
+    const topologyIndex = normalizedOrder.findIndex(({ card }) => card === OVERVIEW_CARD.TopologyCharts)
+    normalizedOrder.splice(topologyIndex === -1 ? normalizedOrder.length : topologyIndex, 0, item)
+  } else {
+    normalizedOrder.push(item)
+  }
+}
+
+// 确保内核控制卡片 (CoreControlCard) 处于最前面
+const coreControlIdx = normalizedOrder.findIndex(({ card }) => card === OVERVIEW_CARD.CoreControlCard)
+if (coreControlIdx > 0) {
+  const [coreControlItem] = normalizedOrder.splice(coreControlIdx, 1)
+  normalizedOrder.unshift(coreControlItem)
+}
+
+overviewCardOrder.value = normalizedOrder
 
 export const earthOriginSource = useStorage<'china' | 'global'>('config/earth-origin-source', 'china')
 export const earthIPInfoAPI = useStorage<IP_INFO_API>('config/earth-ip-info-api', IP_INFO_API.IPIP)
