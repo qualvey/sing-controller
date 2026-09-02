@@ -285,6 +285,19 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	// 生成 Crash Dump 文件
 	m.generateCrashDump(exitCode)
 
+	// 若检测到 TUN 权限不足 (Access is denied)，禁止无意义的自动重启，等待前端用户输入
+	if m.tunAccessDenied {
+		m.state = StateError
+		m.lastError = "TUN 网卡配置权限不足 (Access is denied)，已停止自动重启，等待用户授权或调整配置"
+		logger.Warn("[Supervisor] ⏸️ 检测到系统权限不足 (Access is denied)，已暂停自动重启，等待前端处理")
+		m.broadcast(LogLine{
+			Timestamp: now,
+			Source:    "system",
+			Message:   "[Supervisor] ⏸️ 检测到系统权限不足 (Access is denied)，已暂停自动重启，等待前端处理",
+		})
+		return
+	}
+
 	// 连续崩溃防抖检测（10秒内连续退出超过 3 次）
 	m.recentExits = append(m.recentExits, now)
 	m.cleanRecentExits(now)
@@ -308,7 +321,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 			time.Sleep(1 * time.Second)
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			if m.state == StateCrashed {
+			if m.state == StateCrashed && !m.tunAccessDenied {
 				logger.Info("[Supervisor] 尝试自动重新拉起内核 (第 %d 次)", m.restarts)
 				_ = m.startLocked(context.Background())
 			}
