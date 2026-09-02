@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -44,8 +45,6 @@ type LogOptions struct {
 //   - pidfile：读 pid 文件后 kill -HUP
 //   - hook：自定义 shell 命令（最灵活）
 //   - none：不启用
-//
-// clash_api 无 reload 端点（已查源码确认），不走该方案。
 type ReloadOptions struct {
 	Mode      string `json:"mode,omitempty"`
 	Service   string `json:"service,omitempty"`
@@ -81,18 +80,15 @@ func (o *ReloadOptions) Validate() error {
 	}
 }
 
-// ClashAPIOptions controller ?? clash API ????（可选）
-// ??:?? sing-box ? experimental.clash_api ??（external_controller/secret）
-// 显式配置??（?? sing-box ?? clash_api ?指向外部核心）
+// ClashAPIOptions controller 连接 clash API 的配置（可选）
 type ClashAPIOptions struct {
-	Address string `json:"address,omitempty"` // ??: http://127.0.0.1:9090
+	Address string `json:"address,omitempty"` // 例如: http://127.0.0.1:9090
 	Secret  string `json:"secret,omitempty"`
 }
 
-// ServiceAPIOptions controller ?? service API（gRPC-Web）????（可选）
-// ??:?? sing-box ? services[type=api] ??（listen/listen_port/secret）
+// ServiceAPIOptions controller 连接 service API（gRPC-Web）的配置（可选）
 type ServiceAPIOptions struct {
-	Address string `json:"address,omitempty"` // ??: http://127.0.0.1:9900
+	Address string `json:"address,omitempty"` // 例如: http://127.0.0.1:9900
 	Secret  string `json:"secret,omitempty"`
 }
 
@@ -143,9 +139,14 @@ func (m *Manager) PollIntervalDuration() time.Duration {
 	}
 	return d
 }
+
 func defaultSettings() Settings {
+	singBoxCfg := "/etc/sing-box/config.json"
+	if runtime.GOOS == "windows" {
+		singBoxCfg = "sing-box.json"
+	}
 	return Settings{
-		Config:  "/etc/sing-box/config.json",
+		Config:  singBoxCfg,
 		Listen:  "127.0.0.1:8080",
 		Log:     &LogOptions{Level: "info"},
 		MinPort: 8000,
@@ -165,6 +166,15 @@ func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	content, err := os.ReadFile(m.path)
+	if errors.Is(err, os.ErrNotExist) {
+		// 平滑回退检查：如果默认的 controller.json 不存在但有旧的 config.json，尝试读取旧文件
+		if m.path == "controller.json" {
+			if oldContent, oldErr := os.ReadFile("config.json"); oldErr == nil {
+				content = oldContent
+				err = nil
+			}
+		}
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		m.values = defaultSettings()
 		return m.saveLocked()

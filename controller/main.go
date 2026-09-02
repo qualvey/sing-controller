@@ -55,7 +55,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	flag.StringVar(&listenAddr, "listen", "", "HTTP listen address (override config.json listen)")
-	flag.StringVar(&settingsPath, "config", "config.json", "controller config file path")
+	flag.StringVar(&settingsPath, "config", "controller.json", "controller config file path")
 	flag.StringVar(&secret, "secret", "", "optional API secret (X-Secret header)")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
