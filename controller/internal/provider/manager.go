@@ -598,10 +598,12 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 	}
 
 	// 1. 读取基础配置副本并解析（若文件尚不存在，优先使用订阅源的全量配置）
-	var baseOpts option.Options
+	var (
+		baseOpts   option.Options
+		fullLoaded bool
+	)
 	baseContent, err := os.ReadFile(m.store.Path())
 	if errors.Is(err, os.ErrNotExist) {
-		var fullLoaded bool
 		for _, pTag := range prof.ProviderTags {
 			if fullData, err := os.ReadFile(m.providerFullPath(pTag)); err == nil {
 				if parsedFull, err := store.Parse(ctx, fullData); err == nil {
@@ -639,42 +641,44 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		}
 	}
 
-	// 2. 收集所有历史上注入过或属于任何 provider 的节点 tag，用于彻底清除旧节点
-	m.mu.RLock()
-	tagsToPurge := make(map[string]bool)
-	for _, t := range m.injectedTags {
-		tagsToPurge[t] = true
-	}
-	for _, p := range m.providers {
-		if obs, err := m.GetProviderOutbounds(p.Tag); err == nil {
-			for _, ob := range obs {
-				tagsToPurge[ob.Tag] = true
-			}
+	// 2. 只有当从现有主配置合并时，才清除历史旧节点；若直接使用全量订阅母版则保持其原有完好拓扑
+	if !fullLoaded {
+		m.mu.RLock()
+		tagsToPurge := make(map[string]bool)
+		for _, t := range m.injectedTags {
+			tagsToPurge[t] = true
 		}
-	}
-	m.mu.RUnlock()
-
-	// 3. 从 baseOpts.Outbounds 中剔除历史注入的 provider 节点，恢复纯净基础节点
-	cleanBaseOutbounds := make([]option.Outbound, 0, len(baseOpts.Outbounds))
-	for _, ob := range baseOpts.Outbounds {
-		if !tagsToPurge[ob.Tag] {
-			cleanBaseOutbounds = append(cleanBaseOutbounds, ob)
-		}
-	}
-	baseOpts.Outbounds = cleanBaseOutbounds
-
-	// 4. 从各个 selector / urltest 组中剔除历史 provider 节点 tag
-	for i := range baseOpts.Outbounds {
-		ob := &baseOpts.Outbounds[i]
-		if ob.Type == "selector" || ob.Type == "urltest" {
-			groupTags := getGroupOutbounds(ob)
-			cleanGroupTags := make([]string, 0, len(groupTags))
-			for _, gt := range groupTags {
-				if !tagsToPurge[gt] {
-					cleanGroupTags = append(cleanGroupTags, gt)
+		for _, p := range m.providers {
+			if obs, err := m.GetProviderOutbounds(p.Tag); err == nil {
+				for _, ob := range obs {
+					tagsToPurge[ob.Tag] = true
 				}
 			}
-			setGroupOutbounds(ob, cleanGroupTags)
+		}
+		m.mu.RUnlock()
+
+		// 从 baseOpts.Outbounds 中剔除历史注入的 provider 节点
+		cleanBaseOutbounds := make([]option.Outbound, 0, len(baseOpts.Outbounds))
+		for _, ob := range baseOpts.Outbounds {
+			if !tagsToPurge[ob.Tag] {
+				cleanBaseOutbounds = append(cleanBaseOutbounds, ob)
+			}
+		}
+		baseOpts.Outbounds = cleanBaseOutbounds
+
+		// 从各个 selector / urltest 组中剔除历史 provider 节点 tag
+		for i := range baseOpts.Outbounds {
+			ob := &baseOpts.Outbounds[i]
+			if ob.Type == "selector" || ob.Type == "urltest" {
+				groupTags := getGroupOutbounds(ob)
+				cleanGroupTags := make([]string, 0, len(groupTags))
+				for _, gt := range groupTags {
+					if !tagsToPurge[gt] {
+						cleanGroupTags = append(cleanGroupTags, gt)
+					}
+				}
+				setGroupOutbounds(ob, cleanGroupTags)
+			}
 		}
 	}
 
@@ -730,6 +734,21 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 					}
 				}
 				setGroupOutbounds(ob, groupTags)
+			}
+		}
+	}
+
+	// 8. 兜底检查：保证所有 selector / urltest 组均含有有效的 outbounds 节点，避免 sing-box 校验报 missing tags
+	for i := range baseOpts.Outbounds {
+		ob := &baseOpts.Outbounds[i]
+		if ob.Type == "selector" || ob.Type == "urltest" {
+			groupTags := getGroupOutbounds(ob)
+			if len(groupTags) == 0 {
+				if len(providerNodeTags) > 0 {
+					setGroupOutbounds(ob, providerNodeTags)
+				} else {
+					setGroupOutbounds(ob, []string{"direct"})
+				}
 			}
 		}
 	}
