@@ -54,12 +54,13 @@
           </div>
           <div
             v-if="isOpen"
-            class="min-h-0 flex-1 overflow-y-auto"
-            :class="
+            class="min-h-0 flex-1"
+            :class="[
+              bodyClass || 'overflow-y-auto',
               noPadding
                 ? 'p-0 max-md:pb-[env(safe-area-inset-bottom)]'
                 : 'p-4 max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]'
-            "
+            ]"
           >
             <slot />
           </div>
@@ -87,6 +88,7 @@ const props = withDefaults(
   defineProps<{
     noPadding?: boolean
     boxClass?: string
+    bodyClass?: string
     title?: string
     closable?: boolean
     size?: 'small' | 'medium' | 'large'

@@ -57,6 +57,14 @@ useResizeObserver(formContentRef, (entries) => {
   }
 })
 
+// 在「源码」Tab 下严格小于父容器可用高度，彻底消除外层滚动条，由 CodeMirror 内部滚动
+const sourceEditorHeight = computed(() => {
+  if (typeof window === 'undefined') return 380
+  // 弹窗最大高度约 85vh，扣除标题栏、底部按钮栏、Padding 及 Tabs 切换栏后预留充足余量
+  const maxAvailable = Math.max(240, Math.floor(window.innerHeight * 0.85 - 190))
+  return Math.min(sharedTabHeight.value, maxAvailable)
+})
+
 interface OutboundForm {
   type: string
   tag: string
@@ -496,10 +504,11 @@ onMounted(() => {
       :model-value="modelValue"
       :title="isEdit ? $t('outboundsDialog.editTitle') : $t('outboundsDialog.createTitle')"
       box-class="max-w-[720px]"
+      :body-class="activeTab === 'source' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'"
       @update:model-value="(val) => emit('update:modelValue', !!val)"
     >
-      <TabsRoot v-model="activeTab">
-        <TabsList>
+      <TabsRoot v-model="activeTab" :class="activeTab === 'source' ? 'flex flex-col flex-1 min-h-0' : ''">
+        <TabsList class="shrink-0">
           <TabsTrigger value="form">{{ $t('form') }}</TabsTrigger>
           <TabsTrigger value="source">{{ $t('source') }}</TabsTrigger>
         </TabsList>
@@ -708,8 +717,8 @@ onMounted(() => {
           </div>
         </div>
       </TabsContent>
-        <TabsContent value="source">
-          <ResourceSourceTab ref="srcTab" :initial="sourceJson" :height="sharedTabHeight" />
+        <TabsContent value="source" :class="activeTab === 'source' ? 'flex-1 min-h-0 mt-2 flex flex-col' : ''">
+          <ResourceSourceTab ref="srcTab" :initial="sourceJson" :height="sourceEditorHeight" />
         </TabsContent>
       </TabsRoot>
       <template #footer>
