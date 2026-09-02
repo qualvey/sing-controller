@@ -268,4 +268,32 @@ export const api = {
     http.put(`/users/${encodeURIComponent(name)}`, u).then((r) => r.data),
   deleteUser: (name: string) =>
     http.delete(`/users/${encodeURIComponent(name)}`).then((r) => r.data),
+
+  // Core Supervisor (进程生命周期 & 日志)
+  coreStatus: () => http.get<CoreSupervisorStatus>('/core/status').then((r) => r.data),
+  coreStart: () => http.post<{ success: boolean; message: string }>('/core/start').then((r) => r.data),
+  coreStop: () => http.post<{ success: boolean; message: string }>('/core/stop').then((r) => r.data),
+  coreRestart: () => http.post<{ success: boolean; message: string }>('/core/restart').then((r) => r.data),
+  coreLogs: (limit = 100) =>
+    http.get<{ logs: CoreLogLine[]; count: number }>(`/core/logs?limit=${limit}`).then((r) => r.data),
+}
+
+export interface CoreSupervisorStatus {
+  managed: boolean
+  state: 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed' | 'error' | 'unmanaged'
+  pid?: number
+  uptime_sec?: number
+  started_at?: string
+  stopped_at?: string
+  exit_code?: number
+  last_error?: string
+  binary_path?: string
+  config_path?: string
+  restarts?: number
+}
+
+export interface CoreLogLine {
+  timestamp: string
+  source: 'stdout' | 'stderr' | 'system'
+  message: string
 }
