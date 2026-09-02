@@ -92,16 +92,18 @@ defineExpose({ getText, isDirty })
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 460px;
 }
 .src-hint {
   font-size: 12px;
   color: #e6a23c;
 }
 .src-editor {
-  border: 1px solid #30363d;
+  border: 1px solid var(--color-base-border, #30363d);
   border-radius: 6px;
   overflow: hidden;
-  height: 320px;
+  height: 460px;
+  min-height: 460px;
   text-align: left;
 }
 .src-editor :deep(.cm-editor) {

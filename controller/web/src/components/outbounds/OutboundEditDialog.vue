@@ -272,6 +272,17 @@ watch(
   }
 )
 
+// 切换至「源码」Tab 时，若源码未被脏改，自动同步表单最新的配置数据
+watch(activeTab, (tab) => {
+  if (tab === 'source' && !srcTab.value?.isDirty()) {
+    try {
+      sourceJson.value = JSON.stringify(buildBody(), null, 2)
+    } catch {
+      // ignore
+    }
+  }
+})
+
 // 从 JSON / 节点链接导入弹窗
 const nodeImportDialog = ref(false)
 const nodeImportText = ref('')
