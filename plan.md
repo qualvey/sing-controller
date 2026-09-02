@@ -188,10 +188,10 @@ sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `
 - [x] WebUI 完成 `ProfileManagerModal`、方案卡片列表、订阅源表格与节点预览抽屉。
 
 ### Phase 5: 概览页控制面板增强与 3D 地球交互优化 (Overview & 3D Globe Controls)
-- [ ] **Overview 内核控制卡片 (Core Control Card)**：
+- [x] **Overview 内核控制卡片 (Core Control Card)**：
   - 在 Overview 概览页独立展示内核状态卡片，支持一键“重载配置 (Reload Config)”与“重启内核 (Restart Core)”；
   - 联动展示当前活跃方案（Active Profile）并支持快速切换。
-- [ ] **3D 地球自由轨道控制器 (3D Globe Free Orbit Controls)**：
+- [x] **3D 地球自由轨道控制器 (3D Globe Free Orbit Controls)**：
   - 重构 3D 地球控制器，实现上下左右 360° 自由旋转、平滑惯性阻尼与滚轮缩放聚焦，解决旋转卡顿与轴向限制问题。
 
 ### Phase 6: Wails 跨平台桌面端打包 (Desktop App with Wails)
