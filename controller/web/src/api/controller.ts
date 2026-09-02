@@ -182,6 +182,8 @@ export const api = {
   genPassword: () => http.post<{ password: string }>('/tools/password').then((r) => r.data.password),
   parseJson: (json: string) =>
     http.post<{ ok: boolean; data: unknown }>('/tools/parse-json', { json }).then((r) => r.data),
+  parseNode: (text: string) =>
+    http.post<{ ok: boolean; data: unknown }>('/tools/parse-node', { text }).then((r) => r.data),
 
   // Outbound CRUD
   outbounds: () => http.get<{ outbounds: Outbound[] }>('/outbounds').then((r) => r.data.outbounds),

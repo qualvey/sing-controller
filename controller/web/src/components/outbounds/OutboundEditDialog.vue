@@ -176,13 +176,14 @@ function fillForm(obj: Outbound) {
   const tls = (obj.tls ?? {}) as Record<string, unknown>
   const utls = (tls.utls ?? {}) as Record<string, unknown>
   const reality = (tls.reality ?? {}) as Record<string, unknown>
+  const transport = (obj.transport ?? {}) as Record<string, unknown>
   form.type = str(obj.type)
   form.tag = str(obj.tag)
   form.server = str(obj.server)
   form.server_port = num(obj.server_port)
   form.uuid = str(obj.uuid)
   form.flow = str(obj.flow)
-  form.network = str(obj.network) || 'tcp'
+  form.network = str(transport.type) || str(obj.network) || 'tcp'
   form.password = str(obj.password)
   form.congestion_control = str(obj.congestion_control) || 'bbr'
   form.udp_relay_mode = str(obj.udp_relay_mode) || 'native'
@@ -271,19 +272,19 @@ watch(
   }
 )
 
-// 从 JSON 填充弹窗
-const jsonDialog = ref(false)
-const jsonText = ref('')
-const fillFromJson = () => {
-  jsonText.value = ''
-  jsonDialog.value = true
+// 从 JSON / 节点链接导入弹窗
+const nodeImportDialog = ref(false)
+const nodeImportText = ref('')
+const fillFromNode = () => {
+  nodeImportText.value = ''
+  nodeImportDialog.value = true
 }
-const doFillFromJson = async () => {
+const doFillFromNode = async () => {
   try {
-    const res = await api.parseJson(jsonText.value)
+    const res = await api.parseNode(nodeImportText.value)
     fillForm(res.data as Outbound)
-    jsonDialog.value = false
-    showToast('已从 JSON 填充，请检查表单', 'success')
+    nodeImportDialog.value = false
+    showToast('已解析并填充，请检查表单', 'success')
   } catch (e) {
     showToast((e as Error).message || '解析失败', 'error')
   }
@@ -474,11 +475,11 @@ onMounted(() => {
         </TabsList>
         <TabsContent value="form">
           <div class="mb-4">
-            <button class="btn btn-ghost btn-xs" @click="fillFromJson">
+            <button class="btn btn-ghost btn-xs" @click="fillFromNode">
               <ClipboardPasteIcon class="h-3.5 w-3.5" />
-              从 JSON 填充（粘贴解析）
+              从 JSON / 节点链接导入
             </button>
-            <span class="ml-2 text-xs text-[#909399]">粘贴完整 outbound JSON，自动解析并填充下方字段</span>
+            <span class="ml-2 text-xs text-[#909399]">支持粘贴 vless://、vmess://、ss:// 等链接或 JSON 节点配置</span>
           </div>
           <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
@@ -702,18 +703,18 @@ onMounted(() => {
       </div>
     </DialogWrapper>
 
-    <!-- 从 JSON 填充弹窗 -->
-    <DialogWrapper v-model="jsonDialog" title="从 JSON 填充" box-class="max-w-[560px]">
+    <!-- 从 JSON / 节点链接导入弹窗 -->
+    <DialogWrapper v-model="nodeImportDialog" title="从 JSON / 节点链接导入" box-class="max-w-[560px]">
       <textarea
-        v-model="jsonText"
+        v-model="nodeImportText"
         rows="10"
         class="textarea textarea-bordered w-full font-mono text-xs"
-        placeholder='{"type":"vless","tag":"...","server":"...","server_port":443,"uuid":"...","tls":{...}}'
+        placeholder="支持粘贴 vless://...、vmess://...、ss://... 或完整 JSON 节点配置"
       />
-      <p class="mt-1 text-xs text-[#909399]">解析成功后填充表单字段（type 变化会重置表单，请最后检查）</p>
+      <p class="mt-1 text-xs text-[#909399]">解析成功后将自动填充表单字段（若节点类型变化会重置表单，请最后检查确认）</p>
       <div class="mt-4 flex justify-end gap-2">
-        <button class="btn btn-ghost btn-sm" @click="jsonDialog = false">取消</button>
-        <button class="btn btn-primary btn-sm" @click="doFillFromJson">解析并填充</button>
+        <button class="btn btn-ghost btn-sm" @click="nodeImportDialog = false">取消</button>
+        <button class="btn btn-primary btn-sm" @click="doFillFromNode">解析并填充</button>
       </div>
     </DialogWrapper>
   </div>
