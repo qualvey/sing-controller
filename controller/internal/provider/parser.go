@@ -266,6 +266,19 @@ func addClashTransport(sb map[string]any, p ClashProxyRaw) {
 			reality["public_key"] = realityOpts["public-key"]
 			reality["short_id"] = realityOpts["short-id"]
 			tls["reality"] = reality
+			fp, _ := p["client-fingerprint"].(string)
+			if fp == "" {
+				fp = "chrome"
+			}
+			tls["utls"] = map[string]any{
+				"enabled":     true,
+				"fingerprint": fp,
+			}
+		} else if fp, ok := p["client-fingerprint"].(string); ok && fp != "" {
+			tls["utls"] = map[string]any{
+				"enabled":     true,
+				"fingerprint": fp,
+			}
 		}
 		sb["tls"] = tls
 	}
@@ -410,6 +423,16 @@ func parseProxyURIToSingBox(rawURI string) ([]byte, error) {
 					"enabled":    true,
 					"public_key": q.Get("pbk"),
 					"short_id":   q.Get("sid"),
+				}
+			}
+			fp := q.Get("fp")
+			if fp == "" && q.Get("security") == "reality" {
+				fp = "chrome"
+			}
+			if fp != "" {
+				tls["utls"] = map[string]any{
+					"enabled":     true,
+					"fingerprint": fp,
 				}
 			}
 			sb["tls"] = tls
