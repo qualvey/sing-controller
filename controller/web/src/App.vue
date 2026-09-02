@@ -9,6 +9,7 @@ import BackendManager from './components/settings/backend/BackendManager.vue'
 import UpdateConfigModal from './components/settings/backend/UpdateConfigModal.vue'
 import UpgradeCoreModal from './components/settings/backend/UpgradeCoreModal.vue'
 import ProfileManagerModal from './components/profiles/ProfileManagerModal.vue'
+import TunPermissionModal from './components/common/TunPermissionModal.vue'
 import { isProfileModalOpen } from './composables/profiles'
 import { useAppearanceVars } from './composables/useAppearanceVars'
 import { showUpdateConfigModal, showUpgradeCoreModal } from './composables/backendActions'
@@ -202,6 +203,7 @@ useKeyboard()
     <BackendConnectionError />
     <BackendManager />
     <ProfileManagerModal v-model="isProfileModalOpen" />
+    <TunPermissionModal />
     <!-- 后端维护动作的弹窗:侧边栏菜单和设置页都会拉起,挂在这里两处入口才都有效。 -->
     <UpgradeCoreModal v-model="showUpgradeCoreModal" />
     <UpdateConfigModal v-model="showUpdateConfigModal" />

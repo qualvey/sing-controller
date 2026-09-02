@@ -31,6 +31,7 @@ export interface StatusInfo {
   core_version?: string
   core_type?: string
   core_error?: string
+  tun_access_denied?: boolean
 }
 
 export interface ControllerSettings {
@@ -169,6 +170,10 @@ export const api = {
         params: start != null ? { start } : {},
       })
       .then((r) => r.data),
+
+  // 系统与权限工具
+  elevateProcess: () => http.post<{ message: string }>('/system/elevate').then((r) => r.data),
+  disableTun: () => http.post<{ message: string }>('/system/disable-tun').then((r) => r.data),
 
   // 工具
   genUuid: () => http.post<{ uuid: string }>('/tools/uuid').then((r) => r.data.uuid),

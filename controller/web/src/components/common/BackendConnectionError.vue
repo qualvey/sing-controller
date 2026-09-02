@@ -379,10 +379,11 @@ watch(
     () => statusStore.status?.core_alive,
     () => statusStore.status?.core?.alive,
     () => statusStore.status?.config_exists,
+    () => statusStore.status?.tun_access_denied,
   ],
-  ([status, coreAlive, coreObjAlive, configExists]) => {
-    // 初次冷启动未生成主配置时，由引导弹窗接管，不触发全屏阻断
-    if (configExists === false) {
+  ([status, coreAlive, coreObjAlive, configExists, tunDenied]) => {
+    // 初次冷启动未生成主配置或 TUN 权限不足时，由引导/提权弹窗接管，不触发全屏阻断
+    if (configExists === false || tunDenied) {
       failed.value = false
       return
     }
@@ -402,6 +403,7 @@ const visible = computed(
   () =>
     failed.value &&
     statusStore.status?.config_exists !== false &&
+    !statusStore.status?.tun_access_denied &&
     backendManagerView.value === null &&
     route.name !== ROUTE_NAME.setup,
 )

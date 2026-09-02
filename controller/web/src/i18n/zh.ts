@@ -777,6 +777,19 @@ const zh: LANG_MESSAGE = {
     updating: '更新中',
     update: '更新',
   },
+  tunModal: {
+    title: 'TUN 虚拟网卡权限提示',
+    headline: '需要管理员权限以开启 TUN 虚拟网卡',
+    description: '当前配置中启用了 TUN 虚拟网卡模式，但系统权限不足以配置网络适配器驱动 (Access is denied)。',
+    chooseAction: '请选择处理方式：',
+    elevateBtn: '以管理员身份重启 (弹出系统 UAC)',
+    elevateDesc: '请求 Windows 管理员权限以创建和接管 TUN 虚拟网卡',
+    disableTunBtn: '移除 TUN 模式运行 (无需管理员权限)',
+    disableTunDesc: '自动剔除 TUN 入站，使用 Mixed 代理端口正常运行',
+    tip: '提示：免管理员模式下您可通过设置系统代理或直连端口使用代理',
+    elevateSuccessNotify: '已拉起管理员提权窗口，正在以管理员身份重新启动...',
+    disableTunSuccessNotify: '已成功移除 TUN 模式，sing-box 内核已恢复运行',
+  },
 }
 
 export default zh

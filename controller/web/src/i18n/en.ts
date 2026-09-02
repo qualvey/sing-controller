@@ -788,6 +788,19 @@ const en = {
     updating: 'Updating...',
     update: 'Update',
   },
+  tunModal: {
+    title: 'TUN Virtual Adapter Permission',
+    headline: 'Administrator Privileges Required for TUN Mode',
+    description: 'The current configuration enables TUN mode, but system privileges are insufficient to configure the network adapter driver (Access is denied).',
+    chooseAction: 'Choose an action to proceed:',
+    elevateBtn: 'Restart as Administrator (UAC Prompt)',
+    elevateDesc: 'Request Windows Administrator rights to configure and take over the TUN interface',
+    disableTunBtn: 'Run without TUN Mode (No Admin Required)',
+    disableTunDesc: 'Remove TUN inbound and run cleanly using Mixed proxy ports',
+    tip: 'Tip: In non-admin mode, you can use proxy features via system proxy or mixed ports.',
+    elevateSuccessNotify: 'UAC elevation requested, restarting with administrator privileges...',
+    disableTunSuccessNotify: 'TUN mode removed successfully, core has resumed running.',
+  },
 }
 
 export type LANG_MESSAGE = typeof en
