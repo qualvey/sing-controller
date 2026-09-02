@@ -72,7 +72,7 @@ onMounted(() => {
     ref="listRef"
     v-bind="forwarded"
     :class="cn(
-      'bg-base-300/50 relative inline-flex h-9 items-center justify-center rounded-[0.625rem] p-[3px]',
+      'bg-base-300/50 relative inline-flex self-start h-9 items-center justify-center rounded-[0.625rem] p-[3px]',
       props.class
     )"
   >

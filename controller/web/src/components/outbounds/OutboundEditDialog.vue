@@ -508,7 +508,7 @@ onMounted(() => {
       @update:model-value="(val) => emit('update:modelValue', !!val)"
     >
       <TabsRoot v-model="activeTab" :class="activeTab === 'source' ? 'flex flex-col flex-1 min-h-0' : ''">
-        <TabsList class="shrink-0">
+        <TabsList class="self-start shrink-0">
           <TabsTrigger value="form">{{ $t('form') }}</TabsTrigger>
           <TabsTrigger value="source">{{ $t('source') }}</TabsTrigger>
         </TabsList>
