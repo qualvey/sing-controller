@@ -28,6 +28,7 @@ const en = {
   cancel: 'Cancel',
   saveSuccess: 'Save successful',
   saveFailed: 'Save failed',
+  sourceDirtyHint: 'Modified manually. Raw source content will be used upon save (overwriting form).',
   // DNS
   servers: 'Servers',
   options: 'Options',

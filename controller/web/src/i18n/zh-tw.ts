@@ -26,6 +26,7 @@ const zhTW: LANG_MESSAGE = {
   cancel: '取消',
   saveSuccess: '儲存成功',
   saveFailed: '儲存失敗',
+  sourceDirtyHint: '已手動修改，儲存時將使用原始碼內容（覆蓋表單）',
 
   // DNS
   servers: '伺服器',

@@ -26,6 +26,7 @@ const ru: LANG_MESSAGE = {
   cancel: 'Отмена',
   saveSuccess: 'Успешно сохранено',
   saveFailed: 'Ошибка сохранения',
+  sourceDirtyHint: 'Изменено вручную. При сохранении будет использован исходный код (перезапишет форму).',
 
   // DNS
   servers: 'Серверы',

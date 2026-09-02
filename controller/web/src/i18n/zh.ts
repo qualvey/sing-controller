@@ -30,6 +30,7 @@ const zh: LANG_MESSAGE = {
   cancel: '取消',
   saveSuccess: '保存成功',
   saveFailed: '保存失败',
+  sourceDirtyHint: '已手动修改，保存时将使用源码内容（覆盖表单）',
   // DNS
   servers: '服务器',
   options: '选项',

@@ -4,7 +4,8 @@ import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
 import { jsonc, jsoncLinter } from '../editor/jsonc'
-import { defaultKeymap, indentWithTab } from '@codemirror/commands'
+import { defaultKeymap, indentWithTab, insertNewlineAndIndent } from '@codemirror/commands'
+import { acceptCompletion } from '@codemirror/autocomplete'
 import { foldGutter } from '@codemirror/language'
 import { useCmTheme } from '../composables/useCmTheme'
 
@@ -53,7 +54,12 @@ onMounted(() => {
       themeExt,
       foldGutter(),
       jsoncLinter(),
-      keymap.of([indentWithTab, ...defaultKeymap]),
+      keymap.of([
+        { key: 'Tab', run: acceptCompletion },
+        indentWithTab,
+        { key: 'Enter', run: insertNewlineAndIndent },
+        ...defaultKeymap
+      ]),
       EditorView.updateListener.of((u) => {
         if (u.docChanged && !applyingInitial && !dirty.value) {
           dirty.value = true
@@ -89,33 +95,20 @@ defineExpose({ getText, isDirty })
 </script>
 
 <template>
-  <div class="resource-source" :style="{ minHeight: `${props.height}px` }">
-    <div v-if="dirty" class="src-hint">已手动修改，保存时将使用源码内容（覆盖表单）</div>
+  <div class="flex flex-col gap-1.5" :style="{ minHeight: `${props.height}px` }">
+    <div v-if="dirty" class="text-xs text-warning leading-relaxed">
+      {{ $t('sourceDirtyHint') }}
+    </div>
     <div
       ref="editorHost"
-      class="src-editor"
+      class="border border-base-300 rounded-md overflow-hidden text-left bg-base-100"
       :style="{ height: `${props.height}px`, minHeight: `${props.height}px` }"
     />
   </div>
 </template>
 
 <style scoped>
-.resource-source {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.src-hint {
-  font-size: 12px;
-  color: #e6a23c;
-}
-.src-editor {
-  border: 1px solid var(--color-base-border, #30363d);
-  border-radius: 6px;
-  overflow: hidden;
-  text-align: left;
-}
-.src-editor :deep(.cm-editor) {
+:deep(.cm-editor) {
   height: 100%;
 }
 </style>
