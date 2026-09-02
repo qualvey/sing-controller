@@ -21,10 +21,28 @@ import (
 	"github.com/qualvey/sing-controller/internal/realtime"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
+	"github.com/qualvey/sing-controller/internal/supervisor"
 )
 
 // version 由 goreleaser ldflags 注入（-X main.version={{ .Version }}），本地构建为 dev
 var version = "dev"
+
+func findSingBoxBinary() string {
+	candidates := []string{
+		"./sing-box.exe",
+		"./sing-box",
+		"../sing-box.exe",
+		"../sing-box",
+		"/usr/bin/sing-box",
+		"/usr/local/bin/sing-box",
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return "sing-box"
+}
 
 func main() {
 	var (
@@ -86,7 +104,18 @@ func main() {
 	if err := cfgStore.Load(ctx, defaults); err != nil {
 		slog.Error("load sing-box config", "path", values.Config, "error", err)
 		os.Exit(1)
+	}
 
+	// 初始化 Supervisor 进程守护管理器
+	binaryPath := findSingBoxBinary()
+	sup, err := supervisor.New(supervisor.Config{
+		BinaryPath:  binaryPath,
+		ConfigPath:  cfgStore.Path(),
+		LogCapacity: 2000,
+		AutoRestart: true,
+	})
+	if err != nil {
+		slog.Warn("supervisor init failed", "error", err)
 	}
 
 	// 嵌入 webui（web/dist 已构建时）；构建失败仅影响页面，API 照常
@@ -97,16 +126,18 @@ func main() {
 		slog.Warn("webui static handler init failed, API-only mode", "error", err)
 	}
 	handler := api.NewHandler(api.HandlerOptions{
-		Store:    cfgStore,
-		Settings: cfg,
-		Secret:   secret,
-		Version:  version,
-		Static:   staticHandler,
+		Store:      cfgStore,
+		Settings:   cfg,
+		Supervisor: sup,
+		Secret:     secret,
+		Version:    version,
+		Static:     staticHandler,
 	})
 	slog.Info("sing-box-controller started",
 		"listen", listenAddr,
 		"controller_config", settingsPath,
 		"sing_box_config", cfgStore.Path(),
+		"core_binary", binaryPath,
 		"log_level", logger.GetLevel().String(),
 	)
 	srv := &http.Server{Addr: listenAddr, Handler: handler}
@@ -128,7 +159,14 @@ func main() {
 	} else {
 		slog.Info("server exited cleanly")
 	}
-	// 5. 等待后台 Collector 执行完手头最后一次写入并安全退出
+
+	// 关闭 Supervisor 托管的子进程与 Job Object
+	if sup != nil {
+		slog.Info("stopping supervised core process...")
+		sup.Close()
+	}
+
+	// 等待后台 Collector 执行完手头最后一次写入并安全退出
 	slog.Info("waiting for background tasks to exit...")
 	wg.Wait()
 	rt.Stop()

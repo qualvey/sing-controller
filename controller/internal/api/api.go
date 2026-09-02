@@ -21,6 +21,7 @@ import (
 	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
+	"github.com/qualvey/sing-controller/internal/supervisor"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -28,20 +29,22 @@ import (
 )
 
 type HandlerOptions struct {
-	Store    *store.Store
-	Settings *settings.Manager
-	Secret   string
-	Version  string
+	Store      *store.Store
+	Settings   *settings.Manager
+	Supervisor *supervisor.Manager
+	Secret     string
+	Version    string
 	// Static 嵌入的 webui 静态资源（SPA）；nil 时根路径返回服务信息 JSON（API-only 模式）
 	Static http.Handler
 }
 
 type Handler struct {
-	store    *store.Store
-	settings *settings.Manager
-	secret   string
-	version  string
-	static   http.Handler
+	store      *store.Store
+	settings   *settings.Manager
+	supervisor *supervisor.Manager
+	secret     string
+	version    string
+	static     http.Handler
 
 	schemaOnce sync.Once
 	schemaJSON []byte
@@ -56,12 +59,13 @@ type metaType = store.Meta
 func NewHandler(opts HandlerOptions) http.Handler {
 	logger.Debug("New handler initing")
 	h := &Handler{
-		store:    opts.Store,
-		settings: opts.Settings,
-		secret:   opts.Secret,
-		version:  opts.Version,
-		static:   opts.Static,
-		proxies:  newProxyCache(),
+		store:      opts.Store,
+		settings:   opts.Settings,
+		supervisor: opts.Supervisor,
+		secret:     opts.Secret,
+		version:    opts.Version,
+		static:     opts.Static,
+		proxies:    newProxyCache(),
 	}
 	mux := http.NewServeMux()
 
@@ -84,6 +88,14 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("GET /api/settings", h.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", h.handlePutSettings)
 	mux.HandleFunc("GET /api/ports/available", h.handlePortAvailable)
+
+	// core supervisor 控制器（进程启停 / 状态 / 日志）
+	mux.HandleFunc("GET /api/core/status", h.handleCoreStatus)
+	mux.HandleFunc("POST /api/core/start", h.handleCoreStart)
+	mux.HandleFunc("POST /api/core/stop", h.handleCoreStop)
+	mux.HandleFunc("POST /api/core/restart", h.handleCoreRestart)
+	mux.HandleFunc("GET /api/core/logs", h.handleCoreLogs)
+	mux.HandleFunc("GET /api/core/logs/stream", h.handleCoreLogsStream)
 
 	// 用户池（全局用户，多对多绑定入站）
 	mux.HandleFunc("GET /api/users", h.handleListUsers)
