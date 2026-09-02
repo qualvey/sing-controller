@@ -497,13 +497,13 @@ onMounted(() => {
         <TabsContent value="form">
           <div ref="formContentRef">
             <div class="mb-4">
-            <button class="btn btn-ghost btn-xs" @click="fillFromNode">
-              <ClipboardPasteIcon class="h-3.5 w-3.5" />
-              从 JSON / 节点链接导入
-            </button>
-            <span class="ml-2 text-xs text-[#909399]">支持粘贴 vless://、vmess://、ss:// 等链接或 JSON 节点配置</span>
-          </div>
-          <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
+              <button class="btn btn-ghost btn-xs" @click="fillFromNode">
+                <ClipboardPasteIcon class="h-3.5 w-3.5" />
+                从 JSON / 节点链接导入
+              </button>
+              <span class="ml-2 text-xs text-[#909399]">支持粘贴 vless://、vmess://、ss:// 等链接或 JSON 节点配置</span>
+            </div>
+            <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
             <label class="pt-2 text-sm text-[#606266] dark:text-[#a6b0bf]">类型</label>
             <template v-if="outboundTypes.length">
               <!-- 类型允许随时修改 -->
@@ -701,7 +701,8 @@ onMounted(() => {
             </div>
             <p v-if="validateMsg" class="mt-3 text-[0.8rem] font-medium text-destructive">{{ validateMsg }}</p>
           </div>
-        </TabsContent>
+        </div>
+      </TabsContent>
         <TabsContent value="source">
           <ResourceSourceTab ref="srcTab" :initial="sourceJson" :height="sharedTabHeight" />
         </TabsContent>
