@@ -150,10 +150,31 @@ func DefaultOptions(defaults DefaultConfig) option.Options {
     { "type": "` + inboundType + `", "tag": "in-main", "listen": "` + listen + `", "listen_port": ` + itoa(listenPort) + ` }
   ],
   "outbounds": [
+    {
+      "type": "selector",
+      "tag": "Proxy",
+      "outbounds": ["Auto", "direct"]
+    },
+    {
+      "type": "urltest",
+      "tag": "Auto",
+      "outbounds": ["direct"],
+      "url": "https://www.gstatic.com/generate_204",
+      "interval": "3m"
+    },
     { "type": "direct", "tag": "direct" },
-    { "type": "block", "tag": "block" }
+    { "type": "block", "tag": "block" },
+    { "type": "dns", "tag": "dns-out" }
   ],
-  "route": { "final": "direct" }
+  "route": {
+    "rules": [
+      { "protocol": "dns", "outbound": "dns-out" },
+      { "clash_mode": "Global", "outbound": "Proxy" },
+      { "clash_mode": "Direct", "outbound": "direct" }
+    ],
+    "auto_detect_interface": true,
+    "final": "Proxy"
+  }
 }`)
 	options, err := Parse(include.Context(context.Background()), content)
 	if err != nil {
