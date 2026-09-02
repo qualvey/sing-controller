@@ -302,30 +302,34 @@ func addClashTransport(sb map[string]any, p ClashProxyRaw) {
 	}
 }
 
-// ParseBase64URI 解析 Base64 编码的节点 URI 列表
-func ParseBase64URI(data []byte) ([]option.Outbound, error) {
-	cleanStr := strings.TrimSpace(string(data))
+func decodeBase64Flexible(cleanStr string) ([]byte, error) {
+	cleanStr = strings.TrimSpace(cleanStr)
 	cleanStr = strings.ReplaceAll(cleanStr, " ", "")
 	cleanStr = strings.ReplaceAll(cleanStr, "\n", "")
 	cleanStr = strings.ReplaceAll(cleanStr, "\r", "")
 
-	decoded, err := base64.StdEncoding.DecodeString(cleanStr)
+	if decoded, err := base64.StdEncoding.DecodeString(cleanStr); err == nil {
+		return decoded, nil
+	}
+	if decoded, err := base64.RawStdEncoding.DecodeString(cleanStr); err == nil {
+		return decoded, nil
+	}
+	if decoded, err := base64.URLEncoding.DecodeString(cleanStr); err == nil {
+		return decoded, nil
+	}
+	return base64.RawURLEncoding.DecodeString(cleanStr)
+}
+
+// ParseBase64URI 解析 Base64 编码的节点 URI 列表
+func ParseBase64URI(data []byte) ([]option.Outbound, error) {
+	decoded, err := decodeBase64Flexible(string(data))
 	if err != nil {
-		decoded, err = base64.RawStdEncoding.DecodeString(cleanStr)
-		if err != nil {
-			decoded, err = base64.URLEncoding.DecodeString(cleanStr)
-			if err != nil {
-				decoded, err = base64.RawURLEncoding.DecodeString(cleanStr)
-				if err != nil {
-					return nil, fmt.Errorf("Base64 解码失败: %w", err)
-				}
-			}
-		}
+		return nil, fmt.Errorf("Base64 解码失败: %w", err)
 	}
 	return ParseURIList(string(decoded))
 }
 
-// ParseURIList 解析每行一个的代理链接（vless://, vmess://, ss://, trojan://, hy2://）
+// ParseURIList 解析每行一个的代理链接（vless://, vmess://, ss://, trojan://, hy2://, tuic://）
 func ParseURIList(text string) ([]option.Outbound, error) {
 	ctx := include.Context(context.Background())
 	lines := strings.Split(text, "\n")
@@ -351,8 +355,13 @@ func ParseURIList(text string) ([]option.Outbound, error) {
 	return outbounds, nil
 }
 
-// parseProxyURIToSingBox 解析单个 URI (如 vless://..., ss://...)
+// parseProxyURIToSingBox 解析单个 URI (如 vless://..., vmess://..., ss://...)
 func parseProxyURIToSingBox(rawURI string) ([]byte, error) {
+	lowerURI := strings.ToLower(rawURI)
+	if strings.HasPrefix(lowerURI, "vmess://") {
+		return parseVmessURI(rawURI)
+	}
+
 	u, err := url.Parse(rawURI)
 	if err != nil {
 		return nil, err
@@ -385,7 +394,9 @@ func parseProxyURIToSingBox(rawURI string) ([]byte, error) {
 	switch strings.ToLower(u.Scheme) {
 	case "vless":
 		sb["type"] = "vless"
-		sb["uuid"] = u.User.Username()
+		if u.User != nil {
+			sb["uuid"] = u.User.Username()
+		}
 		if flow := q.Get("flow"); flow != "" {
 			sb["flow"] = flow
 		}
@@ -413,7 +424,9 @@ func parseProxyURIToSingBox(rawURI string) ([]byte, error) {
 
 	case "trojan":
 		sb["type"] = "trojan"
-		sb["password"] = u.User.Username()
+		if u.User != nil {
+			sb["password"] = u.User.Username()
+		}
 		tls := map[string]any{"enabled": true}
 		if sni := q.Get("sni"); sni != "" {
 			tls["server_name"] = sni
@@ -422,7 +435,9 @@ func parseProxyURIToSingBox(rawURI string) ([]byte, error) {
 
 	case "hysteria2", "hy2":
 		sb["type"] = "hysteria2"
-		sb["password"] = u.User.Username()
+		if u.User != nil {
+			sb["password"] = u.User.Username()
+		}
 		tls := map[string]any{"enabled": true}
 		if sni := q.Get("sni"); sni != "" {
 			tls["server_name"] = sni
@@ -435,17 +450,119 @@ func parseProxyURIToSingBox(rawURI string) ([]byte, error) {
 			}
 		}
 
+	case "tuic":
+		sb["type"] = "tuic"
+		if u.User != nil {
+			sb["uuid"] = u.User.Username()
+			sb["password"], _ = u.User.Password()
+		}
+		tls := map[string]any{"enabled": true}
+		if sni := q.Get("sni"); sni != "" {
+			tls["server_name"] = sni
+		}
+		if q.Get("insecure") == "1" || strings.EqualFold(q.Get("allowInsecure"), "true") {
+			tls["insecure"] = true
+		}
+		if alpn := q.Get("alpn"); alpn != "" {
+			tls["alpn"] = strings.Split(alpn, ",")
+		}
+		sb["tls"] = tls
+		if cc := q.Get("congestion_control"); cc != "" {
+			sb["congestion_control"] = cc
+		} else {
+			sb["congestion_control"] = "bbr"
+		}
+
 	case "ss":
 		sb["type"] = "shadowsocks"
 		if u.User != nil {
-			sb["method"] = u.User.Username()
-			sb["password"], _ = u.User.Password()
+			username := u.User.Username()
+			password, hasPass := u.User.Password()
+			if hasPass {
+				sb["method"] = username
+				sb["password"] = password
+			} else {
+				// Base64-encoded method:password
+				if decoded, err := decodeBase64Flexible(username); err == nil {
+					parts := strings.SplitN(string(decoded), ":", 2)
+					if len(parts) == 2 {
+						sb["method"] = parts[0]
+						sb["password"] = parts[1]
+					}
+				}
+			}
 		}
 
 	default:
 		return nil, nil
 	}
 
+	return json.Marshal(sb)
+}
+
+func parseVmessURI(rawURI string) ([]byte, error) {
+	b64 := strings.TrimPrefix(rawURI, "vmess://")
+	b64 = strings.TrimPrefix(b64, "VMESS://")
+	decoded, err := decodeBase64Flexible(b64)
+	if err != nil {
+		return nil, err
+	}
+	var v map[string]any
+	if err := json.Unmarshal(decoded, &v); err != nil {
+		return nil, err
+	}
+	tag, _ := v["ps"].(string)
+	server, _ := v["add"].(string)
+	port := getInt(v["port"])
+	uuid, _ := v["id"].(string)
+	alterID := getInt(v["aid"])
+	net, _ := v["net"].(string)
+	tlsStr, _ := v["tls"].(string)
+	sni, _ := v["sni"].(string)
+	host, _ := v["host"].(string)
+	path, _ := v["path"].(string)
+
+	if tag == "" {
+		tag = server
+	}
+	if port == 0 {
+		port = 443
+	}
+
+	sb := map[string]any{
+		"type":        "vmess",
+		"tag":         tag,
+		"server":      server,
+		"server_port": port,
+		"uuid":        uuid,
+		"alter_id":    alterID,
+		"security":    "auto",
+	}
+	if strings.EqualFold(tlsStr, "tls") {
+		tls := map[string]any{"enabled": true}
+		if sni != "" {
+			tls["server_name"] = sni
+		} else if host != "" {
+			tls["server_name"] = host
+		}
+		sb["tls"] = tls
+	}
+	if strings.EqualFold(net, "ws") || strings.EqualFold(net, "websocket") {
+		transport := map[string]any{"type": "ws"}
+		if path != "" {
+			transport["path"] = path
+		}
+		if host != "" {
+			transport["headers"] = map[string]any{"Host": host}
+		}
+		sb["transport"] = transport
+	} else if strings.EqualFold(net, "grpc") {
+		transport := map[string]any{"type": "grpc"}
+		if path != "" {
+			transport["service_name"] = path
+		}
+		sb["transport"] = transport
+	}
 	return json.Marshal(sb)
 }
 

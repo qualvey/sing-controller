@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -107,12 +108,16 @@ func (m *Manager) loadProfiles() {
 	data, err := os.ReadFile(m.profilesMetaPath())
 	if err != nil {
 		// 初始化默认 Profile
+		defaultTags := make([]string, 0, len(m.providers))
+		for _, p := range m.providers {
+			defaultTags = append(defaultTags, p.Tag)
+		}
 		defaultProfile := &Profile{
 			ID:              "default",
 			Tag:             "default",
 			Name:            "默认方案",
 			Description:     "包含基础主配置与所有已启用订阅节点",
-			ProviderTags:    []string{},
+			ProviderTags:    defaultTags,
 			TargetSelectors: []string{"Proxy", "Auto"},
 			AutoReload:      true,
 			IsActive:        true,
@@ -128,6 +133,11 @@ func (m *Manager) loadProfiles() {
 	var list []*Profile
 	if err := json.Unmarshal(data, &list); err == nil {
 		for _, p := range list {
+			if p.ID == "default" && len(p.ProviderTags) == 0 && len(m.providers) > 0 {
+				for _, prov := range m.providers {
+					p.ProviderTags = append(p.ProviderTags, prov.Tag)
+				}
+			}
 			m.profiles[p.ID] = p
 			if p.IsActive {
 				m.activeProfID = p.ID
@@ -199,6 +209,22 @@ func (m *Manager) AddProvider(ctx context.Context, p Provider) (*Provider, error
 	}
 	m.providers[p.ID] = &p
 	_ = m.saveProvidersLocked()
+
+	// 自动将新订阅加入默认 Profile（如果存在）
+	if defProf, ok := m.profiles["default"]; ok {
+		hasTag := false
+		for _, t := range defProf.ProviderTags {
+			if t == p.Tag {
+				hasTag = true
+				break
+			}
+		}
+		if !hasTag {
+			defProf.ProviderTags = append(defProf.ProviderTags, p.Tag)
+			defProf.UpdatedAt = now
+			_ = m.saveProfilesLocked()
+		}
+	}
 	m.mu.Unlock()
 
 	// 若为远程源且启用，立即异步拉取一次
@@ -220,6 +246,10 @@ func (m *Manager) UpdateProvider(ctx context.Context, p Provider) error {
 		return errors.New("provider not found")
 	}
 
+	urlChanged := existing.URL != p.URL
+	formatChanged := existing.Format != p.Format
+	enabledChanged := existing.Enabled != p.Enabled
+
 	existing.Name = p.Name
 	existing.URL = p.URL
 	existing.Format = p.Format
@@ -228,6 +258,13 @@ func (m *Manager) UpdateProvider(ctx context.Context, p Provider) error {
 	existing.UpdatedAt = time.Now()
 	_ = m.saveProvidersLocked()
 	m.mu.Unlock()
+
+	// 如果 URL、格式或启用状态发生变化且处于启用状态，立即自动重新拉取
+	if (urlChanged || formatChanged || enabledChanged) && p.Enabled && p.Type == ProviderTypeRemote && p.URL != "" {
+		go func() {
+			_, _ = m.RefreshProvider(context.Background(), p.ID)
+		}()
+	}
 
 	return nil
 }
@@ -303,13 +340,15 @@ func (m *Manager) RefreshProvider(ctx context.Context, id string) ([]option.Outb
 		dedupOutbounds = append(dedupOutbounds, ob)
 	}
 
-	// 序列化并落盘为独立的 outbound-<tag>.json 片段
-	jsonData, err := json.MarshalIndent(dedupOutbounds, "", "  ")
-	if err != nil {
+	// 序列化并落盘为独立的 outbound-<tag>.json 片段（必须使用 sjson 包含上下文，保留完整节点字段）
+	var buf bytes.Buffer
+	enc := sjson.NewEncoderContext(include.Context(context.Background()), &buf)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(dedupOutbounds); err != nil {
 		return nil, fmt.Errorf("序列化节点片段失败: %w", err)
 	}
 
-	if err := os.WriteFile(m.providerOutboundPath(tag), jsonData, 0o644); err != nil {
+	if err := os.WriteFile(m.providerOutboundPath(tag), buf.Bytes(), 0o644); err != nil {
 		return nil, fmt.Errorf("写入节点片段文件失败: %w", err)
 	}
 
@@ -326,6 +365,31 @@ func (m *Manager) RefreshProvider(ctx context.Context, id string) ([]option.Outb
 	m.mu.Unlock()
 
 	logger.Info("[Provider] 成功更新订阅 %s (节点数: %d)", tag, len(dedupOutbounds))
+
+	// 自动闭环：若活动方案中包含该订阅源（或默认方案），自动合并并重载内核
+	m.mu.RLock()
+	activeID := m.activeProfID
+	var shouldReapply bool
+	if activeID != "" {
+		if prof, ok := m.profiles[activeID]; ok && prof.AutoReload {
+			for _, pTag := range prof.ProviderTags {
+				if pTag == tag {
+					shouldReapply = true
+					break
+				}
+			}
+		}
+	}
+	m.mu.RUnlock()
+
+	if shouldReapply {
+		go func() {
+			if err := m.ApplyProfile(context.Background(), activeID); err != nil {
+				logger.Warn("[Provider] 订阅 %s 更新后自动应用方案失败: %v", tag, err)
+			}
+		}()
+	}
+
 	return dedupOutbounds, nil
 }
 
@@ -495,14 +559,18 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		ob := &baseOpts.Outbounds[i]
 		if ob.Type == "selector" || ob.Type == "urltest" {
 			if targetSet[strings.ToLower(ob.Tag)] || len(targetSet) == 0 {
-				// 获取现有组内 outbounds
 				groupTags := make([]string, 0)
 				tagMap := make(map[string]bool)
 
-				if selOpts, ok := ob.Options.(*option.SelectorOutboundOptions); ok {
-					groupTags = selOpts.Outbounds
-				} else if urlOpts, ok := ob.Options.(*option.URLTestOutboundOptions); ok {
-					groupTags = urlOpts.Outbounds
+				switch opts := ob.Options.(type) {
+				case *option.SelectorOutboundOptions:
+					groupTags = opts.Outbounds
+				case option.SelectorOutboundOptions:
+					groupTags = opts.Outbounds
+				case *option.URLTestOutboundOptions:
+					groupTags = opts.Outbounds
+				case option.URLTestOutboundOptions:
+					groupTags = opts.Outbounds
 				}
 
 				for _, t := range groupTags {
@@ -515,10 +583,17 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 					}
 				}
 
-				if selOpts, ok := ob.Options.(*option.SelectorOutboundOptions); ok {
-					selOpts.Outbounds = groupTags
-				} else if urlOpts, ok := ob.Options.(*option.URLTestOutboundOptions); ok {
-					urlOpts.Outbounds = groupTags
+				switch opts := ob.Options.(type) {
+				case *option.SelectorOutboundOptions:
+					opts.Outbounds = groupTags
+				case option.SelectorOutboundOptions:
+					opts.Outbounds = groupTags
+					ob.Options = opts
+				case *option.URLTestOutboundOptions:
+					opts.Outbounds = groupTags
+				case option.URLTestOutboundOptions:
+					opts.Outbounds = groupTags
+					ob.Options = opts
 				}
 			}
 		}

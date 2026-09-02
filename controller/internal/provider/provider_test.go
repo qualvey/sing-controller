@@ -93,6 +93,35 @@ func TestParseBase64URI(t *testing.T) {
 	}
 }
 
+func TestParseVmessURI(t *testing.T) {
+	// vmess://eyJ2IjoiMiIsInBzIjoidm1lc3Mtbm9kZSIsImFkZCI6IjguOC44LjgiLCJwb3J0Ijo0NDMsImlkIjoiYTAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwiYWlkIjowLCJuZXQiOiJ3cyIsInRscyI6InRscyIsInNuaSI6ImV4YW1wbGUuY29tIn0=
+	rawURI := "vmess://eyJ2IjoiMiIsInBzIjoidm1lc3Mtbm9kZSIsImFkZCI6IjguOC44LjgiLCJwb3J0Ijo0NDMsImlkIjoiYTAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAxIiwiYWlkIjowLCJuZXQiOiJ3cyIsInRscyI6InRscyIsInNuaSI6ImV4YW1wbGUuY29tIn0="
+	outbounds, err := ParseURIList(rawURI)
+	if err != nil {
+		t.Fatalf("ParseURIList vmess failed: %v", err)
+	}
+	if len(outbounds) != 1 {
+		t.Fatalf("expected 1 outbound, got %d", len(outbounds))
+	}
+	if outbounds[0].Tag != "vmess-node" || outbounds[0].Type != "vmess" {
+		t.Errorf("vmess mismatch: %+v", outbounds[0])
+	}
+}
+
+func TestParseTuicURI(t *testing.T) {
+	rawURI := "tuic://a0000000-0000-0000-0000-000000000001:my-pass@1.2.3.4:8443?sni=example.com&alpn=h3&congestion_control=bbr#TuicNode"
+	outbounds, err := ParseURIList(rawURI)
+	if err != nil {
+		t.Fatalf("ParseURIList tuic failed: %v", err)
+	}
+	if len(outbounds) != 1 {
+		t.Fatalf("expected 1 outbound, got %d", len(outbounds))
+	}
+	if outbounds[0].Tag != "TuicNode" || outbounds[0].Type != "tuic" {
+		t.Errorf("tuic mismatch: %+v", outbounds[0])
+	}
+}
+
 func TestProfileMergingAndValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	baseConfigPath := filepath.Join(tmpDir, "sing-box-config.json")
