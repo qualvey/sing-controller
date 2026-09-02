@@ -74,11 +74,14 @@ export const createEarthRenderer = async (
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
+    controls.dampingFactor = 0.05
     controls.enablePan = false
-    controls.minDistance = 2.65
-    controls.maxDistance = 7.5
-    controls.rotateSpeed = 0.55
-    controls.zoomSpeed = 0.75
+    controls.minDistance = 2.4
+    controls.maxDistance = 8.0
+    controls.rotateSpeed = 0.85
+    controls.zoomSpeed = 1.0
+    controls.autoRotate = true
+    controls.autoRotateSpeed = 0.5
     controls.touches.ONE = THREE.TOUCH.ROTATE
     controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE
     // Keep browser scrolling/navigation gestures inside the canvas from competing
@@ -150,10 +153,9 @@ export const createEarthRenderer = async (
 
       const elapsed = clock.getDelta()
       const delta = Math.min(0.05, elapsed)
-      if (autoRotation) earthGroup.rotation.y += delta * 0.025
       endpointLayer.update(delta)
       if (visualMode === 'space') globeLayer.syncSunLight()
-      controls.update(delta)
+      controls.update()
       routeLayer.update(elapsed)
 
       render()
@@ -171,9 +173,11 @@ export const createEarthRenderer = async (
 
       if (reducedMotion) {
         controls.enableDamping = false
+        controls.autoRotate = false
         render()
       } else {
         controls.enableDamping = true
+        controls.autoRotate = autoRotation
         clock.start()
         renderer.setAnimationLoop(animate)
       }
@@ -299,6 +303,7 @@ export const createEarthRenderer = async (
       setAutoRotation(enabled) {
         if (disposed) return
         autoRotation = enabled
+        controls.autoRotate = enabled && !reducedMotion
       },
       setCityLabelsVisible(nextVisible) {
         if (disposed) return
