@@ -86,6 +86,10 @@ export const fetchVersionAPI = async (): Promise<{ data: { version: string } }> 
     try {
       const status = await api.status()
       if (status) {
+        // 如果是初次启动且尚未生成配置，允许正常连接 Controller 并进入订阅引导
+        if (status.config_exists === false) {
+          return { data: { version: 'sing-box (未配置)' } }
+        }
         if (status.core && !status.core.alive) {
           throw new Error(status.core.error || 'sing-box 核心未运行')
         }

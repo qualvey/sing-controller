@@ -3,7 +3,9 @@ import {
   type ConfigProfile,
   type NodeProvider,
 } from '@/api/controller'
+import { startBackendSession } from '@/assembly/session'
 import { showNotification } from '@/helper/notification'
+import { useStatusStore } from '@/store/status'
 import { ref } from 'vue'
 
 export const isProfileModalOpen = ref(false)
@@ -44,8 +46,13 @@ export const applyProfile = async (id: string) => {
   isApplyingProfileId.value = id
   try {
     await controllerApi.applyProfile(id)
-    showNotification({ content: '配置方案已应用', type: 'alert-success' })
+    showNotification({ content: '配置方案已应用，sing-box 内核正在启动...', type: 'alert-success' })
     await loadProfilesData()
+    const statusStore = useStatusStore()
+    await statusStore.refresh()
+    setTimeout(() => {
+      startBackendSession()
+    }, 600)
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '应用方案失败'
     showNotification({ content: msg, type: 'alert-error' })

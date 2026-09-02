@@ -49,7 +49,6 @@
       :is-edit="isProxyEditModalIsEdit"
       @saved="fetchProxies"
     />
-    <ProfileManagerModal v-model="isProfileModalOpen" />
   </div>
 </template>
 
@@ -63,8 +62,6 @@ import ProxyProvider from '@/components/proxies/ProxyProvider.vue'
 import ProxyGroupChainModal from '@/components/proxies/ProxyGroupChainModal.vue'
 import ProxyContextMenu from '@/components/proxies/ProxyContextMenu.vue'
 import OutboundEditDialog from '@/components/outbounds/OutboundEditDialog.vue'
-import ProfileManagerModal from '@/components/profiles/ProfileManagerModal.vue'
-import { isProfileModalOpen } from '@/composables/profiles'
 import {
   isProxyEditModalOpen,
   isProxyEditModalIsEdit,

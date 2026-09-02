@@ -374,8 +374,18 @@ const copyNginxConfig = async () => {
 const failed = ref(false)
 
 watch(
-  [() => probe.value?.status, () => statusStore.status?.core_alive, () => statusStore.status?.core?.alive],
-  ([status, coreAlive, coreObjAlive]) => {
+  [
+    () => probe.value?.status,
+    () => statusStore.status?.core_alive,
+    () => statusStore.status?.core?.alive,
+    () => statusStore.status?.config_exists,
+  ],
+  ([status, coreAlive, coreObjAlive, configExists]) => {
+    // 初次冷启动未生成主配置时，由引导弹窗接管，不触发全屏阻断
+    if (configExists === false) {
+      failed.value = false
+      return
+    }
     if (status === 'failed' || coreAlive === false || coreObjAlive === false) {
       failed.value = true
     } else if (status === 'connected' || status === undefined) {
@@ -389,7 +399,11 @@ watch(
 // Setup 页本来就是登录后端的地方,不必再盖一层。
 const route = useRoute()
 const visible = computed(
-  () => failed.value && backendManagerView.value === null && route.name !== ROUTE_NAME.setup,
+  () =>
+    failed.value &&
+    statusStore.status?.config_exists !== false &&
+    backendManagerView.value === null &&
+    route.name !== ROUTE_NAME.setup,
 )
 
 const label = computed(() => (activeBackend.value ? getLabelFromBackend(activeBackend.value) : ''))

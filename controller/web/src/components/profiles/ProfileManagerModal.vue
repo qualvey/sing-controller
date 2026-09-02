@@ -3,8 +3,32 @@
     v-model="isOpen"
     :title="t('profiles.managerTitle', '配置组与订阅源管理 (Profiles & Providers)')"
     size="large"
+    :closable="!isLocked"
   >
-    <div class="flex flex-col gap-5 py-1">
+    <div class="flex flex-col gap-4 py-1">
+      <!-- 初次启动未就绪引导提示横幅 -->
+      <div
+        v-if="isLocked"
+        class="alert alert-info bg-info/10 border-info/20 text-info-content text-xs rounded-xl flex items-start gap-3 p-3.5 shadow-sm"
+      >
+        <SparklesIcon class="size-5 text-info shrink-0 mt-0.5" />
+        <div class="flex-1 min-w-0">
+          <div class="font-bold text-sm text-base-content mb-1">
+            欢迎使用 sing-controller！检测到首次启动待初始化
+          </div>
+          <div class="text-base-content/80 leading-relaxed">
+            系统尚未生成 sing-box 主配置且内核未运行。请按以下步骤完成初始化：
+            <ol class="list-decimal list-inside mt-1.5 space-y-1 font-medium">
+              <li>在下方 <span class="badge badge-sm badge-neutral">节点订阅源 (Providers)</span> 点击“添加订阅源”填入您的订阅 URL 并拉取节点</li>
+              <li>切换至 <span class="badge badge-sm badge-neutral">配置方案 (Profiles)</span> 点击“应用”生成完整配置并启动内核</li>
+            </ol>
+            <span class="text-warning text-[11px] block mt-1.5">
+              ⚠️ 提示：在内核成功启动并联通 gRPC 之前，界面将保持锁定引导状态。
+            </span>
+          </div>
+        </div>
+      </div>
+
       <!-- 标签页切换：配置组方案 vs 订阅源管理 -->
       <div class="tabs tabs-boxed bg-base-300/40 p-1 rounded-xl">
         <button
@@ -75,12 +99,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import {
   RectangleGroupIcon,
   CloudArrowDownIcon,
+  SparklesIcon,
 } from '@heroicons/vue/24/outline'
 import type { ConfigProfile, NodeProvider } from '@/api/controller'
 import {
@@ -95,6 +120,8 @@ import {
   refreshProvider,
   deleteProvider,
 } from '@/composables/profiles'
+import { useStatusStore } from '@/store/status'
+import { showNotification } from '@/helper/notification'
 import ProfileCardList from './ProfileCardList.vue'
 import ProviderTableList from './ProviderTableList.vue'
 import ProfileEditDialog from './ProfileEditDialog.vue'
@@ -103,6 +130,15 @@ import ProviderNodesPreview from './ProviderNodesPreview.vue'
 
 const isOpen = defineModel<boolean>({ default: false })
 const { t } = useI18n()
+const statusStore = useStatusStore()
+
+// 判断是否处于冷启动未就绪强制锁定状态（无配置文件，或无节点且内核离线）
+const isLocked = computed(() => {
+  return (
+    statusStore.status?.config_exists === false ||
+    (statusStore.status?.core_alive === false && (statusStore.status?.outbounds ?? 0) === 0)
+  )
+})
 
 // 编辑态状态
 const isProfileDialogVisible = ref(false)
@@ -123,8 +159,26 @@ watch(
   },
 )
 
+// 当进入锁定状态时，自动切换到 providers 订阅源 tab
+watch(
+  isLocked,
+  (locked, oldLocked) => {
+    if (locked) {
+      activeProfilesTab.value = 'providers'
+      isOpen.value = true
+    } else if (oldLocked && !locked) {
+      showNotification({
+        content: '🎉 sing-box 内核已成功启动并联通！引导锁定已解除。',
+        type: 'alert-success',
+      })
+    }
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
   loadProfilesData()
+  void statusStore.refresh()
 })
 
 // Profile 弹窗打开逻辑

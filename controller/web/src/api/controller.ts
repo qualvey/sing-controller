@@ -10,6 +10,7 @@ export interface CoreStatusInfo {
 
 export interface StatusInfo {
   config_path: string
+  config_exists?: boolean
   controller_config: string
   listen: string
   log_level: string
