@@ -42,7 +42,7 @@ param(
 
     [string]$Version,
 
-    [string]$Tags = "with_quic,with_tailscale,with_gvisor,with_utls,with_clash_api,with_acme,with_tun,with_dhcp,with_wireguard,with_ccm,with_ocm,with_cloudflared,with_usbip",
+    [string]$Tags = "with_quic,with_dhcp,with_wireguard,with_utls,with_clash_api,with_gvisor,with_tailscale,with_v2ray_api",
 
     [string]$OutDir = ""
 )
@@ -65,7 +65,8 @@ if (-not $Version) {
     $gitVer = git describe --tags --always --dirty 2>$null
     if ($gitVer) {
         $Version = $gitVer.Trim()
-    } else {
+    }
+    else {
         $Version = "dev"
     }
 }
@@ -86,10 +87,12 @@ if (-not $SkipFrontend) {
         }
         pnpm run build
         if ($LASTEXITCODE -ne 0) { throw "前端构建失败" }
-    } finally {
+    }
+    finally {
         Pop-Location
     }
-} else {
+}
+else {
     Write-Host "`n[*] [1/2] 跳过前端构建 (-SkipFrontend)" -ForegroundColor DarkGray
 }
 
@@ -110,7 +113,8 @@ function Build-Binary {
     $env:GOARCH = $Goarch
     if ($Goarm) {
         $env:GOARM = $Goarm
-    } else {
+    }
+    else {
         Remove-Item env:GOARM -ErrorAction SilentlyContinue
     }
 
@@ -120,7 +124,8 @@ function Build-Binary {
     try {
         go build -tags $Tags -ldflags $ldflags -o $outputPath .
         if ($LASTEXITCODE -ne 0) { throw "Go 编译失败: $Goos/$Goarch" }
-    } finally {
+    }
+    finally {
         Pop-Location
     }
 
@@ -149,10 +154,12 @@ switch ($Target) {
         if ($IsWindows -or $env:OS -eq 'Windows_NT') {
             Build-Binary -Goos 'windows' -Goarch 'amd64' -OutputName 'sing-controller.exe'
             # 同时拷贝到 controller/sing-controller.exe 便于根目录直接调试
-            Copy-Item (Join-Path $OutDir 'sing-controller.exe') (Join-Path $root 'controller/sing-controller.exe') -Force
-        } elseif ($IsMacOS) {
+            Copy-Item (Join-Path $OutDir 'sing-controller.exe') (Join-Path $root 'pkg_test/sing-controller.exe') -Force
+        }
+        elseif ($IsMacOS) {
             Build-Binary -Goos 'darwin' -Goarch 'arm64' -OutputName 'sing-controller-darwin-arm64'
-        } else {
+        }
+        else {
             Build-Binary -Goos 'linux' -Goarch 'amd64' -OutputName 'sing-controller-linux-amd64'
         }
     }
