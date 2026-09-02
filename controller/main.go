@@ -117,11 +117,13 @@ func main() {
 	})
 	if err != nil {
 		slog.Warn("supervisor init failed", "error", err)
-	} else {
-		// 启动时自动拉起 sing-box 内核
+	} else if cfgStore.Exists() {
+		// 启动时若配置文件已存在，自动拉起 sing-box 内核
 		if err := sup.Start(ctx); err != nil {
 			slog.Warn("supervisor auto-start core failed", "error", err)
 		}
+	} else {
+		slog.Info("sing-box config not found, supervisor standing by for initial profile setup", "path", cfgStore.Path())
 	}
 
 	// 初始化 Provider & Profile 管理器

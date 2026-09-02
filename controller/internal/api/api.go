@@ -405,6 +405,7 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	coreStatus := h.probeCoreHealth(1 * time.Second)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"config_path":       h.store.Path(),
+		"config_exists":     h.store.Exists(),
 		"controller_config": h.settings.Path(),
 		"listen":            values.Listen,
 		"log_level":         values.Log.Level,

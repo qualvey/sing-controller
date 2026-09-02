@@ -581,15 +581,19 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		return nil, errors.New("store 未初始化")
 	}
 
-	// 1. 读取基础配置副本并解析
+	// 1. 读取基础配置副本并解析（若文件尚不存在，使用内存中的默认骨架）
+	var baseOpts option.Options
 	baseContent, err := os.ReadFile(m.store.Path())
-	if err != nil {
+	if errors.Is(err, os.ErrNotExist) {
+		baseOpts = m.store.Options
+	} else if err != nil {
 		return nil, fmt.Errorf("读取主配置失败: %w", err)
-	}
-
-	baseOpts, err := store.Parse(ctx, baseContent)
-	if err != nil {
-		return nil, fmt.Errorf("解析主配置失败: %w", err)
+	} else {
+		parsedOpts, err := store.Parse(ctx, baseContent)
+		if err != nil {
+			return nil, fmt.Errorf("解析主配置失败: %w", err)
+		}
+		baseOpts = parsedOpts
 	}
 
 	// 2. 收集所有历史上注入过或属于任何 provider 的节点 tag，用于彻底清除旧节点

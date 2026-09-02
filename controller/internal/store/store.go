@@ -112,9 +112,40 @@ func Validate(ctx context.Context, content []byte) error {
 	return nil
 }
 
-func defaultConfig(inboundType string, listen string, listenPort uint16) option.Options {
+// Exists 检查主配置文件是否真实存在于磁盘
+func (s *Store) Exists() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := os.Stat(s.path); err == nil {
+		return true
+	}
+	return false
+}
+
+// DefaultOptions 生成默认基础配置骨架（包含内置 gRPC API 端口 9900）
+func DefaultOptions(defaults DefaultConfig) option.Options {
+	inboundType := defaults.InboundType
+	if inboundType == "" {
+		inboundType = "mixed"
+	}
+	listen := defaults.Listen
+	if listen == "" {
+		listen = "127.0.0.1"
+	}
+	listenPort := defaults.ListenPort
+	if listenPort == 0 {
+		listenPort = 2080
+	}
+
 	content := []byte(`{
   "log": { "level": "info", "timestamp": true },
+  "services": [
+    {
+      "type": "api",
+      "listen": "127.0.0.1",
+      "listen_port": 9900
+    }
+  ],
   "inbounds": [
     { "type": "` + inboundType + `", "tag": "in-main", "listen": "` + listen + `", "listen_port": ` + itoa(listenPort) + ` }
   ],
@@ -131,18 +162,24 @@ func defaultConfig(inboundType string, listen string, listenPort uint16) option.
 	return options
 }
 
+func defaultConfig(inboundType string, listen string, listenPort uint16) option.Options {
+	return DefaultOptions(DefaultConfig{
+		InboundType: inboundType,
+		Listen:      listen,
+		ListenPort:  listenPort,
+	})
+}
+
 func itoa(value uint16) string { return strconv.FormatUint(uint64(value), 10) }
 
-// Load 读取主配置文件；不存在时按默认值生成骨架（由调用方传入 settings 默认值）。
+// Load 读取主配置文件；不存在时仅初始化内存骨架，不自动落盘。
 func (s *Store) Load(ctx context.Context, defaults DefaultConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	content, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		s.Options = defaultConfig(defaults.InboundType, defaults.Listen, defaults.ListenPort)
-		if err := s.saveLocked(ctx); err != nil {
-			return err
-		}
+		s.Options = DefaultOptions(defaults)
+		s.Meta = loadMeta(s.metaPath, 0, 0, 0, 0)
 		return nil
 	}
 	if err != nil {
