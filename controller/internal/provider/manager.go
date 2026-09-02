@@ -30,6 +30,7 @@ type Manager struct {
 	dir          string // 存储根目录，如 providers/
 	providers    map[string]*Provider
 	profiles     map[string]*Profile
+	injectedTags []string // 记录已动态注入到主配置的节点 tag 列表
 	fetcher      *Fetcher
 	supervisor   SupervisorInterface
 	store        *store.Store
@@ -45,15 +46,17 @@ func NewManager(dir string, st *store.Store, sup SupervisorInterface) (*Manager,
 	}
 
 	m := &Manager{
-		dir:        dir,
-		providers:  make(map[string]*Provider),
-		profiles:   make(map[string]*Profile),
-		fetcher:    NewFetcher(30 * time.Second),
-		supervisor: sup,
-		store:      st,
+		dir:          dir,
+		providers:    make(map[string]*Provider),
+		profiles:     make(map[string]*Profile),
+		injectedTags: make([]string, 0),
+		fetcher:      NewFetcher(30 * time.Second),
+		supervisor:   sup,
+		store:        st,
 	}
 
 	m.loadProviders()
+	m.loadInjectedTags()
 	m.loadProfiles()
 	go m.startCronLoop()
 	return m, nil
@@ -65,6 +68,44 @@ func (m *Manager) providersMetaPath() string {
 
 func (m *Manager) profilesMetaPath() string {
 	return filepath.Join(m.dir, "profiles.json")
+}
+
+func (m *Manager) injectedTagsPath() string {
+	return filepath.Join(m.dir, "injected_tags.json")
+}
+
+func (m *Manager) loadInjectedTags() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	data, err := os.ReadFile(m.injectedTagsPath())
+	if err == nil {
+		_ = json.Unmarshal(data, &m.injectedTags)
+	}
+
+	// 自动扫描目录中现有的所有 fragment 节点，确保历史注入节点也被追踪
+	tagSet := make(map[string]bool)
+	for _, t := range m.injectedTags {
+		tagSet[t] = true
+	}
+	for _, p := range m.providers {
+		if obs, err := m.GetProviderOutbounds(p.Tag); err == nil {
+			for _, ob := range obs {
+				if !tagSet[ob.Tag] {
+					m.injectedTags = append(m.injectedTags, ob.Tag)
+					tagSet[ob.Tag] = true
+				}
+			}
+		}
+	}
+}
+
+func (m *Manager) saveInjectedTagsLocked() error {
+	data, err := json.MarshalIndent(m.injectedTags, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(m.injectedTagsPath(), data, 0o644)
 }
 
 func (m *Manager) providerOutboundPath(tag string) string {
@@ -269,7 +310,7 @@ func (m *Manager) UpdateProvider(ctx context.Context, p Provider) error {
 	return nil
 }
 
-// DeleteProvider 删除订阅源及其独立片段文件
+// DeleteProvider 删除订阅源及其独立片段文件，并从所有方案中注销、重新应用活动方案
 func (m *Manager) DeleteProvider(id string) error {
 	m.mu.Lock()
 	p, ok := m.providers[id]
@@ -281,10 +322,41 @@ func (m *Manager) DeleteProvider(id string) error {
 	tag := p.Tag
 	delete(m.providers, id)
 	_ = m.saveProvidersLocked()
+
+	// 从所有配置方案中剔除该订阅源
+	for _, prof := range m.profiles {
+		newTags := make([]string, 0, len(prof.ProviderTags))
+		for _, pt := range prof.ProviderTags {
+			if pt != tag {
+				newTags = append(newTags, pt)
+			}
+		}
+		prof.ProviderTags = newTags
+		prof.UpdatedAt = time.Now()
+	}
+	_ = m.saveProfilesLocked()
+	activeID := m.activeProfID
 	m.mu.Unlock()
+
+	// 读取待删除片段中的节点 tags，确保加入历史清除列表
+	if obs, err := m.GetProviderOutbounds(tag); err == nil {
+		m.mu.Lock()
+		for _, ob := range obs {
+			m.injectedTags = append(m.injectedTags, ob.Tag)
+		}
+		_ = m.saveInjectedTagsLocked()
+		m.mu.Unlock()
+	}
 
 	// 删除磁盘上的独立片段
 	_ = os.Remove(m.providerOutboundPath(tag))
+
+	// 重新应用活动方案，彻底将已删除订阅的节点从内核和主配置中清除
+	if activeID != "" {
+		if err := m.ApplyProfile(context.Background(), activeID); err != nil {
+			logger.Warn("[Provider] 删除订阅 %s 后重新应用方案失败: %v", tag, err)
+		}
+	}
 	return nil
 }
 
@@ -509,7 +581,7 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		return nil, errors.New("store 未初始化")
 	}
 
-	// 1. 读取基础配置副本
+	// 1. 读取基础配置副本并解析
 	baseContent, err := os.ReadFile(m.store.Path())
 	if err != nil {
 		return nil, fmt.Errorf("读取主配置失败: %w", err)
@@ -520,7 +592,46 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		return nil, fmt.Errorf("解析主配置失败: %w", err)
 	}
 
-	// 2. 收集所有启用 Provider 的节点
+	// 2. 收集所有历史上注入过或属于任何 provider 的节点 tag，用于彻底清除旧节点
+	m.mu.RLock()
+	tagsToPurge := make(map[string]bool)
+	for _, t := range m.injectedTags {
+		tagsToPurge[t] = true
+	}
+	for _, p := range m.providers {
+		if obs, err := m.GetProviderOutbounds(p.Tag); err == nil {
+			for _, ob := range obs {
+				tagsToPurge[ob.Tag] = true
+			}
+		}
+	}
+	m.mu.RUnlock()
+
+	// 3. 从 baseOpts.Outbounds 中剔除历史注入的 provider 节点，恢复纯净基础节点
+	cleanBaseOutbounds := make([]option.Outbound, 0, len(baseOpts.Outbounds))
+	for _, ob := range baseOpts.Outbounds {
+		if !tagsToPurge[ob.Tag] {
+			cleanBaseOutbounds = append(cleanBaseOutbounds, ob)
+		}
+	}
+	baseOpts.Outbounds = cleanBaseOutbounds
+
+	// 4. 从各个 selector / urltest 组中剔除历史 provider 节点 tag
+	for i := range baseOpts.Outbounds {
+		ob := &baseOpts.Outbounds[i]
+		if ob.Type == "selector" || ob.Type == "urltest" {
+			groupTags := getGroupOutbounds(ob)
+			cleanGroupTags := make([]string, 0, len(groupTags))
+			for _, gt := range groupTags {
+				if !tagsToPurge[gt] {
+					cleanGroupTags = append(cleanGroupTags, gt)
+				}
+			}
+			setGroupOutbounds(ob, cleanGroupTags)
+		}
+	}
+
+	// 5. 收集当前 Profile 所选 Provider 的节点
 	var providerOutbounds []option.Outbound
 	providerNodeTags := make([]string, 0)
 
@@ -536,7 +647,7 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		}
 	}
 
-	// 3. 将新节点合并到 baseOpts.Outbounds（去重）
+	// 6. 将当前 Profile 的节点合并到 baseOpts.Outbounds（去重）
 	existingTags := make(map[string]bool)
 	for _, ob := range baseOpts.Outbounds {
 		existingTags[ob.Tag] = true
@@ -549,7 +660,7 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		}
 	}
 
-	// 4. 将节点自动并入目标 Selector / URLTest 组
+	// 7. 将节点自动并入目标 Selector / URLTest 组
 	targetSet := make(map[string]bool)
 	for _, t := range prof.TargetSelectors {
 		targetSet[strings.ToLower(t)] = true
@@ -559,19 +670,8 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		ob := &baseOpts.Outbounds[i]
 		if ob.Type == "selector" || ob.Type == "urltest" {
 			if targetSet[strings.ToLower(ob.Tag)] || len(targetSet) == 0 {
-				groupTags := make([]string, 0)
+				groupTags := getGroupOutbounds(ob)
 				tagMap := make(map[string]bool)
-
-				switch opts := ob.Options.(type) {
-				case *option.SelectorOutboundOptions:
-					groupTags = opts.Outbounds
-				case option.SelectorOutboundOptions:
-					groupTags = opts.Outbounds
-				case *option.URLTestOutboundOptions:
-					groupTags = opts.Outbounds
-				case option.URLTestOutboundOptions:
-					groupTags = opts.Outbounds
-				}
 
 				for _, t := range groupTags {
 					tagMap[t] = true
@@ -582,35 +682,59 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 						tagMap[t] = true
 					}
 				}
-
-				switch opts := ob.Options.(type) {
-				case *option.SelectorOutboundOptions:
-					opts.Outbounds = groupTags
-				case option.SelectorOutboundOptions:
-					opts.Outbounds = groupTags
-					ob.Options = opts
-				case *option.URLTestOutboundOptions:
-					opts.Outbounds = groupTags
-				case option.URLTestOutboundOptions:
-					opts.Outbounds = groupTags
-					ob.Options = opts
-				}
+				setGroupOutbounds(ob, groupTags)
 			}
 		}
 	}
 
-	// 5. 序列化为最终 JSON
+	// 8. 序列化为最终 JSON
 	finalJSON, err := store.MarshalOptions(ctx, baseOpts)
 	if err != nil {
 		return nil, fmt.Errorf("合并配置序列化失败: %w", err)
 	}
 
-	// 6. 执行全量 Validate（box.New 干跑预检）
+	// 9. 执行全量 Validate（box.New 干跑预检）
 	if err := store.Validate(ctx, finalJSON); err != nil {
 		return nil, fmt.Errorf("合并后配置预检失败: %w", err)
 	}
 
+	// 10. 更新当前已注入的节点 tags 并持久化
+	m.mu.Lock()
+	m.injectedTags = providerNodeTags
+	_ = m.saveInjectedTagsLocked()
+	m.mu.Unlock()
+
 	return finalJSON, nil
+}
+
+func getGroupOutbounds(ob *option.Outbound) []string {
+	switch opts := ob.Options.(type) {
+	case *option.SelectorOutboundOptions:
+		return opts.Outbounds
+	case option.SelectorOutboundOptions:
+		return opts.Outbounds
+	case *option.URLTestOutboundOptions:
+		return opts.Outbounds
+	case option.URLTestOutboundOptions:
+		return opts.Outbounds
+	default:
+		return nil
+	}
+}
+
+func setGroupOutbounds(ob *option.Outbound, tags []string) {
+	switch opts := ob.Options.(type) {
+	case *option.SelectorOutboundOptions:
+		opts.Outbounds = tags
+	case option.SelectorOutboundOptions:
+		opts.Outbounds = tags
+		ob.Options = opts
+	case *option.URLTestOutboundOptions:
+		opts.Outbounds = tags
+	case option.URLTestOutboundOptions:
+		opts.Outbounds = tags
+		ob.Options = opts
+	}
 }
 
 // ApplyProfile 应用指定方案：合并、预检、原子覆写盘并重载内核

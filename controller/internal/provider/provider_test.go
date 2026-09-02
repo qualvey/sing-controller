@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/qualvey/sing-controller/internal/store"
+	"github.com/sagernet/sing-box/option"
 )
 
 func TestParseClashYAML(t *testing.T) {
@@ -216,7 +217,44 @@ proxies:
 		t.Fatalf("ApplyProfile failed: %v", err)
 	}
 
-	// 验证磁盘上的配置是否更新
+	// 验证磁盘上的配置是否包含节点
 	savedContent, _ := os.ReadFile(baseConfigPath)
-	t.Logf("Merged config:\n%s", string(savedContent))
+	savedOpts, err := store.Parse(context.Background(), savedContent)
+	if err != nil {
+		t.Fatalf("parse saved config: %v", err)
+	}
+	hasHK := false
+	for _, ob := range savedOpts.Outbounds {
+		if ob.Tag == "HK-01" {
+			hasHK = true
+		}
+	}
+	if !hasHK {
+		t.Fatalf("expected HK-01 in saved outbounds")
+	}
+
+	// 4. 删除 Provider，验证节点及 Selector 中引用被彻底移除
+	if err := mgr.DeleteProvider(p.ID); err != nil {
+		t.Fatalf("DeleteProvider failed: %v", err)
+	}
+
+	cleanContent, _ := os.ReadFile(baseConfigPath)
+	cleanOpts, err := store.Parse(context.Background(), cleanContent)
+	if err != nil {
+		t.Fatalf("parse clean config: %v", err)
+	}
+	for _, ob := range cleanOpts.Outbounds {
+		if ob.Tag == "HK-01" || ob.Tag == "SG-01" {
+			t.Fatalf("found deleted node %s still in outbounds!", ob.Tag)
+		}
+		if ob.Tag == "Proxy" {
+			if selOpts, ok := ob.Options.(*option.SelectorOutboundOptions); ok {
+				for _, tTag := range selOpts.Outbounds {
+					if tTag == "HK-01" || tTag == "SG-01" {
+						t.Fatalf("found deleted node %s still in selector group!", tTag)
+					}
+				}
+			}
+		}
+	}
 }
