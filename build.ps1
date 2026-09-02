@@ -42,7 +42,7 @@ param(
 
     [string]$Version,
 
-    [string]$Tags = "with_quic,with_utls,with_gvisor,with_dhcp,with_wireguard,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_usbip",
+    [string]$Tags = "with_quic,with_tailscale,with_gvisor,with_utls,with_clash_api,with_acme,with_tun,with_dhcp,with_wireguard,with_ccm,with_ocm,with_cloudflared,with_usbip",
 
     [string]$OutDir = ""
 )
