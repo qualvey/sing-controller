@@ -499,6 +499,13 @@ func (m *Manager) GetProviderOutbounds(tag string) ([]option.Outbound, error) {
 	return outbounds, nil
 }
 
+// ActiveProfileID 返回当前活动方案 ID
+func (m *Manager) ActiveProfileID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.activeProfID
+}
+
 // ListProfiles 获取所有配置组方案
 func (m *Manager) ListProfiles() []*Profile {
 	m.mu.RLock()

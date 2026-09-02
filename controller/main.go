@@ -130,6 +130,15 @@ func main() {
 	provMgr, err := provider.NewManager("providers", cfgStore, sup)
 	if err != nil {
 		slog.Warn("provider manager init failed", "error", err)
+	} else if !cfgStore.Exists() {
+		// 冷启动自愈：若本地已存有订阅与活动方案，自动合并落盘并拉起内核
+		if activeID := provMgr.ActiveProfileID(); activeID != "" {
+			if err := provMgr.ApplyProfile(ctx, activeID); err != nil {
+				slog.Debug("auto apply profile on startup", "error", err)
+			} else {
+				slog.Info("auto-applied active profile on startup", "profile", activeID)
+			}
+		}
 	}
 
 	// 嵌入 webui（web/dist 已构建时）；构建失败仅影响页面，API 照常
