@@ -134,6 +134,7 @@
 | | `POST` | `/api/tools/password` | 生成 16 字节随机 Base64 密码 |
 | | `POST` | `/api/tools/reality-keypair`| 生成 Reality X25519 密钥对 |
 | | `POST` | `/api/tools/parse-json` | 校验并解析 JSON 字符串 |
+| | `POST` | `/api/tools/parse-node` | 解析节点配置或代理链接（vless://、vmess://、ss://、JSON 等） |
 | | `POST` | `/api/reload` | 手动触发 sing-box 进程重载 (SIGHUP) |
 
 ---
@@ -871,6 +872,41 @@ Clash API 透明反向代理，无缝转发到 sing-box 的 `experimental.clash_
     "data": {
       "server": "1.1.1.1",
       "port": 53
+    }
+  }
+  ```
+
+#### POST `/api/tools/parse-node`
+解析客户端传入的节点配置文本或代理分享链接（支持 `vless://`, `vmess://`, `ss://`, `trojan://`, `tuic://`, `hy2://` 以及完整 JSON 节点）。
+- **Request Body**:
+  ```json
+  {
+    "text": "vless://4a3a3118-2bb1-4cd4-8848-f8605c3c1234@198.51.100.1:443?security=reality&sni=example.com&pbk=wBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB&sid=12345678&fp=chrome#US-Node"
+  }
+  ```
+- **Response `200 OK`**:
+  ```json
+  {
+    "ok": true,
+    "data": {
+      "type": "vless",
+      "tag": "US-Node",
+      "server": "198.51.100.1",
+      "server_port": 443,
+      "uuid": "4a3a3118-2bb1-4cd4-8848-f8605c3c1234",
+      "tls": {
+        "enabled": true,
+        "server_name": "example.com",
+        "reality": {
+          "enabled": true,
+          "public_key": "wBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+          "short_id": "12345678"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      }
     }
   }
   ```

@@ -140,6 +140,7 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("POST /api/tools/reality-keypair", h.handleToolRealityKeypair)
 	mux.HandleFunc("POST /api/tools/password", h.handleToolPassword)
 	mux.HandleFunc("POST /api/tools/parse-json", h.handleToolParseJSON)
+	mux.HandleFunc("POST /api/tools/parse-node", h.handleToolParseNode)
 
 	// outbound CRUD
 	mux.HandleFunc("GET /api/outbounds", h.handleListOutbounds)

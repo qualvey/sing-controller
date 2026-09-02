@@ -5,10 +5,13 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/qualvey/sing-controller/internal/logger"
+	"github.com/qualvey/sing-controller/internal/provider"
 	"github.com/qualvey/sing-controller/internal/store"
 )
 
@@ -70,6 +73,67 @@ func (h *Handler) handleToolParseJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logger.Debug("解析 JSON 文本成功")
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": data})
+}
+
+// handleToolParseNode 解析节点配置文本或分享链接（JSON 或 vless://, vmess://, ss:// 等）：
+// 合法 → {ok:true, data:<解析结果>}；非法 → 400 带错误信息。
+func (h *Handler) handleToolParseNode(w http.ResponseWriter, r *http.Request) {
+	body, err := readRawBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var request struct {
+		Text    string `json:"text"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		logger.Warn("解析节点工具请求体失败: %v", err)
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	input := strings.TrimSpace(request.Text)
+	if input == "" {
+		input = strings.TrimSpace(request.Content)
+	}
+	if input == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("输入内容不能为空"))
+		return
+	}
+
+	// 1. 如果是 JSON (以 { 开头)
+	if strings.HasPrefix(input, "{") {
+		var data any
+		if err := json.Unmarshal([]byte(input), &data); err != nil {
+			logger.Warn("解析用户提供的 JSON 节点失败: %v", err)
+			writeError(w, http.StatusBadRequest, fmt.Errorf("JSON 格式错误: %w", err))
+			return
+		}
+		logger.Debug("解析 JSON 节点成功")
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": data})
+		return
+	}
+
+	// 2. 尝试作为代理 URI (vless://, vmess://, ss://, trojan://, tuic://, hy2:// 等) 解析
+	sbJSON, err := provider.ParseProxyURIToSingBox(input)
+	if err != nil || len(sbJSON) == 0 {
+		logger.Warn("解析节点链接失败: %v", err)
+		if err == nil {
+			err = fmt.Errorf("不支持的节点链接格式或协议")
+		}
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	var data any
+	if err := json.Unmarshal(sbJSON, &data); err != nil {
+		logger.Warn("反序列化 sing-box 节点配置失败: %v", err)
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	logger.Debug("解析节点链接成功")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "data": data})
 }
 
