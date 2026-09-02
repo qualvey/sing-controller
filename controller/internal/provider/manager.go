@@ -670,11 +670,9 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		targetSet[strings.ToLower(t)] = true
 	}
 
-	hasAnySelector := false
 	for i := range baseOpts.Outbounds {
 		ob := &baseOpts.Outbounds[i]
 		if ob.Type == "selector" || ob.Type == "urltest" {
-			hasAnySelector = true
 			if targetSet[strings.ToLower(ob.Tag)] || len(targetSet) == 0 {
 				groupTags := getGroupOutbounds(ob)
 				tagMap := make(map[string]bool)
@@ -690,31 +688,6 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 				}
 				setGroupOutbounds(ob, groupTags)
 			}
-		}
-	}
-
-	// 若基础配置中不存在任何 Selector 组，自动生成 Proxy 选择器组自愈
-	if !hasAnySelector && len(providerNodeTags) > 0 {
-		proxyGroupTags := append([]string(nil), providerNodeTags...)
-		proxyGroupTags = append(proxyGroupTags, "direct")
-		proxyOb := option.Outbound{
-			Type: "selector",
-			Tag:  "Proxy",
-			Options: &option.SelectorOutboundOptions{
-				Outbounds: proxyGroupTags,
-			},
-		}
-		baseOpts.Outbounds = append([]option.Outbound{proxyOb}, baseOpts.Outbounds...)
-	}
-
-	// 确保默认路由出口指向代理选择器
-	if baseOpts.Route == nil {
-		baseOpts.Route = &option.RouteOptions{
-			Final: "Proxy",
-		}
-	} else if baseOpts.Route.Final == "" || baseOpts.Route.Final == "direct" {
-		if hasAnySelector || len(providerNodeTags) > 0 {
-			baseOpts.Route.Final = "Proxy"
 		}
 	}
 
