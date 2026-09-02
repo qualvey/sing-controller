@@ -116,6 +116,11 @@ func main() {
 	})
 	if err != nil {
 		slog.Warn("supervisor init failed", "error", err)
+	} else {
+		// 启动时自动拉起 sing-box 内核
+		if err := sup.Start(ctx); err != nil {
+			slog.Warn("supervisor auto-start core failed", "error", err)
+		}
 	}
 
 	// 嵌入 webui（web/dist 已构建时）；构建失败仅影响页面，API 照常
