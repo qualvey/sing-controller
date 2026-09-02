@@ -185,3 +185,10 @@ sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `
 - [ ] 实现远程 URL 定时拉取器与 ETag 差量缓存。
 - [ ] 集成 `sing-box check` 预检与配置原子更新流程。
 - [ ] 配置文件历史版本备份与 WebUI 一键回滚。
+
+### Phase 5: Wails 跨平台桌面端打包 (Desktop App with Wails)
+- [ ] 引入 **Wails (Go + Webview)** 框架，将 Controller 作为应用主核心，直接嵌入 WebUI。
+- [ ] 实现系统托盘 (System Tray) 支持：托盘菜单、快速切换代理模式/策略组、配置组一键切换。
+- [ ] 封装系统级能力：开机自启、原生通知提示、系统代理一键设置 (System Proxy)。
+- [ ] 桌面端跨平台打包流水线（Windows `.exe` / `.msi`、macOS `.app` / `.dmg`、Linux `.AppImage` / `.deb`）。
+
