@@ -18,11 +18,9 @@ const props = withDefaults(
     initial: string
     height?: number | string
     minHeight?: number | string
-    maxHeight?: number | string
   }>(),
   {
-    minHeight: 200,
-    maxHeight: '100%',
+    minHeight: 240,
   }
 )
 const emit = defineEmits<{ update: [] }>()
@@ -35,32 +33,18 @@ const dirty = ref(false)
 // （表现为"源码永远指向第一个项目"，且保存时误用上一项的源码覆盖当前项）
 let applyingInitial = false
 
-const containerStyle = computed(() => {
-  const style: Record<string, string> = {
-    maxHeight: typeof props.maxHeight === 'number' ? `${props.maxHeight}px` : props.maxHeight,
+const resolvedHeight = computed(() => {
+  if (props.height !== undefined && props.height !== null && props.height !== '') {
+    return typeof props.height === 'number' ? `${props.height}px` : String(props.height)
   }
-  if (props.minHeight !== undefined) {
-    style.minHeight = typeof props.minHeight === 'number' ? `${props.minHeight}px` : props.minHeight
-  }
-  if (props.height) {
-    style.height = typeof props.height === 'number' ? `${props.height}px` : props.height
-  }
-  return style
+  return '440px'
 })
 
-const editorStyle = computed(() => {
-  const style: Record<string, string> = {
-    maxHeight: typeof props.maxHeight === 'number' ? `${props.maxHeight}px` : props.maxHeight,
+const resolvedMinHeight = computed(() => {
+  if (props.minHeight !== undefined && props.minHeight !== null && props.minHeight !== '') {
+    return typeof props.minHeight === 'number' ? `${props.minHeight}px` : String(props.minHeight)
   }
-  if (props.minHeight !== undefined) {
-    style.minHeight = typeof props.minHeight === 'number' ? `${props.minHeight}px` : props.minHeight
-  }
-  if (props.height) {
-    style.height = typeof props.height === 'number' ? `${props.height}px` : props.height
-  } else {
-    style.height = '100%'
-  }
-  return style
+  return '240px'
 })
 
 watch(
@@ -98,7 +82,7 @@ onMounted(() => {
         }
       }),
       EditorView.theme({
-        '&': { height: '100%', maxHeight: '100%', fontSize: '13px' },
+        '&': { height: '100%', fontSize: '13px' },
         '.cm-scroller': {
           fontFamily: "ui-monospace, 'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
           lineHeight: '1.6'
@@ -127,8 +111,8 @@ defineExpose({ getText, isDirty })
 
 <template>
   <div
-    class="flex flex-col gap-1.5 w-full h-full max-h-full flex-1 min-h-0"
-    :style="containerStyle"
+    class="flex flex-col gap-1.5 w-full"
+    :style="{ height: resolvedHeight, minHeight: resolvedMinHeight }"
   >
     <div v-if="dirty" class="text-xs text-warning leading-relaxed shrink-0">
       {{ $t('sourceDirtyHint') }}
@@ -136,7 +120,6 @@ defineExpose({ getText, isDirty })
     <div
       ref="editorHost"
       class="border border-base-300 rounded-md overflow-hidden text-left bg-base-100 flex-1 min-h-0 w-full"
-      :style="editorStyle"
     />
   </div>
 </template>
@@ -144,10 +127,8 @@ defineExpose({ getText, isDirty })
 <style scoped>
 :deep(.cm-editor) {
   height: 100%;
-  max-height: 100%;
 }
 :deep(.cm-scroller) {
   overflow: auto;
-  max-height: 100%;
 }
 </style>

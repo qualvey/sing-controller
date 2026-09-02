@@ -57,11 +57,12 @@ useResizeObserver(formContentRef, (entries) => {
   }
 })
 
-// 在「源码」Tab 下严格小于父容器可用高度，彻底消除外层滚动条，由 CodeMirror 内部滚动
+// 确保在「源码」Tab 与「表单」Tab 尺寸高度无缝一致，杜绝任何缩小与跳动
 const sourceEditorHeight = computed(() => {
-  if (typeof window === 'undefined') return 380
-  // 弹窗最大高度约 85vh，扣除标题栏、底部按钮栏、Padding 及 Tabs 切换栏后预留充足余量
-  const maxAvailable = Math.max(240, Math.floor(window.innerHeight * 0.85 - 190))
+  if (typeof window === 'undefined') return 440
+  // 弹窗最大可用净高度（85vh 减去头部45 + 底部49 + Padding32 + Tabs36）
+  const maxAvailable = Math.max(300, Math.floor(window.innerHeight * 0.85 - 170))
+  // 严格贴合表单已撑开的实际高度，若表单超高处于滚动状态则填满当前视口，平滑无跳动
   return Math.min(sharedTabHeight.value, maxAvailable)
 })
 
@@ -504,10 +505,10 @@ onMounted(() => {
       :model-value="modelValue"
       :title="isEdit ? $t('outboundsDialog.editTitle') : $t('outboundsDialog.createTitle')"
       box-class="max-w-[720px]"
-      :body-class="activeTab === 'source' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'"
+      :body-class="activeTab === 'source' ? 'overflow-hidden' : 'overflow-y-auto'"
       @update:model-value="(val) => emit('update:modelValue', !!val)"
     >
-      <TabsRoot v-model="activeTab" :class="activeTab === 'source' ? 'flex flex-col flex-1 min-h-0' : ''">
+      <TabsRoot v-model="activeTab">
         <TabsList class="self-start shrink-0">
           <TabsTrigger value="form">{{ $t('form') }}</TabsTrigger>
           <TabsTrigger value="source">{{ $t('source') }}</TabsTrigger>
@@ -717,7 +718,7 @@ onMounted(() => {
           </div>
         </div>
       </TabsContent>
-        <TabsContent value="source" :class="activeTab === 'source' ? 'flex-1 min-h-0 mt-2 flex flex-col' : ''">
+        <TabsContent value="source">
           <ResourceSourceTab ref="srcTab" :initial="sourceJson" :height="sourceEditorHeight" />
         </TabsContent>
       </TabsRoot>
