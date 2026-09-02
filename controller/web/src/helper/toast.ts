@@ -1,26 +1,22 @@
-// 极简全局 toast（重构过渡期替代 ElMessage 的公共设施）
-// 用法：showToast('保存成功', 'success')
-type ToastType = 'success' | 'error' | 'info' | 'warning'
+import { showNotification } from '@/helper/notification'
 
-let container: HTMLDivElement | null = null
+export type ToastType = 'success' | 'error' | 'info' | 'warning'
 
+const TOAST_TYPE_MAP: Record<ToastType, 'alert-success' | 'alert-error' | 'alert-info' | 'alert-warning'> = {
+  success: 'alert-success',
+  error: 'alert-error',
+  info: 'alert-info',
+  warning: 'alert-warning',
+}
+
+/**
+ * 全局统一 Toast 提示
+ * 桥接至系统级的 showNotification，具备完整的主题色彩、动画、图标与倒计时效果
+ */
 export function showToast(message: string, type: ToastType = 'info', duration = 2500): void {
-  if (!container) {
-    container = document.createElement('div')
-    container.className = 'toast-container'
-    document.body.appendChild(container)
-  }
-  const el = document.createElement('div')
-  el.className = `toast-item toast-${type}`
-  el.textContent = message
-  container.appendChild(el)
-  // 双 rAF 确保进入动画生效
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => el.classList.add('toast-in'))
+  showNotification({
+    content: message,
+    type: TOAST_TYPE_MAP[type] || 'alert-info',
+    timeout: duration,
   })
-  setTimeout(() => {
-    el.classList.remove('toast-in')
-    el.classList.add('toast-out')
-    setTimeout(() => el.remove(), 250)
-  }, duration)
 }
