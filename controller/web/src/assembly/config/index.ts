@@ -31,12 +31,28 @@ export const fetchConfigs = async () => (await load()).fetchConfigs()
 export const updateConfigs = async (cfg: Record<string, string | boolean | object | number>) =>
   (await load()).updateConfigs(cfg)
 
-// 配置 / 缓存 / DNS 维护动作(Clash 专属),经 config 域门面暴露给 view。
+import { controllerApi } from '@/api/controller'
+import {
+  flushDNSCacheAPI,
+  flushFakeIPAPI,
+  queryDNSAPI,
+  reloadConfigsAPI as clashReloadConfigsAPI,
+  updateConfigsAPI,
+  updateGeoDataAPI,
+} from '@/api/clash'
+import { activeBackend } from '@/store/setup'
+
+export const reloadConfigsAPI = async () => {
+  if (activeBackend.value?.type === 'controller' || channel.value === Channel.Singbox) {
+    return controllerApi.reload()
+  }
+  return clashReloadConfigsAPI()
+}
+
 export {
   flushDNSCacheAPI,
   flushFakeIPAPI,
   queryDNSAPI,
-  reloadConfigsAPI,
   updateConfigsAPI,
   updateGeoDataAPI,
-} from '@/api/clash'
+}

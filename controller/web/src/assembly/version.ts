@@ -1,9 +1,10 @@
 import { api } from '@/api'
+import { controllerApi } from '@/api/controller'
 import {
   fetchClashVersion,
   getClashWsUrl,
   probeClashChannel,
-  restartCoreAPI,
+  restartCoreAPI as clashRestartCoreAPI,
   upgradeCoreAPI,
   upgradeUIAPI,
 } from '@/api/clash'
@@ -293,5 +294,11 @@ export const checkUIUpdate = async () => {
   }
 }
 
-// 内核 / UI 维护动作(Clash 专属,无后端分支),经版本域门面暴露给 view。
-export { restartCoreAPI, upgradeCoreAPI, upgradeUIAPI }
+export const restartCoreAPI = async () => {
+  if (activeBackend.value?.type === 'controller' || channel.value === Channel.Singbox) {
+    return controllerApi.coreRestart()
+  }
+  return clashRestartCoreAPI()
+}
+
+export { upgradeCoreAPI, upgradeUIAPI }

@@ -115,10 +115,10 @@ const soft = computed(() => {
   const mihomoOrForkCore = mihomo || isForkCoreOverride.value
 
   return {
-    // ---------- mihomo 内核侧 ----------
+    // ---------- 核心控制与重载能力 ----------
     coreUpgrade: mihomoOrForkCore,
-    coreRestart: mihomoOrForkCore,
-    reloadConfigs: mihomoOrForkCore,
+    coreRestart: true,
+    reloadConfigs: true,
     updateConfigs: mihomoOrForkCore,
     updateGeoDatabase: mihomoOrForkCore,
     // /storage/zashboard 设置同步,mihomo 扩展

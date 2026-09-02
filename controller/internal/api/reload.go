@@ -25,6 +25,14 @@ import (
 
 // reloadNow 按配置执行一次重载；mode 为 none 时返回 (false, nil)。
 func (h *Handler) reloadNow() (bool, error) {
+	// 若 Supervisor 正在托管子进程，直接通过 Supervisor 毫秒级重载
+	if h.supervisor != nil && h.supervisor.Status().BinaryPath != "" {
+		if err := h.supervisor.Restart(context.Background()); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+
 	values := h.settings.Values()
 	reload := values.Reload
 	if reload == nil || reload.Mode == "none" {
