@@ -172,23 +172,32 @@ sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `
 - [ ] 在 CodeMirror 中基于 `jsonc-parser` + `schema.json` 接入**键名/枚举值智能补全 (Autocomplete)** 与 **悬浮字段文档 (Hover Tooltips)**。
 
 ### Phase 2: 进程管理器与日志管道 (Supervisor Engine)
-- [ ] 实现 Go `ProcessManager` 抽象，封装子进程启动、停止、重启与状态查询。
-- [ ] 接入 stdout/stderr 管道，实现内存 `RingBuffer` 与日志广播。
-- [ ] Windows 平台适配 Job Object 生命周期绑定（防孤儿进程）。
+- [x] 实现 Go `ProcessManager` 抽象，封装子进程启动、停止、重启与状态查询。
+- [x] 接入 stdout/stderr 管道，实现内存 `RingBuffer` 与日志广播。
+- [x] Windows 平台适配 Job Object 生命周期绑定（防孤儿进程）。
 
 ### Phase 3: 崩溃防护与自愈系统 (Crash Guard)
-- [ ] 捕获非正常退出与 Panic 堆栈，自动生成独立 Crash 日志文件。
-- [ ] 实现防频繁秒退的熔断/退避重试（Backoff）机制。
-- [ ] WebUI 增加内核状态指示灯、崩溃诊断弹窗与 Crash 日志下载。
+- [x] 捕获非正常退出与 Panic 堆栈，自动生成独立 Crash 日志文件。
+- [x] 实现防频繁秒退的熔断/退避重试（Backoff）机制。
+- [x] WebUI 增加内核状态指示灯、崩溃诊断日志。
 
-### Phase 4: Config URL 订阅与配置流转 (Subscription & Auto-Reload)
-- [ ] 实现远程 URL 定时拉取器与 ETag 差量缓存。
-- [ ] 集成 `sing-box check` 预检与配置原子更新流程。
-- [ ] 配置文件历史版本备份与 WebUI 一键回滚。
+### Phase 4: 多格式订阅与配置流转 (Subscription & Profiles / Auto-Reload)
+- [x] 实现 3 种订阅格式（Base64 纯节点 URI、Clash YAML、Sing-Box JSON）自动识别与解析提取。
+- [x] 实现 ETag 差量拉取与 Cron 定时后台自动拉取。
+- [x] 实现 `MergeAndValidateProfile` 内存合成、动态注入及删除订阅时的自动清污 (Purge) 闭环。
+- [x] WebUI 完成 `ProfileManagerModal`、方案卡片列表、订阅源表格与节点预览抽屉。
 
-### Phase 5: Wails 跨平台桌面端打包 (Desktop App with Wails)
+### Phase 5: 概览页控制面板增强与 3D 地球交互优化 (Overview & 3D Globe Controls)
+- [ ] **Overview 内核控制卡片 (Core Control Card)**：
+  - 在 Overview 概览页独立展示内核状态卡片，支持一键“重载配置 (Reload Config)”与“重启内核 (Restart Core)”；
+  - 联动展示当前活跃方案（Active Profile）并支持快速切换。
+- [ ] **3D 地球自由轨道控制器 (3D Globe Free Orbit Controls)**：
+  - 重构 3D 地球控制器，实现上下左右 360° 自由旋转、平滑惯性阻尼与滚轮缩放聚焦，解决旋转卡顿与轴向限制问题。
+
+### Phase 6: Wails 跨平台桌面端打包 (Desktop App with Wails)
 - [ ] 引入 **Wails (Go + Webview)** 框架，将 Controller 作为应用主核心，直接嵌入 WebUI。
 - [ ] 实现系统托盘 (System Tray) 支持：托盘菜单、快速切换代理模式/策略组、配置组一键切换。
 - [ ] 封装系统级能力：开机自启、原生通知提示、系统代理一键设置 (System Proxy)。
 - [ ] 桌面端跨平台打包流水线（Windows `.exe` / `.msi`、macOS `.app` / `.dmg`、Linux `.AppImage` / `.deb`）。
+
 
