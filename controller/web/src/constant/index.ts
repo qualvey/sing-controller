@@ -431,6 +431,7 @@ export enum SETTINGS_MENU_KEY {
 }
 
 export enum OVERVIEW_CARD {
+  CoreControlCard = 'CoreControlCard',
   ChartsCard = 'ChartsCard',
   NetworkCard = 'NetworkCard',
   ProviderTrafficOverview = 'ProviderTrafficOverview',

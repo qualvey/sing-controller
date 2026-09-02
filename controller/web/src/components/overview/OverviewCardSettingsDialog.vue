@@ -41,6 +41,7 @@ import Draggable from 'vuedraggable'
 const isOpen = defineModel<boolean>({ required: true })
 
 const cardKeyToLabelMap: Record<string, string> = {
+  CoreControlCard: 'coreControlCard',
   ChartsCard: 'chartsCard',
   NetworkCard: 'networkCard',
   ProviderTrafficOverview: 'providerTrafficOverview',

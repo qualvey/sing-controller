@@ -18,6 +18,7 @@
 import OverviewCtrl from '@/components/controls/OverviewCtrl.vue'
 import ChartsCard from '@/components/overview/ChartsCard.vue'
 import ConnectionHistory from '@/components/overview/ConnectionHistory.vue'
+import CoreControlCard from '@/components/overview/CoreControlCard.vue'
 import NetworkCard from '@/components/overview/NetworkCard.vue'
 import ProviderTrafficOverview from '@/components/overview/ProviderTrafficOverview.vue'
 import RuleHitCountCard from '@/components/overview/RuleHitCountCard.vue'
@@ -36,6 +37,7 @@ const visibleCards = computed(() => {
 })
 
 const cardComponents: Record<string, Component> = {
+  CoreControlCard,
   ChartsCard,
   NetworkCard,
   ProviderTrafficOverview,
