@@ -847,6 +847,53 @@ func (m *Manager) ApplyProfile(ctx context.Context, id string) error {
 	return nil
 }
 
+// DisableTun 从当前主配置中移除所有 type 为 "tun" 的入站，并重启内核
+func (m *Manager) DisableTun(ctx context.Context) error {
+	if m.store == nil {
+		return errors.New("store 未初始化")
+	}
+
+	opts := m.store.Options
+	newInbounds := make([]option.Inbound, 0, len(opts.Inbounds))
+	for _, in := range opts.Inbounds {
+		if in.Type != "tun" {
+			newInbounds = append(newInbounds, in)
+		}
+	}
+
+	// 确保至少有一个入站（若全部被移除则补充默认 mixed 2080 入站）
+	if len(newInbounds) == 0 {
+		mixedJSON := []byte(`{"type": "mixed", "tag": "in-main", "listen": "127.0.0.1", "listen_port": 2080}`)
+		if mixedIn, err := sjson.UnmarshalExtendedContext[option.Inbound](include.Context(ctx), mixedJSON); err == nil {
+			newInbounds = append(newInbounds, mixedIn)
+		}
+	}
+
+	opts.Inbounds = newInbounds
+
+	finalJSON, err := store.MarshalOptions(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("序列化配置失败: %w", err)
+	}
+
+	if err := store.Validate(ctx, finalJSON); err != nil {
+		return fmt.Errorf("移除 TUN 后配置校验失败: %w", err)
+	}
+
+	if err := m.store.RawSave(ctx, finalJSON); err != nil {
+		return fmt.Errorf("保存配置失败: %w", err)
+	}
+
+	logger.Info("[Provider] 已禁用 TUN 入站并更新主配置")
+
+	if m.supervisor != nil {
+		if err := m.supervisor.Restart(ctx); err != nil {
+			logger.Warn("[Provider] 重启内核失败: %v", err)
+		}
+	}
+	return nil
+}
+
 // startCronLoop 后台定时轮询自动更新订阅
 func (m *Manager) startCronLoop() {
 	ticker := time.NewTicker(1 * time.Minute)

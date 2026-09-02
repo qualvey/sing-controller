@@ -12,7 +12,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -127,6 +130,10 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	mux.HandleFunc("/api/clash/", h.handleClashProxy)
 	// service API ??（?? /api/grpc/* ?? services[type=api],gRPC-Web / WS）
 	mux.HandleFunc("/api/grpc/", h.handleServiceProxy)
+
+	// 系统与权限工具
+	mux.HandleFunc("POST /api/system/elevate", h.handleSystemElevate)
+	mux.HandleFunc("POST /api/system/disable-tun", h.handleSystemDisableTun)
 
 	// 工具
 	mux.HandleFunc("POST /api/tools/uuid", h.handleToolUUID)
@@ -403,22 +410,78 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		ruleCount = len(h.store.Options.Route.Rules)
 	}
 	coreStatus := h.probeCoreHealth(1 * time.Second)
+	tunDenied := false
+	if h.supervisor != nil {
+		tunDenied = h.supervisor.TunAccessDenied()
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"config_path":       h.store.Path(),
-		"config_exists":     h.store.Exists(),
-		"controller_config": h.settings.Path(),
-		"listen":            values.Listen,
-		"log_level":         values.Log.Level,
-		"min_port":          values.MinPort,
-		"defaults":          values.Defaults,
-		"inbounds":          len(h.store.Options.Inbounds),
-		"outbounds":         len(h.store.Options.Outbounds),
-		"rules":             ruleCount,
-		"core":              coreStatus,
-		"core_alive":        coreStatus.Alive,
-		"core_version":      coreStatus.Version,
-		"core_type":         coreStatus.Type,
-		"core_error":        coreStatus.Error,
+		"config_path":        h.store.Path(),
+		"config_exists":      h.store.Exists(),
+		"controller_config":  h.settings.Path(),
+		"listen":             values.Listen,
+		"log_level":          values.Log.Level,
+		"min_port":           values.MinPort,
+		"defaults":           values.Defaults,
+		"inbounds":           len(h.store.Options.Inbounds),
+		"outbounds":          len(h.store.Options.Outbounds),
+		"rules":              ruleCount,
+		"core":               coreStatus,
+		"core_alive":         coreStatus.Alive,
+		"core_version":       coreStatus.Version,
+		"core_type":          coreStatus.Type,
+		"core_error":         coreStatus.Error,
+		"tun_access_denied":  tunDenied,
+	})
+}
+
+// handleSystemElevate 触发 UAC 提权并以管理员身份重启 controller 进程
+func (h *Handler) handleSystemElevate(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS != "windows" {
+		writeError(w, http.StatusBadRequest, errors.New("仅 Windows 系统支持 UAC 提权"))
+		return
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("获取程序路径失败: %w", err))
+		return
+	}
+
+	args := os.Args[1:]
+	argStr := strings.Join(args, " ")
+
+	psCmd := fmt.Sprintf("Start-Process -FilePath '%s' -ArgumentList '%s' -Verb RunAs", exePath, argStr)
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
+	if err := cmd.Start(); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("启动提权进程失败: %w", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "已成功拉起管理员提权窗口",
+	})
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		os.Exit(0)
+	}()
+}
+
+// handleSystemDisableTun 移除主配置中的 TUN 入站并自动重启内核
+func (h *Handler) handleSystemDisableTun(w http.ResponseWriter, r *http.Request) {
+	if h.providerMgr == nil {
+		writeError(w, http.StatusInternalServerError, errors.New("provider manager 未就绪"))
+		return
+	}
+
+	if err := h.providerMgr.DisableTun(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("禁用 TUN 模式失败: %w", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "已成功移除 TUN 模式并重新加载配置",
 	})
 }
 

@@ -34,8 +34,9 @@ type Manager struct {
 	stoppedAt   *time.Time
 	exitCode    int
 	lastError   string
-	restarts    int
-	recentExits []time.Time
+	restarts        int
+	recentExits     []time.Time
+	tunAccessDenied bool
 
 	platform *platformData
 	logs     *RingBuffer
@@ -87,12 +88,19 @@ func (m *Manager) Status() StatusInfo {
 		UptimeSec:  uptime,
 		StartedAt:  m.startedAt,
 		StoppedAt:  m.stoppedAt,
-		ExitCode:   m.exitCode,
-		LastError:  m.lastError,
-		BinaryPath: m.cfg.BinaryPath,
-		ConfigPath: m.cfg.ConfigPath,
-		Restarts:   m.restarts,
+		ExitCode:        m.exitCode,
+		LastError:       m.lastError,
+		BinaryPath:      m.cfg.BinaryPath,
+		ConfigPath:      m.cfg.ConfigPath,
+		Restarts:        m.restarts,
+		TunAccessDenied: m.tunAccessDenied,
 	}
+}
+
+func (m *Manager) TunAccessDenied() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.tunAccessDenied
 }
 
 func (m *Manager) Logs(limit int) []LogLine {
@@ -193,6 +201,7 @@ func (m *Manager) startLocked(ctx context.Context) error {
 	m.startedAt = &now
 	m.state = StateRunning
 	m.lastError = ""
+	m.tunAccessDenied = false
 
 	m.broadcast(LogLine{
 		Timestamp: now,
@@ -212,6 +221,12 @@ func (m *Manager) streamLogs(r io.Reader, source string) {
 	for scanner.Scan() {
 		text := scanner.Text()
 		logger.Info("[Core/%s] %s", source, text)
+		lower := strings.ToLower(text)
+		if strings.Contains(lower, "access is denied") && strings.Contains(lower, "tun") {
+			m.mu.Lock()
+			m.tunAccessDenied = true
+			m.mu.Unlock()
+		}
 		m.broadcast(LogLine{
 			Timestamp: time.Now(),
 			Source:    source,
