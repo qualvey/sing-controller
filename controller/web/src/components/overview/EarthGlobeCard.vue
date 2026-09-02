@@ -268,35 +268,41 @@
     <Teleport to="body">
       <div
         v-if="hoveredEndpoint"
-        class="bg-base-100 border-base-300 pointer-events-none fixed z-[10000] min-w-40 rounded-lg border p-2 text-xs shadow-xl"
+        class="bg-base-100/95 border-base-300 pointer-events-none fixed z-[10000] min-w-44 max-w-80 rounded-xl border p-2.5 text-xs shadow-2xl backdrop-blur-md"
         :style="tooltipStyle"
       >
-        <div class="font-semibold">
+        <div class="font-bold text-sm text-base-content">
           {{
             [hoveredEndpoint.city, hoveredEndpoint.country].filter(Boolean).join(', ') ||
             t('unknown')
           }}
         </div>
-        <div class="text-base-content/65 mt-1">
-          {{ t('earthEndpointRole') }}: {{ t(`earthRole_${hoveredEndpoint.role}`) }}
+        <div class="text-base-content/65 mt-1.5 flex items-center justify-between gap-2">
+          <span>{{ t('earthEndpointRole') }}:</span>
+          <span class="font-medium text-base-content/90">{{ t(`earthRole_${hoveredEndpoint.role}`) }}</span>
         </div>
-        <div class="text-base-content/65">
-          {{ t('connectionCount') }}: {{ hoveredEndpoint.connections }}
+        <div class="text-base-content/65 flex items-center justify-between gap-2">
+          <span>{{ t('connectionCount') }}:</span>
+          <span class="font-semibold text-primary">{{ hoveredEndpoint.connections }}</span>
         </div>
         <div
-          v-if="hoveredEndpoint.role === 'destination' && hoveredEndpoint.topHosts.length"
+          v-if="hoveredEndpoint.topHosts && hoveredEndpoint.topHosts.length"
           class="border-base-300 mt-2 border-t pt-1.5"
         >
-          <div class="text-base-content/55 mb-1">{{ t('earthTopDownloadedHosts') }}</div>
-          <div
-            v-for="(item, index) in hoveredEndpoint.topHosts"
-            :key="`${item.host}-${index}`"
-            class="flex max-w-64 items-center justify-between gap-3 leading-5"
-          >
-            <span class="min-w-0 truncate font-mono">{{ item.host }}</span>
-            <span class="text-base-content/55 shrink-0">{{
-              prettyBytesHelper(item.downloaded)
-            }}</span>
+          <div class="text-base-content/55 mb-1.5 font-medium flex items-center justify-between text-[11px]">
+            <span>{{ t('earthTopDownloadedHosts') }}</span>
+          </div>
+          <div class="flex flex-col gap-1 max-h-48 overflow-y-auto">
+            <div
+              v-for="(item, index) in hoveredEndpoint.topHosts"
+              :key="`${item.host}-${index}`"
+              class="flex items-center justify-between gap-3 text-[11px] leading-4 bg-base-200/50 rounded px-1.5 py-0.5"
+            >
+              <span class="min-w-0 truncate font-mono text-primary font-medium">{{ item.host }}</span>
+              <span class="text-base-content/55 shrink-0 text-[10px]">{{
+                prettyBytesHelper(item.downloaded)
+              }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -622,6 +628,16 @@ const handleWorkerMessage = ({ data }: MessageEvent<GeoWorkerResponse>) => {
 const handleEndpointHover = (info: EarthEndpointInfo | null, x?: number, y?: number) => {
   hoveredEndpoint.value = info
   if (x != null && y != null) tooltipPosition.value = { x, y }
+
+  if (info) {
+    // 鼠标悬停在路径节点上时，暂停自转，方便用户查看与阅读关联连接地址
+    renderer.value?.setAutoRotation(false)
+  } else {
+    // 鼠标移出后，若用户没有手动暂停自转，则恢复自转
+    if (!rotationPaused.value) {
+      renderer.value?.setAutoRotation(true)
+    }
+  }
 }
 
 const toggleRotation = () => {

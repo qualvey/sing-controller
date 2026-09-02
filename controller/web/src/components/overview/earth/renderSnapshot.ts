@@ -31,9 +31,7 @@ export const createEarthRenderSnapshot = (incomingRoutes: readonly EarthRoute[])
 
       if (existing) {
         existing.connections += route.connections
-        if (point.role === 'destination') {
-          existing.topHosts = mergeTopHosts(existing.topHosts, route.topHosts)
-        }
+        existing.topHosts = mergeTopHosts(existing.topHosts, route.topHosts)
       } else {
         endpoints.set(key, {
           key,
@@ -41,7 +39,7 @@ export const createEarthRenderSnapshot = (incomingRoutes: readonly EarthRoute[])
           country: point.country,
           role: point.role,
           connections: route.connections,
-          topHosts: point.role === 'destination' ? [...route.topHosts] : [],
+          topHosts: [...route.topHosts],
           position: toEarthVector(point).multiplyScalar(ENDPOINT_RADIUS),
         })
       }
