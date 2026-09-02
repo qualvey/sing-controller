@@ -100,30 +100,103 @@ proxy_set_header Connection "upgrade";</code></pre>
           </div>
         </div>
 
+        <!-- 崩溃/核心离线时的日志查看器 -->
+        <div
+          v-if="isCoreOffline"
+          class="border-base-border bg-base-200/60 flex flex-col rounded-lg border p-2.5 text-xs"
+        >
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-base-content/80 flex items-center gap-1.5">
+              <CommandLineIcon class="h-3.5 w-3.5 opacity-70" />
+              内核运行与崩溃日志
+            </span>
+            <button
+              class="btn btn-ghost btn-xs text-primary h-6 min-h-0 px-2"
+              @click="toggleLogs"
+            >
+              {{ showLogs ? '收起日志 ▲' : '查看日志 ▼' }}
+            </button>
+          </div>
+          <div
+            v-if="showLogs"
+            class="mt-2 flex flex-col gap-1"
+          >
+            <div
+              v-if="loadingLogs"
+              class="flex items-center justify-center py-4 text-base-content/50"
+            >
+              <span class="loading loading-spinner loading-xs mr-2"></span>
+              加载日志中...
+            </div>
+            <div
+              v-else-if="coreLogs.length === 0"
+              class="py-2 text-center text-base-content/40 text-[11px]"
+            >
+              暂无日志记录
+            </div>
+            <div
+              v-else
+              class="bg-base-300 text-base-content/90 max-h-48 overflow-y-auto rounded p-2 text-[11px] font-mono leading-relaxed select-all"
+            >
+              <div
+                v-for="(line, idx) in coreLogs"
+                :key="idx"
+                class="break-all"
+                :class="{
+                  'text-error': line.source === 'stderr' || line.message.includes('panic') || line.message.includes('fatal') || line.message.includes('error'),
+                  'text-warning': line.source === 'system',
+                  'text-base-content/80': line.source === 'stdout',
+                }"
+              >
+                <span class="opacity-40">[{{ formatLogTime(line.timestamp) }}]</span>
+                <span class="opacity-60 ml-1">[{{ line.source }}]</span>
+                {{ line.message }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="flex flex-col gap-2">
           <div class="flex gap-2">
-            <!-- 核心离线时提供一键重启/重载核心 -->
+            <!-- 核心离线时提供一键启动/重启核心 -->
             <button
               v-if="isCoreOffline"
               class="btn btn-primary btn-sm flex-1"
-              :disabled="isReloading || isRetrying"
-              @click="reloadCore"
+              :disabled="isStarting || isRetrying"
+              @click="handleCoreAction('start')"
             >
               <span
-                v-if="isReloading"
+                v-if="isStarting"
+                class="loading loading-spinner loading-xs"
+              ></span>
+              <PlayIcon
+                v-else
+                class="h-4 w-4"
+              />
+              {{ isStarting ? '正在启动...' : '启动核心' }}
+            </button>
+
+            <button
+              v-if="isCoreOffline"
+              class="btn btn-neutral btn-sm flex-1"
+              :disabled="isRestarting || isRetrying"
+              @click="handleCoreAction('restart')"
+            >
+              <span
+                v-if="isRestarting"
                 class="loading loading-spinner loading-xs"
               ></span>
               <ArrowPathIcon
                 v-else
                 class="h-4 w-4"
               />
-              {{ isReloading ? '正在重载核心...' : '重载核心' }}
+              {{ isRestarting ? '正在重启...' : '重启核心' }}
             </button>
 
             <button
               class="btn btn-sm flex-1"
               :class="{ 'btn-primary': !isCoreOffline, 'btn-outline': isCoreOffline }"
-              :disabled="isRetrying || isReloading"
+              :disabled="isRetrying || isStarting || isRestarting"
               @click="retry"
             >
               <span
@@ -175,7 +248,7 @@ proxy_set_header Connection "upgrade";</code></pre>
 </template>
 
 <script setup lang="ts">
-import { api } from '@/api'
+import { api, type CoreLogLine } from '@/api'
 import { startBackendSession } from '@/assembly/session'
 import { backendProbe } from '@/assembly/version'
 import { ROUTE_NAME } from '@/constant'
@@ -193,16 +266,48 @@ import { useStatusStore } from '@/store/status'
 import {
   ArrowPathIcon,
   ChevronRightIcon,
+  CommandLineIcon,
   ExclamationTriangleIcon,
+  PlayIcon,
   ServerIcon,
 } from '@heroicons/vue/24/outline'
+import dayjs from 'dayjs'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 const statusStore = useStatusStore()
 const detail = ref('')
-const isReloading = ref(false)
+const isStarting = ref(false)
+const isRestarting = ref(false)
 const copiedNginx = ref(false)
+
+const showLogs = ref(false)
+const loadingLogs = ref(false)
+const coreLogs = ref<CoreLogLine[]>([])
+
+const formatLogTime = (ts: string) => {
+  if (!ts) return ''
+  return dayjs(ts).format('HH:mm:ss.SSS')
+}
+
+const fetchCoreLogs = async () => {
+  loadingLogs.value = true
+  try {
+    const res = await api.coreLogs(60)
+    coreLogs.value = res.logs || []
+  } catch (e) {
+    console.warn('获取核心日志失败:', e)
+  } finally {
+    loadingLogs.value = false
+  }
+}
+
+const toggleLogs = () => {
+  showLogs.value = !showLogs.value
+  if (showLogs.value && coreLogs.value.length === 0) {
+    void fetchCoreLogs()
+  }
+}
 
 // 探测结果属于上一个后端时不认,免得刚切走就弹一个旧后端的失败。
 const probe = computed(() =>
@@ -322,18 +427,33 @@ const retry = () => {
   startBackendSession()
 }
 
-const reloadCore = async () => {
-  if (isReloading.value) return
-  isReloading.value = true
+const handleCoreAction = async (action: 'start' | 'restart') => {
+  if (action === 'start') {
+    if (isStarting.value) return
+    isStarting.value = true
+  } else {
+    if (isRestarting.value) return
+    isRestarting.value = true
+  }
+
   try {
-    const res = await api.reload()
-    showToast(res.reloaded ? 'sing-box 核心重载成功' : '已发送重载指令', 'success')
+    if (action === 'start') {
+      await api.coreStart()
+      showToast('已启动 sing-box 内核', 'success')
+    } else {
+      await api.coreRestart()
+      showToast('已重启 sing-box 内核', 'success')
+    }
     await statusStore.refresh()
-    startBackendSession()
+    setTimeout(() => {
+      startBackendSession()
+    }, 500)
   } catch (e) {
-    showToast((e as Error).message || '重载核心失败', 'error')
+    showToast((e as Error).message || `${action === 'start' ? '启动' : '重启'}核心失败`, 'error')
+    void fetchCoreLogs()
   } finally {
-    isReloading.value = false
+    isStarting.value = false
+    isRestarting.value = false
   }
 }
 
