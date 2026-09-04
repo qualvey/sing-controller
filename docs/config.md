@@ -126,11 +126,13 @@ WebUI 页面及 Controller 内部反向代理到 sing-box 的通信端点。
 ### 5. `stats`（流量统计与实时监控）
 控制后台 Collector 对流量和用户连接的数据统计行为。
 
-| 字段 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `poll_interval` | string | `"10s"` | 从 sing-box v2ray stats 采集数据的轮询周期（Go duration 格式） |
-| `pattern` | string | `""` | 流量统计规则匹配过滤正则 |
-| `reset_on_query` | bool | `false` | 查询时是否通知内核重置计数器 |
-| `real_time.enabled` | bool | `false` | 是否开启实时 WebSocket 流量推送广播 |
-| `real_time.interval_ms` | int | `1000` | 实时广播频率（毫秒） |
-| `real_time.online_threshold_sec` | int | `60` | 判定用户/节点在线的活跃超时时间（秒） |
+| 字段　　　　　　　　　　　　　　 | 类型　 | 默认值　| 说明　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 |
+| :---------------------------------| :-------| :--------| :---------------------------------------------------------------|
+| `poll_interval`　　　　　　　　　| string | `"10s"` | 从 sing-box v2ray stats 采集数据的轮询周期（Go duration 格式） |
+| `pattern`　　　　　　　　　　　　| string | `""`　　| 流量统计规则匹配过滤正则　　　　　　　　　　　　　　　　　　　 |
+| `reset_on_query`　　　　　　　　 | bool　 | `false` | 查询时是否通知内核重置计数器　　　　　　　　　　　　　　　　　 |
+| `real_time.enabled`　　　　　　　| bool　 | `false` | 是否开启实时 WebSocket 流量推送广播　　　　　　　　　　　　　　|
+| `real_time.interval_ms`　　　　　| int　　| `1000`　| 实时广播频率（毫秒）　　　　　　　　　　　　　　　　　　　　　 |
+| `real_time.online_threshold_sec` | int　　| `60`　　| 判定用户/节点在线的活跃超时时间（秒）　　　　　　　　　　　　　|
+
+|

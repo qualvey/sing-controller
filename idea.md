@@ -3,7 +3,8 @@
 - [x] OverView 概览页控制面板独立卡片：重载配置、重启内核与方案联动（已落地）
 - [x] 3D 地球自由轨道旋转交互优化：上下左右 360° 顺畅旋转与阻尼惯性（已落地）
 - [] codeEditor ctl+s 保存而不是触发保存网页
-
+- [] proxiesPage-> GroupTab ->右键也有删除和编辑（拉取所有节点作为候选）
+- [] proxiesGroup内的节点，右键菜单添加"设为默认", 结果->config.json中将该项目至于数组的第一个
 > 💡 **已评审并落地为规划方案**：完整架构与实施方案请查阅 [plan.md](file:///C:/Users/Ryu/Documents/sing-box-webui/plan.md)。
 
 ## 和内核一起打包。
