@@ -11,9 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/include"
@@ -95,26 +98,128 @@ func Parse(ctx context.Context, content []byte) (option.Options, error) {
 	return sjson.UnmarshalExtendedContext[option.Options](ctx, content)
 }
 
-// Validate 完整校验：解码 + box.New 干跑（复用 daemon.CheckConfig 模式）。
+// BinaryPath 允许主程序注入定位到的 sing-box 二进制路径
+var BinaryPath string
+
+// FindSingBoxBinary 自动查找宿主机上的 sing-box 二进制
+func FindSingBoxBinary() string {
+	if BinaryPath != "" {
+		if fi, err := os.Stat(BinaryPath); err == nil && !fi.IsDir() {
+			return BinaryPath
+		}
+	}
+	candidates := []string{
+		"./sing-box.exe",
+		"./sing-box",
+		"../sing-box.exe",
+		"../sing-box",
+	}
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		candidates = append([]string{
+			filepath.Join(exeDir, "sing-box.exe"),
+			filepath.Join(exeDir, "sing-box"),
+		}, candidates...)
+	}
+	candidates = append(candidates,
+		"/usr/bin/sing-box",
+		"/usr/local/bin/sing-box",
+	)
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+			return c
+		}
+	}
+	if path, err := exec.LookPath("sing-box"); err == nil {
+		return path
+	}
+	return ""
+}
+
+// Validate 校验配置：
+//  1. 纯语法与 Schema 严格解码（保证格式符合规范、无重复 tag）；
+//  2. 优先通过宿主环境外挂内核执行 `sing-box check -c <tmp>` 进行最权威校验；
+//  3. 若宿主未找到 sing-box 二进制，则使用纯内存 box.New 兜底（并豁免因 controller 裁剪 tags 引发的缺少驱动错误）。
 func Validate(ctx context.Context, content []byte) error {
 	ctx = include.Context(ctx)
 	options, err := Parse(ctx, content)
 	if err != nil {
 		return err
 	}
+
+	// 1. 优先使用宿主机原生内核进行实际 check -c 校验（100% 匹配宿主内核编译 tags）
+	bin := FindSingBoxBinary()
+	if bin != "" {
+		tmpDir, err := os.MkdirTemp("", "sing-box-check-*")
+		if err == nil {
+			defer os.RemoveAll(tmpDir)
+			tmpFile := filepath.Join(tmpDir, "config.json")
+			if err := os.WriteFile(tmpFile, content, 0600); err == nil {
+				cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(cctx, bin, "check", "-c", tmpFile)
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					cleanErr := strings.TrimSpace(string(out))
+					if cleanErr != "" {
+						return errors.New(cleanErr)
+					}
+					return fmt.Errorf("sing-box check failed: %w", err)
+				}
+				return nil
+			}
+		}
+	}
+
+	// 2. 降级备用：无外部内核时用内置 box.New 干跑（豁免缺 build tag 导致的误报）
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	instance, err := box.New(box.Options{Context: cctx, Options: options})
 	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "is not included in this build") || strings.Contains(errMsg, "rebuild with -tags") {
+			return nil
+		}
 		return err
 	}
 	instance.Close()
 	return nil
 }
 
-func defaultConfig(inboundType string, listen string, listenPort uint16) option.Options {
+// Exists 检查主配置文件是否真实存在于磁盘
+func (s *Store) Exists() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := os.Stat(s.path); err == nil {
+		return true
+	}
+	return false
+}
+
+// DefaultOptions 生成默认基础配置骨架（包含内置 gRPC API 端口 9900）
+func DefaultOptions(defaults DefaultConfig) option.Options {
+	inboundType := defaults.InboundType
+	if inboundType == "" {
+		inboundType = "mixed"
+	}
+	listen := defaults.Listen
+	if listen == "" {
+		listen = "127.0.0.1"
+	}
+	listenPort := defaults.ListenPort
+	if listenPort == 0 {
+		listenPort = 2080
+	}
+
 	content := []byte(`{
   "log": { "level": "info", "timestamp": true },
+  "services": [
+    {
+      "type": "api",
+      "listen": "127.0.0.1",
+      "listen_port": 9900
+    }
+  ],
   "inbounds": [
     { "type": "` + inboundType + `", "tag": "in-main", "listen": "` + listen + `", "listen_port": ` + itoa(listenPort) + ` }
   ],
@@ -131,18 +236,24 @@ func defaultConfig(inboundType string, listen string, listenPort uint16) option.
 	return options
 }
 
+func defaultConfig(inboundType string, listen string, listenPort uint16) option.Options {
+	return DefaultOptions(DefaultConfig{
+		InboundType: inboundType,
+		Listen:      listen,
+		ListenPort:  listenPort,
+	})
+}
+
 func itoa(value uint16) string { return strconv.FormatUint(uint64(value), 10) }
 
-// Load 读取主配置文件；不存在时按默认值生成骨架（由调用方传入 settings 默认值）。
+// Load 读取主配置文件；不存在时仅初始化内存骨架，不自动落盘。
 func (s *Store) Load(ctx context.Context, defaults DefaultConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	content, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		s.Options = defaultConfig(defaults.InboundType, defaults.Listen, defaults.ListenPort)
-		if err := s.saveLocked(ctx); err != nil {
-			return err
-		}
+		s.Options = DefaultOptions(defaults)
+		s.Meta = loadMeta(s.metaPath, 0, 0, 0, 0)
 		return nil
 	}
 	if err != nil {
@@ -275,6 +386,7 @@ func (s *Store) saveRawLocked(ctx context.Context, content []byte) error {
 		_ = os.WriteFile(s.path+".bak", content, 0o644)
 	}
 	tmp := s.path + ".tmp"
+	_ = os.Remove(tmp)
 	if err := os.WriteFile(tmp, content, 0o644); err != nil {
 		return err
 	}
@@ -303,6 +415,7 @@ func (s *Store) saveLocked(ctx context.Context) error {
 		_ = os.WriteFile(s.path+".bak", content, 0o644)
 	}
 	tmp := s.path + ".tmp"
+	_ = os.Remove(tmp)
 	if err := os.WriteFile(tmp, content, 0o644); err != nil {
 		return err
 	}

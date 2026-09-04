@@ -10,6 +10,7 @@ export interface CoreStatusInfo {
 
 export interface StatusInfo {
   config_path: string
+  config_exists?: boolean
   controller_config: string
   listen: string
   log_level: string
@@ -30,6 +31,7 @@ export interface StatusInfo {
   core_version?: string
   core_type?: string
   core_error?: string
+  tun_access_denied?: boolean
 }
 
 export interface ControllerSettings {
@@ -61,6 +63,7 @@ export interface Outbound {
   tag: string
   server?: string
   server_port?: number
+  attach_groups?: string[]
   [key: string]: unknown
 }
 
@@ -169,6 +172,10 @@ export const api = {
       })
       .then((r) => r.data),
 
+  // 系统与权限工具
+  elevateProcess: () => http.post<{ message: string }>('/system/elevate').then((r) => r.data),
+  disableTun: () => http.post<{ message: string }>('/system/disable-tun').then((r) => r.data),
+
   // 工具
   genUuid: () => http.post<{ uuid: string }>('/tools/uuid').then((r) => r.data.uuid),
   genRealityKeypair: () =>
@@ -176,16 +183,24 @@ export const api = {
   genPassword: () => http.post<{ password: string }>('/tools/password').then((r) => r.data.password),
   parseJson: (json: string) =>
     http.post<{ ok: boolean; data: unknown }>('/tools/parse-json', { json }).then((r) => r.data),
+  parseNode: (text: string) =>
+    http.post<{ ok: boolean; data: unknown }>('/tools/parse-node', { text }).then((r) => r.data),
 
   // Outbound CRUD
   outbounds: () => http.get<{ outbounds: Outbound[] }>('/outbounds').then((r) => r.data.outbounds),
   getOutbound: (tag: string) =>
     http.get<Outbound>(`/outbounds/${encodeURIComponent(tag)}`).then((r) => r.data),
-  createOutbound: (o: Outbound) => http.post('/outbounds', o).then((r) => r.data),
-  updateOutbound: (tag: string, o: Outbound) =>
-    http.put(`/outbounds/${encodeURIComponent(tag)}`, o).then((r) => r.data),
-  deleteOutbound: (tag: string, force = false) =>
-    http.delete(`/outbounds/${encodeURIComponent(tag)}${force ? '?force=true' : ''}`).then((r) => r.data),
+  createOutbound: (o: Outbound, reload = true) =>
+    http.post(`/outbounds${reload ? '?reload=true' : ''}`, o).then((r) => r.data),
+  updateOutbound: (tag: string, o: Outbound, reload = true) =>
+    http.put(`/outbounds/${encodeURIComponent(tag)}${reload ? '?reload=true' : ''}`, o).then((r) => r.data),
+  deleteOutbound: (tag: string, force = false, reload = true) => {
+    const params = new URLSearchParams()
+    if (force) params.set('force', 'true')
+    if (reload) params.set('reload', 'true')
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    return http.delete(`/outbounds/${encodeURIComponent(tag)}${qs}`).then((r) => r.data)
+  },
 
   // Inbound CRUD
   inbounds: () => http.get<{ inbounds: Inbound[] }>('/inbounds').then((r) => r.data.inbounds),

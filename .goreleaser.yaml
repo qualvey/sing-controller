@@ -49,8 +49,8 @@ nfpms:
     homepage: https://github.com/qualvey/sing-controller
     maintainer: qualvey <wel@ryugo.org>
     description: |-
-      sing-box controller - RESTful configuration management service for sing-box.
-      Generates and validates sing-box config.json; does not run the proxy itself.
+      sing-box controller - RESTful configuration management service and process supervisor for sing-box.
+      Manages sing-box lifecycle, provides WebUI, configuration generation, and hot-reload.
     license: GPL-3.0
     formats:
       - deb

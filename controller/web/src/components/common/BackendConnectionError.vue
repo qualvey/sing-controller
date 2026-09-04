@@ -203,7 +203,13 @@ proxy_set_header Connection "upgrade";</code></pre>
                 v-if="isRetrying"
                 class="loading loading-spinner loading-xs"
               ></span>
-              {{ isRetrying ? $t('backendConnecting') : $t('retry') }}
+              {{
+                isRetrying
+                  ? $t('backendConnecting')
+                  : autoRetryCountdown > 0
+                    ? `${$t('retry')} (${autoRetryCountdown}s)`
+                    : $t('retry')
+              }}
             </button>
             <button
               class="btn btn-sm flex-1"
@@ -262,7 +268,7 @@ import {
   backendManagerView,
   openBackendManager,
 } from '@/store/setup'
-import { useStatusStore } from '@/store/status'
+import { isCoreReloading, useStatusStore } from '@/store/status'
 import {
   ArrowPathIcon,
   ChevronRightIcon,
@@ -272,7 +278,7 @@ import {
   ServerIcon,
 } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 const statusStore = useStatusStore()
@@ -374,10 +380,24 @@ const copyNginxConfig = async () => {
 const failed = ref(false)
 
 watch(
-  [() => probe.value?.status, () => statusStore.status?.core_alive, () => statusStore.status?.core?.alive],
-  ([status, coreAlive, coreObjAlive]) => {
+  [
+    () => probe.value?.status,
+    () => statusStore.status?.core_alive,
+    () => statusStore.status?.core?.alive,
+    () => statusStore.status?.config_exists,
+    () => statusStore.status?.tun_access_denied,
+  ],
+  ([status, coreAlive, coreObjAlive, configExists, tunDenied]) => {
+    // 初次冷启动未生成主配置或 TUN 权限不足时，由引导/提权弹窗接管，不触发全屏阻断
+    if (configExists === false || tunDenied) {
+      failed.value = false
+      return
+    }
     if (status === 'failed' || coreAlive === false || coreObjAlive === false) {
       failed.value = true
+      if (coreAlive === true && coreObjAlive !== false && status === 'failed') {
+        startBackendSession()
+      }
     } else if (status === 'connected' || status === undefined) {
       failed.value = false
     }
@@ -387,9 +407,16 @@ watch(
 
 // 管理面板自己会实时探测,盖在它上面只会挡路;
 // Setup 页本来就是登录后端的地方,不必再盖一层。
+// 处于预期内的核心重载期时不弹窗阻断。
 const route = useRoute()
 const visible = computed(
-  () => failed.value && backendManagerView.value === null && route.name !== ROUTE_NAME.setup,
+  () =>
+    failed.value &&
+    !isCoreReloading.value &&
+    statusStore.status?.config_exists !== false &&
+    !statusStore.status?.tun_access_denied &&
+    backendManagerView.value === null &&
+    route.name !== ROUTE_NAME.setup,
 )
 
 const label = computed(() => (activeBackend.value ? getLabelFromBackend(activeBackend.value) : ''))
@@ -422,7 +449,50 @@ watch(
   { immediate: true },
 )
 
+const autoRetryCountdown = ref(5)
+let autoRetryTimer: ReturnType<typeof setInterval> | null = null
+
+const stopAutoRetry = () => {
+  if (autoRetryTimer) {
+    clearInterval(autoRetryTimer)
+    autoRetryTimer = null
+  }
+  autoRetryCountdown.value = 5
+}
+
+const startAutoRetry = () => {
+  stopAutoRetry()
+  autoRetryCountdown.value = 5
+  autoRetryTimer = setInterval(() => {
+    if (autoRetryCountdown.value > 1) {
+      autoRetryCountdown.value--
+    } else {
+      autoRetryCountdown.value = 5
+      if (!isRetrying.value && !isStarting.value && !isRestarting.value) {
+        retry()
+      }
+    }
+  }, 1000)
+}
+
+watch(
+  visible,
+  (val) => {
+    if (val) {
+      startAutoRetry()
+    } else {
+      stopAutoRetry()
+    }
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  stopAutoRetry()
+})
+
 const retry = () => {
+  autoRetryCountdown.value = 5
   void statusStore.refresh()
   startBackendSession()
 }

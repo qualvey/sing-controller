@@ -1,3 +1,4 @@
+// Package logger 提供统一的日志输出抽象，支持级别控制和文件落地。
 package logger
 
 import (
@@ -6,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -70,12 +72,12 @@ func ParseLevel(s string) Level {
 }
 
 var (
-	defaultWriter io.Writer       = os.Stdout
-	std                           = log.New(defaultWriter, "", log.LstdFlags)
+	defaultWriter io.Writer      = os.Stderr
+	std                          = log.New(defaultWriter, "", log.LstdFlags)
 	mu            sync.RWMutex
-	currentLevel  Level           = LevelInfo
-	slogLevelVar  *slog.LevelVar  = new(slog.LevelVar)
-	initOnce      sync.Once
+	currentLevel  Level          = LevelInfo
+	slogLevelVar  *slog.LevelVar = new(slog.LevelVar)
+	logFileHandle *os.File
 )
 
 func init() {
@@ -86,9 +88,56 @@ func init() {
 	slog.SetDefault(slog.New(handler))
 }
 
-// Init 初始化日志系统（设置日志级别与输出）
-func Init(level string) {
+// Init 初始化日志系统（设置日志级别与可选的文件落地）
+func Init(level string, output string, outfile string) {
 	SetLevel(level)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 清理旧的文件句柄
+	if logFileHandle != nil {
+		_ = logFileHandle.Close()
+		logFileHandle = nil
+	}
+
+	var writers []io.Writer
+
+	output = strings.ToLower(strings.TrimSpace(output))
+	switch output {
+	case "stdout":
+		writers = append(writers, os.Stdout)
+	case "file":
+		// 仅写入文件
+	default: // stderr 或未指定
+		writers = append(writers, os.Stderr)
+	}
+
+	if outfile != "" {
+		if err := os.MkdirAll(filepath.Dir(outfile), 0755); err == nil {
+			if f, err := os.OpenFile(outfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+				logFileHandle = f
+				writers = append(writers, f)
+			}
+		}
+	}
+
+	if len(writers) == 0 {
+		writers = append(writers, os.Stderr)
+	}
+
+	var finalWriter io.Writer
+	if len(writers) == 1 {
+		finalWriter = writers[0]
+	} else {
+		finalWriter = io.MultiWriter(writers...)
+	}
+
+	std.SetOutput(finalWriter)
+	handler := slog.NewTextHandler(finalWriter, &slog.HandlerOptions{
+		Level: slogLevelVar,
+	})
+	slog.SetDefault(slog.New(handler))
 }
 
 // SetLevel 动态调整日志级别（线程安全，同时同步 slog）
@@ -173,10 +222,13 @@ func SetOutput(w io.Writer) {
 func ResetOutput() {
 	mu.Lock()
 	defer mu.Unlock()
+	if logFileHandle != nil {
+		_ = logFileHandle.Close()
+		logFileHandle = nil
+	}
 	std.SetOutput(defaultWriter)
 	handler := slog.NewTextHandler(defaultWriter, &slog.HandlerOptions{
 		Level: slogLevelVar,
 	})
 	slog.SetDefault(slog.New(handler))
 }
-

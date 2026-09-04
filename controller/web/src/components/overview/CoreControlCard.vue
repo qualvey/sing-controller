@@ -135,6 +135,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import { reloadConfigsAPI } from '@/assembly/config'
 import { restartCoreAPI, version } from '@/assembly/version'
+import { reloadAll } from '@/composables/backendActions'
 import {
   profilesList,
   loadProfilesData,
@@ -161,6 +162,7 @@ const handleReloadConfig = async () => {
   isReloading.value = true
   try {
     await reloadConfigsAPI()
+    await reloadAll()
     showNotification({
       content: t('coreControl.reloadSuccess'),
       type: 'alert-success',
@@ -177,6 +179,7 @@ const handleRestartCore = async () => {
   isRestarting.value = true
   try {
     await restartCoreAPI()
+    await reloadAll()
     showNotification({
       content: t('coreControl.restartSuccess'),
       type: 'alert-success',

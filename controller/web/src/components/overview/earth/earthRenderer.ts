@@ -1,8 +1,8 @@
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import * as THREE from 'three/webgpu'
 import { createCityLabelLayer } from './cityLabelLayer'
-import { getRealtimeSunDirection, toEarthVector } from './earthMath'
+import { EarthControls } from './earthControls'
+import { getRealtimeSunDirection } from './earthMath'
 import { createEndpointLayer } from './endpointLayer'
 import { createGlobeLayer } from './globeLayer'
 import { createEarthRenderSnapshot } from './renderSnapshot'
@@ -10,8 +10,6 @@ import type { EarthRenderer as EarthRendererContract, EarthRendererOptions } fro
 import { createRouteLayer } from './routeLayer'
 
 export type { EarthRenderer } from './rendererTypes'
-
-const MAX_INITIAL_LATITUDE = 15
 
 type Cleanup = () => void
 
@@ -44,7 +42,8 @@ export const createEarthRenderer = async (
 
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100)
-  camera.position.set(3.7, 1.55, 3.2)
+  camera.position.set(0, 0.8, 4.9)
+  camera.lookAt(0, 0, 0)
 
   const renderer = new THREE.WebGPURenderer({ alpha: true, antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -72,26 +71,25 @@ export const createEarthRenderer = async (
     container.appendChild(labelRenderer.domElement)
     registerCleanup(() => labelRenderer.domElement.remove())
 
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = true
-    controls.dampingFactor = 0.05
-    controls.enablePan = false
-    controls.minDistance = 2.4
-    controls.maxDistance = 8.0
-    controls.rotateSpeed = 0.85
-    controls.zoomSpeed = 1.0
-    controls.autoRotate = true
-    controls.autoRotateSpeed = 0.5
-    controls.touches.ONE = THREE.TOUCH.ROTATE
-    controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE
-    // Keep browser scrolling/navigation gestures inside the canvas from competing
-    // with OrbitControls on touch devices.
-    renderer.domElement.style.touchAction = 'none'
-    registerCleanup(() => controls.dispose())
-
     const earthGroup = new THREE.Group()
     scene.add(earthGroup)
     registerCleanup(() => scene.remove(earthGroup))
+
+    const controls = new EarthControls({
+      camera,
+      domElement: renderer.domElement,
+      earthGroup,
+      minDistance: 2.4,
+      maxDistance: 8.0,
+      rotateSpeed: 1.35,
+      zoomSpeed: 1.0,
+      inertiaDamping: 0.94,
+      autoRotate: true,
+      autoRotateSpeed: 0.5,
+    })
+    // Keep browser scrolling/navigation gestures inside the canvas from competing with controls
+    renderer.domElement.style.touchAction = 'none'
+    registerCleanup(() => controls.dispose())
 
     let reducedMotion = options.reducedMotion
     let visualMode = options.visualMode
@@ -155,7 +153,7 @@ export const createEarthRenderer = async (
       const delta = Math.min(0.05, elapsed)
       endpointLayer.update(delta)
       if (visualMode === 'space') globeLayer.syncSunLight()
-      controls.update()
+      controls.update(delta)
       routeLayer.update(elapsed)
 
       render()
@@ -172,11 +170,9 @@ export const createEarthRenderer = async (
       if (visualMode === 'space') updateSunForTime()
 
       if (reducedMotion) {
-        controls.enableDamping = false
         controls.autoRotate = false
         render()
       } else {
-        controls.enableDamping = true
         controls.autoRotate = autoRotation
         clock.start()
         renderer.setAnimationLoop(animate)
@@ -280,19 +276,7 @@ export const createEarthRenderer = async (
         }
 
         initialLocationSet = true
-        const distance = camera.position.distanceTo(controls.target)
-        const direction = toEarthVector({
-          latitude: THREE.MathUtils.clamp(
-            location.latitude,
-            -MAX_INITIAL_LATITUDE,
-            MAX_INITIAL_LATITUDE,
-          ),
-          longitude: location.longitude,
-        })
-          .applyQuaternion(earthGroup.quaternion)
-          .normalize()
-        camera.position.copy(controls.target).addScaledVector(direction, distance)
-        controls.update()
+        controls.focusLocation(location)
         render()
       },
       setReducedMotion(value) {

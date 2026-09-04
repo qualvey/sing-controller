@@ -16,6 +16,7 @@ import { probeWebSocket } from '@/helper/connectivity'
 import { getRequestErrorMessage } from '@/helper/requestError'
 import { autoUpgradeCore, autoUpgradeDashboard, checkUpgradeCore } from '@/store/settings'
 import { activeBackend } from '@/store/setup'
+import { markCoreReloading } from '@/store/status'
 import type { Backend } from '@/types'
 import { computed, nextTick, ref } from 'vue'
 import { can, channel, Channel, clashAvailable, core, Core, resetCore } from './backend'
@@ -86,6 +87,10 @@ export const fetchVersionAPI = async (): Promise<{ data: { version: string } }> 
     try {
       const status = await api.status()
       if (status) {
+        // 如果是初次启动且尚未生成配置，允许正常连接 Controller 并进入订阅引导
+        if (status.config_exists === false) {
+          return { data: { version: 'sing-box (未配置)' } }
+        }
         if (status.core && !status.core.alive) {
           throw new Error(status.core.error || 'sing-box 核心未运行')
         }
@@ -295,6 +300,7 @@ export const checkUIUpdate = async () => {
 }
 
 export const restartCoreAPI = async () => {
+  markCoreReloading(6000)
   if (channel.value === Channel.Singbox) {
     return controllerApi.coreRestart()
   }

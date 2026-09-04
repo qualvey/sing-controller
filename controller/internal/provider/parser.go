@@ -353,7 +353,7 @@ func ParseURIList(text string) ([]option.Outbound, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		sbJSON, err := parseProxyURIToSingBox(line)
+		sbJSON, err := ParseProxyURIToSingBox(line)
 		if err != nil || len(sbJSON) == 0 {
 			continue
 		}
@@ -368,8 +368,8 @@ func ParseURIList(text string) ([]option.Outbound, error) {
 	return outbounds, nil
 }
 
-// parseProxyURIToSingBox 解析单个 URI (如 vless://..., vmess://..., ss://...)
-func parseProxyURIToSingBox(rawURI string) ([]byte, error) {
+// ParseProxyURIToSingBox 解析单个 URI (如 vless://..., vmess://..., ss://...)
+func ParseProxyURIToSingBox(rawURI string) ([]byte, error) {
 	lowerURI := strings.ToLower(rawURI)
 	if strings.HasPrefix(lowerURI, "vmess://") {
 		return parseVmessURI(rawURI)

@@ -94,7 +94,8 @@ import { formatJsoncDoc, jsonc, jsoncLinter, parseJsonc } from '@/editor/jsonc'
 import { showToast } from '@/helper/toast'
 import { useStatusStore } from '@/store/status'
 import { useThemeStore } from '@/store/theme'
-import { defaultKeymap, indentWithTab } from '@codemirror/commands'
+import { acceptCompletion } from '@codemirror/autocomplete'
+import { defaultKeymap, indentWithTab, insertNewlineAndIndent } from '@codemirror/commands'
 import { foldGutter } from '@codemirror/language'
 import { lintGutter } from '@codemirror/lint'
 import { openSearchPanel } from '@codemirror/search'
@@ -377,7 +378,13 @@ onMounted(() => {
       foldGutter(),
       lintGutter(),
       jsoncLinter(),
-      keymap.of([indentWithTab, { key: 'Mod-Shift-f', run: formatJsoncDoc }, ...defaultKeymap]),
+      keymap.of([
+        { key: 'Tab', run: acceptCompletion },
+        indentWithTab,
+        { key: 'Enter', run: insertNewlineAndIndent },
+        { key: 'Mod-Shift-f', run: formatJsoncDoc },
+        ...defaultKeymap
+      ]),
       EditorView.lineWrapping,
       EditorView.updateListener.of((u) => {
         if (u.docChanged || u.selectionSet || u.focusChanged) updateStats(u.view)

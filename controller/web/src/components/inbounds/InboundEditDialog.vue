@@ -3,15 +3,17 @@
     v-model="isInboundModalOpen"
     :title="isEditMode ? '编辑 Inbound' : '新建 Inbound'"
     box-class="max-w-[680px]"
+      :body-class="activeTab === 'source' ? 'overflow-hidden' : 'overflow-y-auto'"
     @update:model-value="(val) => (!val ? closeInboundModal() : null)"
   >
     <TabsRoot v-model="activeTab">
-      <TabsList>
+      <TabsList class="self-start shrink-0">
         <TabsTrigger value="form">表单</TabsTrigger>
         <TabsTrigger value="source">源码</TabsTrigger>
       </TabsList>
 
       <TabsContent value="form">
+          <div ref="formContentRef">
         <div class="mb-4">
           <button
             type="button"
@@ -561,12 +563,13 @@
         >
           {{ validateMsg }}
         </p>
+        </div>
       </TabsContent>
 
       <TabsContent value="source">
         <ResourceSourceTab
           ref="srcTab"
-          :initial="sourceJson"
+          :initial="sourceJson" :height="sourceEditorHeight"
         />
       </TabsContent>
     </TabsRoot>
@@ -667,9 +670,18 @@ import {
   UserPlusIcon,
   WandIcon,
 } from '@lucide/vue'
+import { useResizeObserver } from '@vueuse/core'
 import { computed, reactive, ref, watch } from 'vue'
 
-
+// 确保在「源码」Tab 与「表单」Tab 尺寸高度无缝一致，杜绝任何缩小与跳动
+const sourceEditorHeight = computed(() => {
+  if (typeof window === 'undefined') return 440
+  // 弹窗最大可用净高度（85vh 减去头部45 + 底部49 + Padding32 + Tabs36）
+  const maxAvailable = Math.max(300, Math.floor(window.innerHeight * 0.85 - 170))
+  // 严格贴合表单已撑开的实际高度，若表单超高处于滚动状态则填满当前视口，平滑无跳动
+  return Math.min(sharedTabHeight.value, maxAvailable)
+})
+const sharedTabHeight = ref<number>(440)
 const statusStore = useStatusStore()
 
 const activeTab = ref('form')
@@ -679,6 +691,14 @@ const saving = ref(false)
 const allocating = ref(false)
 const generating = ref(false)
 const suppressTypeWatch = ref(false)
+const formContentRef = ref<HTMLElement>()
+
+useResizeObserver(formContentRef, (entries) => {
+  const entry = entries[0]
+  if (entry && activeTab.value === 'form' && entry.contentRect.height > 60) {
+    sharedTabHeight.value = Math.max(300, Math.round(entry.contentRect.height))
+  }
+})
 
 const handleCreateUserForInbound = () => {
   openCreateUserModal((newUser) => {

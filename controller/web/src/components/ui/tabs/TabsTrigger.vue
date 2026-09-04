@@ -12,7 +12,8 @@ const forwarded = useForwardProps(props)
   <TabsTrigger
     v-bind="forwarded"
     :class="cn(
-      'inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs',
+      'relative z-1 inline-flex items-center justify-center gap-1.5 rounded-[0.5rem] px-3.5 py-1 text-sm font-medium whitespace-nowrap transition-colors duration-150 outline-none select-none disabled:pointer-events-none disabled:opacity-50',
+      'text-base-content/60 hover:text-base-content/85 data-[state=active]:text-base-content data-[state=active]:font-semibold',
       props.class
     )"
   >

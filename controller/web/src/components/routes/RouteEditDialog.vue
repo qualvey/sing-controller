@@ -257,6 +257,7 @@ const save = async () => {
     return
   }
   saving.value = true
+  statusStore.markReloading(4000)
   try {
     const rule = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildRule()
     const res = props.isEdit && props.id
@@ -267,6 +268,7 @@ const save = async () => {
     emit('saved', res)
     await statusStore.refresh()
   } catch (e) {
+    statusStore.clearReloading()
     showToast((e as Error).message || '操作失败', 'error')
   } finally {
     saving.value = false

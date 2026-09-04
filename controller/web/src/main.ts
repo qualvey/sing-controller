@@ -7,6 +7,7 @@ import App from './App.vue'
 import { loadFonts } from './assets/load-fonts'
 import './assets/main.css'
 import { applyCustomThemes, applyKsuTheme } from './helper'
+import { printAppBanner } from './helper/banner'
 import { i18n } from './i18n'
 import router from './router'
 
@@ -22,6 +23,7 @@ if (isEdge) {
   }
 }
 
+printAppBanner()
 applyCustomThemes()
 applyKsuTheme()
 loadFonts()

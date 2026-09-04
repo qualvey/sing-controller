@@ -86,7 +86,7 @@ func TestServiceProxySettingsOverride(t *testing.T) {
 	set := settings.New(filepath.Join(dir, "settings.json"))
 	_ = set.Load()
 	_ = set.Update(func(s *settings.Settings) error {
-		s.ServiceAPI = &settings.ServiceAPIOptions{Address: backend.URL, Secret: "s3cret"}
+		s.API.Service = &settings.EndpointAPI{Address: backend.URL, Secret: "s3cret"}
 		return nil
 	})
 	// 配置里没有 services 段

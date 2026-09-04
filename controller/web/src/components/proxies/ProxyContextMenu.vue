@@ -80,7 +80,7 @@ const handleDeleteNode = async () => {
   try {
     await api.deleteOutbound(name)
     showToast(t('deleteSuccess') || '删除成功', 'success')
-    await fetchProxies()
+    await fetchProxies(true)
     try {
       await statusStore.refresh()
     } catch {
@@ -99,7 +99,7 @@ const handleDeleteNode = async () => {
       try {
         await api.deleteOutbound(name, true)
         showToast('删除成功（已移除引用）', 'success')
-        await fetchProxies()
+        await fetchProxies(true)
         try {
           await statusStore.refresh()
         } catch {

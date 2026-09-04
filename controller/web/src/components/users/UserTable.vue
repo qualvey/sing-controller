@@ -175,7 +175,7 @@
 import type { UserMeta } from '@/api'
 import { deleteUser, usersFilter } from '@/assembly/users'
 import HighlightText from '@/components/common/HighlightText.vue'
-import { openEditUserModal } from '@/composables/userManagement'
+import { openCreateUserModal, openEditUserModal } from '@/composables/userManagement'
 import { showConfirmDialog } from '@/helper/confirmDialog'
 import { showToast } from '@/helper/toast'
 import {

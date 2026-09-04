@@ -34,8 +34,9 @@ type Manager struct {
 	stoppedAt   *time.Time
 	exitCode    int
 	lastError   string
-	restarts    int
-	recentExits []time.Time
+	restarts        int
+	recentExits     []time.Time
+	tunAccessDenied bool
 
 	platform *platformData
 	logs     *RingBuffer
@@ -87,12 +88,19 @@ func (m *Manager) Status() StatusInfo {
 		UptimeSec:  uptime,
 		StartedAt:  m.startedAt,
 		StoppedAt:  m.stoppedAt,
-		ExitCode:   m.exitCode,
-		LastError:  m.lastError,
-		BinaryPath: m.cfg.BinaryPath,
-		ConfigPath: m.cfg.ConfigPath,
-		Restarts:   m.restarts,
+		ExitCode:        m.exitCode,
+		LastError:       m.lastError,
+		BinaryPath:      m.cfg.BinaryPath,
+		ConfigPath:      m.cfg.ConfigPath,
+		Restarts:        m.restarts,
+		TunAccessDenied: m.tunAccessDenied,
 	}
+}
+
+func (m *Manager) TunAccessDenied() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.tunAccessDenied
 }
 
 func (m *Manager) Logs(limit int) []LogLine {
@@ -193,6 +201,7 @@ func (m *Manager) startLocked(ctx context.Context) error {
 	m.startedAt = &now
 	m.state = StateRunning
 	m.lastError = ""
+	m.tunAccessDenied = false
 
 	m.broadcast(LogLine{
 		Timestamp: now,
@@ -211,6 +220,13 @@ func (m *Manager) streamLogs(r io.Reader, source string) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		text := scanner.Text()
+		logger.Info("[Core/%s] %s", source, text)
+		lower := strings.ToLower(text)
+		if (strings.Contains(lower, "access is denied") || strings.Contains(lower, "operation not permitted")) && strings.Contains(lower, "tun") {
+			m.mu.Lock()
+			m.tunAccessDenied = true
+			m.mu.Unlock()
+		}
 		m.broadcast(LogLine{
 			Timestamp: time.Now(),
 			Source:    source,
@@ -247,6 +263,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	// 判断是否为正常主动停止
 	if m.state == StateStopping || m.state == StateStopped {
 		m.state = StateStopped
+		logger.Info("[Supervisor] sing-box 内核已正常停止 (ExitCode: %d)", exitCode)
 		m.broadcast(LogLine{
 			Timestamp: now,
 			Source:    "system",
@@ -258,6 +275,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	// 异常退出 / Crash 诊断
 	m.state = StateCrashed
 	m.lastError = fmt.Sprintf("内核异常退出 (ExitCode: %d)", exitCode)
+	logger.Error("[Supervisor] ⚠️ 警告: sing-box 内核异常退出! (ExitCode: %d)", exitCode)
 	m.broadcast(LogLine{
 		Timestamp: now,
 		Source:    "system",
@@ -267,6 +285,19 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	// 生成 Crash Dump 文件
 	m.generateCrashDump(exitCode)
 
+	// 若检测到 TUN 权限不足 (Access is denied)，禁止无意义的自动重启，等待前端用户输入
+	if m.tunAccessDenied {
+		m.state = StateError
+		m.lastError = "TUN 网卡配置权限不足 (Access is denied)，已停止自动重启，等待用户授权或调整配置"
+		logger.Warn("[Supervisor] ⏸️ 检测到系统权限不足 (Access is denied)，已暂停自动重启，等待前端处理")
+		m.broadcast(LogLine{
+			Timestamp: now,
+			Source:    "system",
+			Message:   "[Supervisor] ⏸️ 检测到系统权限不足 (Access is denied)，已暂停自动重启，等待前端处理",
+		})
+		return
+	}
+
 	// 连续崩溃防抖检测（10秒内连续退出超过 3 次）
 	m.recentExits = append(m.recentExits, now)
 	m.cleanRecentExits(now)
@@ -274,6 +305,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 	if len(m.recentExits) >= 3 {
 		m.state = StateError
 		m.lastError = "内核在短时间内频繁崩溃，已暂停自动拉起以防止系统雪崩"
+		logger.Error("[Supervisor] 🛑 内核在 10 秒内连续崩溃 3 次，熔断暂停自动重启")
 		m.broadcast(LogLine{
 			Timestamp: now,
 			Source:    "system",
@@ -289,7 +321,7 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 			time.Sleep(1 * time.Second)
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			if m.state == StateCrashed {
+			if m.state == StateCrashed && !m.tunAccessDenied {
 				logger.Info("[Supervisor] 尝试自动重新拉起内核 (第 %d 次)", m.restarts)
 				_ = m.startLocked(context.Background())
 			}
@@ -348,8 +380,8 @@ func (m *Manager) Stop(ctx context.Context) error {
 	})
 	m.mu.Unlock()
 
-	// 优雅终止：发送中断信号
-	_ = proc.Signal(os.Interrupt)
+	// 优雅终止：发送中断信号（POSIX 优先向进程组投递）
+	_ = signalInterruptGroup(proc)
 
 	// 等待 waitProcess 退出并关闭 waitDone，超时强制杀死
 	if waitDone != nil {
@@ -372,6 +404,38 @@ func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	m.state = StateStopped
 	m.mu.Unlock()
+	return nil
+}
+
+// Reload 原生热重载 sing-box 配置：
+// 在 POSIX/Linux 环境下向进程直接发送 SIGHUP 信号，实现连接不断流的原地重载；
+// 在 Windows 或进程未处于运行状态时，优雅降级为 Restart 或 Start。
+func (m *Manager) Reload(ctx context.Context) error {
+	m.mu.Lock()
+	if m.state != StateRunning || m.cmd == nil || m.cmd.Process == nil {
+		m.mu.Unlock()
+		return m.Start(ctx)
+	}
+	proc := m.cmd.Process
+	m.mu.Unlock()
+
+	start := time.Now()
+	err := signalReload(proc)
+	if errors.Is(err, errReloadNotSupported) {
+		logger.Info("[Supervisor] 当前平台不支持 SIGHUP 原地重载，平滑降级为进程重启...")
+		return m.Restart(ctx)
+	}
+	if err != nil {
+		logger.Warn("[Supervisor] 发送 SIGHUP 失败: %v，降级为进程重启", err)
+		return m.Restart(ctx)
+	}
+
+	m.broadcast(LogLine{
+		Timestamp: time.Now(),
+		Source:    "system",
+		Message:   fmt.Sprintf("[Supervisor] sing-box 内核已触发 SIGHUP 配置热重载 (耗时 %v)", time.Since(start)),
+	})
+	logger.Info("[Supervisor] 已向 sing-box (PID: %d) 发送 SIGHUP 热重载信号", proc.Pid)
 	return nil
 }
 

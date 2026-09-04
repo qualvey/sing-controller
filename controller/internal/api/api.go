@@ -12,8 +12,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
 	"reflect"
-	"strconv"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -128,11 +130,16 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	// service API ??（?? /api/grpc/* ?? services[type=api],gRPC-Web / WS）
 	mux.HandleFunc("/api/grpc/", h.handleServiceProxy)
 
+	// 系统与权限工具
+	mux.HandleFunc("POST /api/system/elevate", h.handleSystemElevate)
+	mux.HandleFunc("POST /api/system/disable-tun", h.handleSystemDisableTun)
+
 	// 工具
 	mux.HandleFunc("POST /api/tools/uuid", h.handleToolUUID)
 	mux.HandleFunc("POST /api/tools/reality-keypair", h.handleToolRealityKeypair)
 	mux.HandleFunc("POST /api/tools/password", h.handleToolPassword)
 	mux.HandleFunc("POST /api/tools/parse-json", h.handleToolParseJSON)
+	mux.HandleFunc("POST /api/tools/parse-node", h.handleToolParseNode)
 
 	// outbound CRUD
 	mux.HandleFunc("GET /api/outbounds", h.handleListOutbounds)
@@ -309,7 +316,7 @@ func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
 		"api":     "/api",
 		"status":  "/api/status",
 		"schema":  "/api/schema",
-		"listen":  values.Listen,
+		"listen":  values.Server.Addr(),
 		"config":  h.store.Path(),
 		"webui":   "独立部署（web/ 目录，npm run dev 或构建后静态托管）",
 	})
@@ -349,8 +356,8 @@ func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*op
 	}
 	logger.Info("配置更新已原子落盘 (path=%s)", r.URL.Path)
 	response := map[string]any{"saved": true}
-	// 保存后自动重载 sing-box（settings.reload.after_save）
-	if executed, err := h.reloadIfEnabled(); err != nil {
+	// 保存后自动重载 sing-box（settings.reload.after_save 或 ?reload=true）
+	if executed, err := h.reloadIfRequested(r); err != nil {
 		logger.Error("配置保存后自动重载 sing-box 失败: %v", err)
 		response["reload_error"] = err.Error()
 		response["message"] = "配置已保存，但 sing-box 重载失败"
@@ -403,21 +410,81 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		ruleCount = len(h.store.Options.Route.Rules)
 	}
 	coreStatus := h.probeCoreHealth(1 * time.Second)
+	tunDenied := false
+	if h.supervisor != nil {
+		tunDenied = h.supervisor.TunAccessDenied()
+	}
+
+	logLevel := "info"
+	if values.Log != nil && values.Log.Level != "" {
+		logLevel = values.Log.Level
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"config_path":       h.store.Path(),
-		"controller_config": h.settings.Path(),
-		"listen":            values.Listen,
-		"log_level":         values.Log.Level,
-		"min_port":          values.MinPort,
-		"defaults":          values.Defaults,
-		"inbounds":          len(h.store.Options.Inbounds),
-		"outbounds":         len(h.store.Options.Outbounds),
-		"rules":             ruleCount,
-		"core":              coreStatus,
-		"core_alive":        coreStatus.Alive,
-		"core_version":      coreStatus.Version,
-		"core_type":         coreStatus.Type,
-		"core_error":        coreStatus.Error,
+		"config_path":        h.store.Path(),
+		"config_exists":      h.store.Exists(),
+		"controller_config":  h.settings.Path(),
+		"listen":             values.Server.Addr(),
+		"log_level":          logLevel,
+		"inbounds":           len(h.store.Options.Inbounds),
+		"outbounds":          len(h.store.Options.Outbounds),
+		"rules":              ruleCount,
+		"core":               coreStatus,
+		"core_alive":         coreStatus.Alive,
+		"core_version":       coreStatus.Version,
+		"core_type":          coreStatus.Type,
+		"core_error":         coreStatus.Error,
+		"tun_access_denied":  tunDenied,
+	})
+}
+
+// handleSystemElevate 触发 UAC 提权并以管理员身份重启 controller 进程
+func (h *Handler) handleSystemElevate(w http.ResponseWriter, r *http.Request) {
+	if runtime.GOOS != "windows" {
+		writeError(w, http.StatusBadRequest, errors.New("仅 Windows 系统支持 UAC 提权"))
+		return
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("获取程序路径失败: %w", err))
+		return
+	}
+
+	args := os.Args[1:]
+	argStr := strings.Join(args, " ")
+
+	psCmd := fmt.Sprintf("Start-Process -FilePath '%s' -ArgumentList '%s' -Verb RunAs", exePath, argStr)
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
+	if err := cmd.Start(); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("启动提权进程失败: %w", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "已成功拉起管理员提权窗口",
+	})
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		os.Exit(0)
+	}()
+}
+
+// handleSystemDisableTun 移除主配置中的 TUN 入站并自动重启内核
+func (h *Handler) handleSystemDisableTun(w http.ResponseWriter, r *http.Request) {
+	if h.providerMgr == nil {
+		writeError(w, http.StatusInternalServerError, errors.New("provider manager 未就绪"))
+		return
+	}
+
+	if err := h.providerMgr.DisableTun(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("禁用 TUN 模式失败: %w", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "已成功移除 TUN 模式并重新加载配置",
 	})
 }
 
@@ -461,38 +528,27 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var privilegedPortWarning string
-	if newValues.Config == "" {
-		writeError(w, http.StatusBadRequest, errors.New("config 路径不能为空"))
+	if newValues.Core.ConfigPath == "" {
+		writeError(w, http.StatusBadRequest, errors.New("core.config_path 不能为空"))
 		return
 	}
-	if newValues.Listen != "" {
-		_, portText, err := net.SplitHostPort(newValues.Listen)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, errors.New("listen 格式应为 host:port，如 127.0.0.1:8080"))
-			return
+	if newValues.Server.ListenPort > 0 && newValues.Server.ListenPort < 1024 {
+		privilegedPortWarning = fmt.Sprintf("端口 %d 是特权端口（<1024）。deb 部署已支持（AmbientCapabilities），本机开发直跑需 root 或加 capabilities。", newValues.Server.ListenPort)
+	}
+	if newValues.Log != nil {
+		if newValues.Log.Level != "" {
+			if _, err := log.ParseLevel(newValues.Log.Level); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
 		}
-		port, parseErr := strconv.Atoi(portText)
-		if parseErr == nil && port > 0 && port < 1024 {
-			// 特权端口：允许保存（systemd unit 已带 CAP_NET_BIND_SERVICE），但给出提示
-			privilegedPortWarning = fmt.Sprintf("端口 %d 是特权端口（<1024）。deb 部署已支持（AmbientCapabilities），本机开发直跑需 root 或加 capabilities。", port)
-		}
+		// 动态调整 logger 实时生效
+		logger.Init(newValues.Log.Level, newValues.Log.Output, newValues.Log.Outfile)
 	}
-	if newValues.Log != nil && newValues.Log.Level != "" {
-		if _, err := log.ParseLevel(newValues.Log.Level); err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		// 动态调整 logger 级别实时生效
-		logger.SetLevel(newValues.Log.Level)
+	if newValues.Core.Reload == nil {
+		newValues.Core.Reload = &settings.ReloadOptions{Mode: "auto"}
 	}
-	if newValues.MinPort < 1024 || newValues.MinPort > 65535 {
-		writeError(w, http.StatusBadRequest, errors.New("min_port 需在 1024-65535 之间"))
-		return
-	}
-	if newValues.Reload == nil {
-		newValues.Reload = &settings.ReloadOptions{Mode: "auto"}
-	}
-	if err := newValues.Reload.Validate(); err != nil {
+	if err := newValues.Core.Reload.Validate(); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -505,16 +561,16 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	logger.Info("Controller 设置已成功更新 (listen=%s, log_level=%s, min_port=%d, config=%s)",
-		newValues.Listen, logger.GetLevel().String(), newValues.MinPort, newValues.Config)
+	logger.Info("Controller 设置已成功更新 (listen=%s, log_level=%s, config_path=%s)",
+		newValues.Server.Addr(), logger.GetLevel().String(), newValues.Core.ConfigPath)
 	// config 路径变更 → 切换主配置存储
-	if h.store.Path() != newValues.Config {
-		logger.Info("切换 sing-box 配置文件路径: %s -> %s", h.store.Path(), newValues.Config)
-		h.store.SetPath(newValues.Config)
+	if h.store.Path() != newValues.Core.ConfigPath {
+		logger.Info("切换 sing-box 配置文件路径: %s -> %s", h.store.Path(), newValues.Core.ConfigPath)
+		h.store.SetPath(newValues.Core.ConfigPath)
 		if err := h.store.Load(ctx, store.DefaultConfig{
-			InboundType: newValues.Defaults.InboundType,
-			Listen:      newValues.Defaults.Listen,
-			ListenPort:  newValues.Defaults.ListenPort,
+			InboundType: "mixed",
+			Listen:      "127.0.0.1",
+			ListenPort:  2080,
 		}); err != nil {
 			logger.Error("加载新 sing-box 主配置失败: %v", err)
 			writeJSON(w, http.StatusOK, map[string]any{
@@ -578,8 +634,8 @@ func (h *Handler) handlePutConfigRaw(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Info("原样保存 sing-box 配置成功")
 	response := map[string]any{"saved": true}
-	// 保存后自动重载 sing-box（settings.reload.after_save）
-	if executed, err := h.reloadIfEnabled(); err != nil {
+	// 保存后自动重载 sing-box（settings.reload.after_save 或 ?reload=true）
+	if executed, err := h.reloadIfRequested(r); err != nil {
 		logger.Error("保存后自动重载 sing-box 失败: %v", err)
 		response["reload_error"] = err.Error()
 		response["message"] = "配置已保存，但 sing-box 重载失败"

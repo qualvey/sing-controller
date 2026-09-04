@@ -112,6 +112,10 @@ func (m *Manager) providerOutboundPath(tag string) string {
 	return filepath.Join(m.dir, fmt.Sprintf("outbound-%s.json", tag))
 }
 
+func (m *Manager) providerFullPath(tag string) string {
+	return filepath.Join(m.dir, fmt.Sprintf("full-%s.json", tag))
+}
+
 func (m *Manager) loadProviders() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -424,6 +428,11 @@ func (m *Manager) RefreshProvider(ctx context.Context, id string) ([]option.Outb
 		return nil, fmt.Errorf("写入节点片段文件失败: %w", err)
 	}
 
+	// 若为全量 sing-box 配置，额外持久化为 full-<tag>.json 供全量使用
+	if fullOpts, err := store.Parse(ctx, body); err == nil && (len(fullOpts.Inbounds) > 0 || fullOpts.Route != nil || fullOpts.DNS != nil) {
+		_ = os.WriteFile(m.providerFullPath(tag), body, 0o644)
+	}
+
 	// 更新元数据
 	m.mu.Lock()
 	if existing, ok := m.providers[id]; ok {
@@ -488,6 +497,13 @@ func (m *Manager) GetProviderOutbounds(tag string) ([]option.Outbound, error) {
 		return nil, err
 	}
 	return outbounds, nil
+}
+
+// ActiveProfileID 返回当前活动方案 ID
+func (m *Manager) ActiveProfileID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.activeProfID
 }
 
 // ListProfiles 获取所有配置组方案
@@ -581,53 +597,88 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 		return nil, errors.New("store 未初始化")
 	}
 
-	// 1. 读取基础配置副本并解析
+	// 1. 读取基础配置副本并解析（若文件尚不存在，优先使用订阅源的全量配置）
+	var (
+		baseOpts   option.Options
+		fullLoaded bool
+	)
 	baseContent, err := os.ReadFile(m.store.Path())
-	if err != nil {
-		return nil, fmt.Errorf("读取主配置失败: %w", err)
-	}
-
-	baseOpts, err := store.Parse(ctx, baseContent)
-	if err != nil {
-		return nil, fmt.Errorf("解析主配置失败: %w", err)
-	}
-
-	// 2. 收集所有历史上注入过或属于任何 provider 的节点 tag，用于彻底清除旧节点
-	m.mu.RLock()
-	tagsToPurge := make(map[string]bool)
-	for _, t := range m.injectedTags {
-		tagsToPurge[t] = true
-	}
-	for _, p := range m.providers {
-		if obs, err := m.GetProviderOutbounds(p.Tag); err == nil {
-			for _, ob := range obs {
-				tagsToPurge[ob.Tag] = true
-			}
-		}
-	}
-	m.mu.RUnlock()
-
-	// 3. 从 baseOpts.Outbounds 中剔除历史注入的 provider 节点，恢复纯净基础节点
-	cleanBaseOutbounds := make([]option.Outbound, 0, len(baseOpts.Outbounds))
-	for _, ob := range baseOpts.Outbounds {
-		if !tagsToPurge[ob.Tag] {
-			cleanBaseOutbounds = append(cleanBaseOutbounds, ob)
-		}
-	}
-	baseOpts.Outbounds = cleanBaseOutbounds
-
-	// 4. 从各个 selector / urltest 组中剔除历史 provider 节点 tag
-	for i := range baseOpts.Outbounds {
-		ob := &baseOpts.Outbounds[i]
-		if ob.Type == "selector" || ob.Type == "urltest" {
-			groupTags := getGroupOutbounds(ob)
-			cleanGroupTags := make([]string, 0, len(groupTags))
-			for _, gt := range groupTags {
-				if !tagsToPurge[gt] {
-					cleanGroupTags = append(cleanGroupTags, gt)
+	if errors.Is(err, os.ErrNotExist) {
+		for _, pTag := range prof.ProviderTags {
+			if fullData, err := os.ReadFile(m.providerFullPath(pTag)); err == nil {
+				if parsedFull, err := store.Parse(ctx, fullData); err == nil {
+					baseOpts = parsedFull
+					fullLoaded = true
+					break
 				}
 			}
-			setGroupOutbounds(ob, cleanGroupTags)
+		}
+		if !fullLoaded {
+			baseOpts = m.store.Options
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("读取主配置失败: %w", err)
+	} else {
+		parsedOpts, err := store.Parse(ctx, baseContent)
+		if err != nil {
+			return nil, fmt.Errorf("解析主配置失败: %w", err)
+		}
+		baseOpts = parsedOpts
+	}
+
+	// 保证存在 controller 必须的 api service（用于探活与控制），不影响其余原有配置
+	hasAPI := false
+	for _, s := range baseOpts.Services {
+		if s.Type == "api" {
+			hasAPI = true
+			break
+		}
+	}
+	if !hasAPI {
+		apiServiceJSON := []byte(`{"type": "api", "listen": "127.0.0.1", "listen_port": 9900}`)
+		if apiService, err := sjson.UnmarshalExtendedContext[option.Service](include.Context(ctx), apiServiceJSON); err == nil {
+			baseOpts.Services = append(baseOpts.Services, apiService)
+		}
+	}
+
+	// 2. 只有当从现有主配置合并时，才清除历史旧节点；若直接使用全量订阅母版则保持其原有完好拓扑
+	if !fullLoaded {
+		m.mu.RLock()
+		tagsToPurge := make(map[string]bool)
+		for _, t := range m.injectedTags {
+			tagsToPurge[t] = true
+		}
+		for _, p := range m.providers {
+			if obs, err := m.GetProviderOutbounds(p.Tag); err == nil {
+				for _, ob := range obs {
+					tagsToPurge[ob.Tag] = true
+				}
+			}
+		}
+		m.mu.RUnlock()
+
+		// 从 baseOpts.Outbounds 中剔除历史注入的 provider 节点
+		cleanBaseOutbounds := make([]option.Outbound, 0, len(baseOpts.Outbounds))
+		for _, ob := range baseOpts.Outbounds {
+			if !tagsToPurge[ob.Tag] {
+				cleanBaseOutbounds = append(cleanBaseOutbounds, ob)
+			}
+		}
+		baseOpts.Outbounds = cleanBaseOutbounds
+
+		// 从各个 selector / urltest 组中剔除历史 provider 节点 tag
+		for i := range baseOpts.Outbounds {
+			ob := &baseOpts.Outbounds[i]
+			if ob.Type == "selector" || ob.Type == "urltest" {
+				groupTags := getGroupOutbounds(ob)
+				cleanGroupTags := make([]string, 0, len(groupTags))
+				for _, gt := range groupTags {
+					if !tagsToPurge[gt] {
+						cleanGroupTags = append(cleanGroupTags, gt)
+					}
+				}
+				setGroupOutbounds(ob, cleanGroupTags)
+			}
 		}
 	}
 
@@ -683,6 +734,21 @@ func (m *Manager) MergeAndValidateProfile(ctx context.Context, prof Profile) ([]
 					}
 				}
 				setGroupOutbounds(ob, groupTags)
+			}
+		}
+	}
+
+	// 8. 兜底检查：保证所有 selector / urltest 组均含有有效的 outbounds 节点，避免 sing-box 校验报 missing tags
+	for i := range baseOpts.Outbounds {
+		ob := &baseOpts.Outbounds[i]
+		if ob.Type == "selector" || ob.Type == "urltest" {
+			groupTags := getGroupOutbounds(ob)
+			if len(groupTags) == 0 {
+				if len(providerNodeTags) > 0 {
+					setGroupOutbounds(ob, providerNodeTags)
+				} else {
+					setGroupOutbounds(ob, []string{"direct"})
+				}
 			}
 		}
 	}
@@ -746,15 +812,19 @@ func (m *Manager) ApplyProfile(ctx context.Context, id string) error {
 		return errors.New("profile not found")
 	}
 
+	logger.Info("[Profile] 正在应用方案 %s (%s)...", prof.Name, id)
 	finalJSON, err := m.MergeAndValidateProfile(ctx, *prof)
 	if err != nil {
+		logger.Error("[Profile] 方案 %s 合并校验失败: %v", prof.Name, err)
 		return err
 	}
 
 	// 原子写盘
 	if err := m.store.RawSave(ctx, finalJSON); err != nil {
+		logger.Error("[Profile] 保存主配置失败: %v", err)
 		return fmt.Errorf("保存配置失败: %w", err)
 	}
+	logger.Info("[Profile] 主配置 %s 已成功写入 (大小: %d 字节)", m.store.Path(), len(finalJSON))
 
 	// 标记活动方案
 	m.mu.Lock()
@@ -767,12 +837,60 @@ func (m *Manager) ApplyProfile(ctx context.Context, id string) error {
 
 	// 若启用了自动重载且 Supervisor 存在，立即重启内核
 	if prof.AutoReload && m.supervisor != nil {
+		logger.Info("[Profile] 正在通知 Supervisor 启动/重启 sing-box 内核...")
 		if err := m.supervisor.Restart(ctx); err != nil {
-			logger.Warn("[Profile] 切换方案后重载内核失败: %v", err)
+			logger.Warn("[Profile] 内核重启失败: %v", err)
 		}
 	}
 
 	logger.Info("[Profile] 成功应用配置组方案: %s (%s)", prof.Name, prof.Tag)
+	return nil
+}
+
+// DisableTun 从当前主配置中移除所有 type 为 "tun" 的入站，并重启内核
+func (m *Manager) DisableTun(ctx context.Context) error {
+	if m.store == nil {
+		return errors.New("store 未初始化")
+	}
+
+	opts := m.store.Options
+	newInbounds := make([]option.Inbound, 0, len(opts.Inbounds))
+	for _, in := range opts.Inbounds {
+		if in.Type != "tun" {
+			newInbounds = append(newInbounds, in)
+		}
+	}
+
+	// 确保至少有一个入站（若全部被移除则补充默认 mixed 2080 入站）
+	if len(newInbounds) == 0 {
+		mixedJSON := []byte(`{"type": "mixed", "tag": "in-main", "listen": "127.0.0.1", "listen_port": 2080}`)
+		if mixedIn, err := sjson.UnmarshalExtendedContext[option.Inbound](include.Context(ctx), mixedJSON); err == nil {
+			newInbounds = append(newInbounds, mixedIn)
+		}
+	}
+
+	opts.Inbounds = newInbounds
+
+	finalJSON, err := store.MarshalOptions(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("序列化配置失败: %w", err)
+	}
+
+	if err := store.Validate(ctx, finalJSON); err != nil {
+		return fmt.Errorf("移除 TUN 后配置校验失败: %w", err)
+	}
+
+	if err := m.store.RawSave(ctx, finalJSON); err != nil {
+		return fmt.Errorf("保存配置失败: %w", err)
+	}
+
+	logger.Info("[Provider] 已禁用 TUN 入站并更新主配置")
+
+	if m.supervisor != nil {
+		if err := m.supervisor.Restart(ctx); err != nil {
+			logger.Warn("[Provider] 重启内核失败: %v", err)
+		}
+	}
 	return nil
 }
 

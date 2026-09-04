@@ -25,23 +25,38 @@ import (
 
 // reloadNow 按配置执行一次重载；mode 为 none 时返回 (false, nil)。
 func (h *Handler) reloadNow() (bool, error) {
-	// 若 Supervisor 正在托管子进程，直接通过 Supervisor 毫秒级重载
+	// 若 Supervisor 正在托管子进程，优先通过 Supervisor 触发 SIGHUP 原生原地热重载（Windows 下自动降级为重启）
 	if h.supervisor != nil && h.supervisor.Status().BinaryPath != "" {
-		if err := h.supervisor.Restart(context.Background()); err != nil {
+		if err := h.supervisor.Reload(context.Background()); err != nil {
 			return true, err
 		}
+		h.waitCoreReady(1500 * time.Millisecond)
 		return true, nil
 	}
 
 	values := h.settings.Values()
-	reload := values.Reload
+	reload := values.Core.Reload
 	if reload == nil || reload.Mode == "none" {
 		return false, nil
 	}
 	if err := h.reloadWithMode(reload, context.Background()); err != nil {
 		return true, err
 	}
+	h.waitCoreReady(1500 * time.Millisecond)
 	return true, nil
+}
+
+// waitCoreReady 在重载发信后快速轮询等待内核恢复响应，避免客户端瞬时打到重启过程中的断开端口
+func (h *Handler) waitCoreReady(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(60 * time.Millisecond)
+		status := h.probeCoreHealth(100 * time.Millisecond)
+		if status.Alive {
+			return true
+		}
+	}
+	return false
 }
 
 // reloadWithMode 按指定模式执行重载。
@@ -131,14 +146,30 @@ func (h *Handler) reloadWithMode(reload *settings.ReloadOptions, parent context.
 	}
 }
 
-// reloadIfEnabled 保存成功后调用：启用 after_save 时执行重载，返回 (是否执行, 错误)。
-func (h *Handler) reloadIfEnabled() (bool, error) {
+// reloadIfRequested 保存成功后调用：
+// 1. 若请求显式指定 ?reload=false，跳过重载；
+// 2. 若请求显式指定 ?reload=true 或 settings 开启了 after_save，执行重载；
+// 3. 针对 /api/outbounds 节点类运维接口，默认总是触发内核重载（除非 ?reload=false），确保节点增删改与内核运行时实时一致。
+func (h *Handler) reloadIfRequested(r *http.Request) (bool, error) {
 	values := h.settings.Values()
-	if values.Reload == nil || values.Reload.Mode == "none" || !values.Reload.AfterSave {
+	if values.Core.Reload == nil || values.Core.Reload.Mode == "none" {
+		return false, nil
+	}
+	if r != nil && r.URL.Query().Get("reload") == "false" {
+		return false, nil
+	}
+	force := r != nil && r.URL.Query().Get("reload") == "true"
+	isOutboundOp := r != nil && strings.HasPrefix(r.URL.Path, "/api/outbounds")
+	if !force && !isOutboundOp && !values.Core.Reload.AfterSave {
 		return false, nil
 	}
 	executed, err := h.reloadNow()
 	return executed, err
+}
+
+// reloadIfEnabled 保存成功后调用：启用 after_save 时执行重载，返回 (是否执行, 错误)。
+func (h *Handler) reloadIfEnabled() (bool, error) {
+	return h.reloadIfRequested(nil)
 }
 
 // detectReloadCommand 自动探测可用的 init 重载机制（按优先级）：

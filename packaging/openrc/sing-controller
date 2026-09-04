@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+# Alpine Linux / openrc init script for sing-controller (Mode B: Single Service).
+# Install:  cp sing-controller /etc/init.d/sing-controller && chmod +x /etc/init.d/sing-controller
+#           rc-update add sing-controller default && rc-service sing-controller start
+
+name="sing-controller"
+description="sing-box controller (single-service supervisor mode)"
+
+command="/usr/bin/sing-controller"
+command_args="-config /etc/sing-controller/config.json"
+command_background="yes"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+depend() {
+	need net
+	after firewall
+}

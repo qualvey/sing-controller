@@ -64,7 +64,7 @@ func TestClashProxySettingsConfig(t *testing.T) {
 	set := settings.New(filepath.Join(dir, "settings.json"))
 	_ = set.Load()
 	_ = set.Update(func(s *settings.Settings) error {
-		s.ClashAPI = &settings.ClashAPIOptions{Address: backend.URL, Secret: "s3cret"}
+		s.API.Clash = &settings.EndpointAPI{Address: backend.URL, Secret: "s3cret"}
 		return nil
 	})
 

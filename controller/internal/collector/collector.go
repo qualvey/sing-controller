@@ -23,13 +23,16 @@ import (
 // StartCollector 启动采集循环：拉 sing-box gRPC 统计 → 增量入库 + 累计 upsert + 实时推送
 func StartCollector(ctx context.Context, wg *sync.WaitGroup, cfg *settings.Manager, rt *realtime.Broadcaster) {
 	defer wg.Done() // 1. 退出前通知主流程：采集协程已完全结束
-	apiAddr := cfg.Values().V2rayAPI
+	apiAddr := ""
+	if cfg.Values().API.V2Ray != nil {
+		apiAddr = cfg.Values().API.V2Ray.Address
+	}
 	if apiAddr == "" {
-		logger.Warn("[Collector] v2ray_api is empty, collector disabled")
+		logger.Warn("[Collector] api.v2ray.address is empty, collector disabled")
 		return // 直接退出，defer 会正常调用 wg.Done()
 	}
 	interval := cfg.PollIntervalDuration()
-	conn, err := grpc.NewClient(cfg.Values().V2rayAPI, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		logger.Error("[Collector] dial sing-box gRPC failed: %v", err)
 		return
@@ -37,7 +40,7 @@ func StartCollector(ctx context.Context, wg *sync.WaitGroup, cfg *settings.Manag
 	defer conn.Close()
 	client := command.NewStatsServiceClient(conn)
 
-	logger.Info("[Collector] Connected to sing-box gRPC at %s", cfg.Values().V2rayAPI)
+	logger.Info("[Collector] Connected to sing-box gRPC at %s", apiAddr)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -78,12 +81,12 @@ func collect(parentCtx context.Context, client command.StatsServiceClient, cfg *
 			return
 		}
 		queryPattern := c.pattern
-		if cfg.Values().Pattern != "" {
-			queryPattern = cfg.Values().Pattern + queryPattern
+		if cfg.Values().Stats.Pattern != "" {
+			queryPattern = cfg.Values().Stats.Pattern + queryPattern
 		}
 		resp, err := client.QueryStats(ctx, &command.QueryStatsRequest{
 			Pattern: queryPattern,
-			Reset_:  cfg.Values().ResetOnQuery,
+			Reset_:  cfg.Values().Stats.ResetOnQuery,
 		})
 		if err != nil {
 			logger.Error("[Collector] QueryStats(%s) error: %v", c.category, err)

@@ -13,49 +13,62 @@
         role="dialog"
         aria-modal="true"
         :aria-labelledby="title ? 'dialog-title' : undefined"
-        @keydown.escape="close"
+        @keydown.escape="handleEscape"
       >
         <!-- 遮罩，点击关闭 -->
         <div
           class="modal-backdrop w-screen"
           aria-hidden="true"
-          @click="close"
+          @click="handleBackdropClick"
         />
 
         <!-- 弹窗主体：内容区自行滚动，标题/按钮区固定 -->
         <div
           ref="modalBoxRef"
-          class="modal-box bg-base-100 relative flex flex-col overflow-hidden p-0 outline-none max-md:max-h-[85dvh] max-md:min-h-[calc(var(--dialog-viewport-height,100dvh)*0.4)]"
-          :class="boxClass"
+          class="modal-box bg-base-100 relative flex flex-col overflow-hidden p-0 outline-none max-md:max-h-[85dvh] max-md:min-h-[calc(var(--dialog-viewport-height,100dvh)*0.4)] md:max-h-[85vh]"
+          :class="[
+            boxClass,
+            size === 'large' ? 'max-w-4xl w-11/12' : size === 'small' ? 'max-w-sm' : ''
+          ]"
           tabindex="-1"
           @keydown.enter.self="enter"
         >
           <div
             v-if="title && isOpen"
             id="dialog-title"
-            class="border-base-content/10 relative shrink-0 border-b px-4 py-2 text-base font-bold"
+            class="border-base-content/10 relative shrink-0 border-b px-4 py-2.5 text-base font-bold flex items-center justify-between"
           >
-            {{ title }}
-            <slot name="title-right" />
-            <button
-              type="button"
-              class="btn btn-circle btn-ghost btn-xs absolute top-2 right-2"
-              aria-label="close"
-              @click="close"
-            >
-              <XMarkIcon class="h-4 w-4" />
-            </button>
+            <span>{{ title }}</span>
+            <div class="flex items-center gap-2">
+              <slot name="title-right" />
+              <button
+                v-if="closable !== false"
+                type="button"
+                class="btn btn-circle btn-ghost btn-xs"
+                aria-label="close"
+                @click="close"
+              >
+                <XMarkIcon class="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div
             v-if="isOpen"
-            class="min-h-0 overflow-y-auto max-md:flex-1 md:max-h-[90dvh]"
-            :class="
+            class="min-h-0 flex-1"
+            :class="[
+              bodyClass || 'overflow-y-auto',
               noPadding
                 ? 'p-0 max-md:pb-[env(safe-area-inset-bottom)]'
                 : 'p-4 max-md:pb-[calc(1rem+env(safe-area-inset-bottom))]'
-            "
+            ]"
           >
             <slot />
+          </div>
+          <div
+            v-if="$slots.footer && isOpen"
+            class="border-base-content/10 bg-base-100/90 relative shrink-0 border-t px-4 py-3"
+          >
+            <slot name="footer" />
           </div>
         </div>
       </div>
@@ -71,7 +84,19 @@ import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { ref, watch } from 'vue'
 
 const isOpen = defineModel<boolean>({ default: false })
-defineProps<{ noPadding?: boolean; boxClass?: string; title?: string }>()
+const props = withDefaults(
+  defineProps<{
+    noPadding?: boolean
+    boxClass?: string
+    bodyClass?: string
+    title?: string
+    closable?: boolean
+    size?: 'small' | 'medium' | 'large'
+  }>(),
+  {
+    closable: true,
+  },
+)
 const emits = defineEmits<{
   (e: 'enter'): void
 }>()
@@ -88,9 +113,24 @@ watch(isOpen, (val) => {
     })
   }
 })
+
 function close() {
+  if (props.closable === false) return
   isOpen.value = false
 }
+
+function handleEscape() {
+  if (props.closable !== false) {
+    close()
+  }
+}
+
+function handleBackdropClick() {
+  if (props.closable !== false) {
+    close()
+  }
+}
+
 function enter() {
   emits('enter')
 }

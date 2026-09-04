@@ -206,6 +206,14 @@ func (h *Handler) handleApplyProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	// 双服务模式（Linux/OpenWrt）：若未托管内核，保存方案后通过系统机制（systemd/procd）重载 sing-box
+	if h.supervisor == nil {
+		if reloaded, err := h.reloadIfEnabled(); err != nil {
+			logger.Warn("[API] 应用方案后系统重载失败: %v", err)
+		} else if reloaded {
+			logger.Info("[API] 应用方案后系统服务已触发重载")
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "方案已应用并生效",

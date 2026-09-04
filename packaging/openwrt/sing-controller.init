@@ -1,0 +1,61 @@
+#!/bin/sh /etc/rc.common
+# OpenWrt / procd init script for sing-controller (Mode B: Single Service).
+#
+# Install:
+#   cp sing-controller.init /etc/init.d/sing-controller && chmod +x /etc/init.d/sing-controller
+#   cp sing-controller.config /etc/config/sing-controller
+#   /etc/init.d/sing-controller enable
+#   /etc/init.d/sing-controller start
+
+USE_PROCD=1
+START=99
+STOP=10
+
+PROG="/usr/bin/sing-controller"
+NAME="sing-controller"
+
+start_service() {
+	config_load "$NAME"
+
+	local enabled config_file work_dir user log_stderr
+	config_get_bool enabled "main" "enabled" "1"
+	[ "$enabled" -eq "1" ] || return 0
+
+	config_get config_file "main" "conffile" "/etc/sing-controller/config.json"
+	config_get work_dir "main" "workdir" "/var/lib/sing-box"
+	config_get user "main" "user" "root"
+	config_get_bool log_stderr "main" "log_stderr" "1"
+
+	# 1. 启动前目录自愈赋权（若指定非 root 用户）
+	if [ -n "$user" ] && [ "$user" != "root" ] && id "$user" >/dev/null 2>&1; then
+		mkdir -p "$work_dir" 2>/dev/null
+		mkdir -p "$(dirname "$config_file")" 2>/dev/null
+		mkdir -p "/etc/sing-box" 2>/dev/null
+		chown -R "$user:$user" "$work_dir" "/etc/sing-box" "$(dirname "$config_file")" 2>/dev/null
+		chmod 750 "$work_dir" "/etc/sing-box" "$(dirname "$config_file")" 2>/dev/null
+	fi
+
+	# 2. 注册 procd 托管实例
+	procd_open_instance
+	if [ -n "$user" ] && [ "$user" != "root" ] && id "$user" >/dev/null 2>&1; then
+		procd_set_param user "$user"
+	fi
+
+	procd_set_param command "$PROG" -config "$config_file"
+	procd_set_param file "$config_file"
+	procd_set_param stderr "$log_stderr"
+	procd_set_param respawn 3600 5 0
+	procd_set_param limits core="unlimited"
+	procd_set_param limits nofile="1000000 1000000"
+	procd_close_instance
+}
+
+# 3. 显式热重载：/etc/init.d/sing-controller reload 向进程投递 SIGHUP 原地刷新
+reload_service() {
+	procd_send_signal SIGHUP
+}
+
+# 4. 监听 UCI 配置与主配置文件的触发变更
+service_triggers() {
+	procd_add_reload_trigger "$NAME"
+}

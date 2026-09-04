@@ -192,7 +192,10 @@ const ensureSession = () => {
 // 在后端切换 / 登出时丢弃订阅。
 export const resetProxies = () => stop()
 
-export const fetchProxies = async () => {
+export const fetchProxies = async (force = false) => {
+  if (force) {
+    stop()
+  }
   ensureSession()
   if (ready) await ready
   rebuild()

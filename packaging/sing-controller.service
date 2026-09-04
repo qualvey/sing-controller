@@ -1,22 +1,31 @@
 [Unit]
-Description=sing-box controller (configuration management API)
+Description=sing-box controller (WebUI & configuration management service)
 Documentation=https://github.com/qualvey/sing-controller
-After=network-online.target
+After=network.target nss-lookup.target network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=sing-controller
-Group=sing-controller
-# 允许非 root 绑定特权端口（<1024，如 listen 0.0.0.0:80）
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# 双服务架构下需要调用 systemctl reload/restart sing-box，故以 root 身份运行
+User=root
+Group=root
+SupplementaryGroups=sing-box
+
+# 1. 采用 systemd 标准状态目录：自动创建 /var/lib/sing-box 并赋权，存放 cache.db 与运行时状态
+StateDirectory=sing-box
+WorkingDirectory=/var/lib/sing-box
+
+# 2. 完整能力集：网络底层控制 + TUN 网卡 + 进程规则嗅探 (process_name) + 文件与所有权权限覆盖 (写盘 /etc/sing-box)
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_FOWNER
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_FOWNER
+
+# 3. 资源限制与执行命令
+LimitNOFILE=1048576
 ExecStart=/usr/bin/sing-controller -config /etc/sing-controller/config.json
 Restart=on-failure
-RestartSec=3
-NoNewPrivileges=true
-ProtectSystem=full
-ProtectHome=true
+RestartSec=5s
+
+# 4. 写盘路径开放
 # /etc/sing-controller: controller 自身配置；/etc/sing-box: 主配置（原子写盘 tmp+rename 需可写）
 ReadWritePaths=/etc/sing-controller /etc/sing-box
 

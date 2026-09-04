@@ -5,7 +5,8 @@ import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
 import { jsonc, jsoncLinter, formatJsoncDoc, parseJsonc } from '../editor/jsonc'
 import { foldGutter } from '@codemirror/language'
-import { defaultKeymap, indentWithTab } from '@codemirror/commands'
+import { acceptCompletion } from '@codemirror/autocomplete'
+import { defaultKeymap, indentWithTab, insertNewlineAndIndent } from '@codemirror/commands'
 import { api } from '../api'
 import { useCmTheme } from '../composables/useCmTheme'
 import { showToast } from '../helper/toast'
@@ -112,7 +113,13 @@ onMounted(() => {
       themeExt,
       foldGutter(),
       jsoncLinter(),
-      keymap.of([indentWithTab, { key: 'Mod-Shift-f', run: formatJsoncDoc }, ...defaultKeymap]),
+      keymap.of([
+        { key: 'Tab', run: acceptCompletion },
+        indentWithTab,
+        { key: 'Enter', run: insertNewlineAndIndent },
+        { key: 'Mod-Shift-f', run: formatJsoncDoc },
+        ...defaultKeymap
+      ]),
       EditorView.theme({
         '&': { height: '100%', fontSize: '13px' },
         '.cm-scroller': {

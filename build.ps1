@@ -35,14 +35,14 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('local', 'windows', 'windows-amd64', 'windows-arm64', 'linux-amd64', 'linux-arm64', 'linux-armv7', 'deb-arm64', 'deb-all', 'all')]
+    [ValidateSet('local', 'windows', 'windows-amd64', 'windows-arm64', 'linux-amd64', 'linux-arm64', 'linux-armv7', 'deb-arm64', 'deb-all', 'apk-arm64', 'apk-amd64', 'all')]
     [string]$Target = 'local',
 
     [switch]$SkipFrontend,
 
     [string]$Version,
 
-    [string]$Tags = "with_quic,with_tailscale,with_gvisor,with_utls,with_clash_api,with_acme,with_tun,with_dhcp,with_wireguard,with_ccm,with_ocm,with_cloudflared,with_usbip",
+    [string]$Tags = "",
 
     [string]$OutDir = ""
 )
@@ -65,7 +65,8 @@ if (-not $Version) {
     $gitVer = git describe --tags --always --dirty 2>$null
     if ($gitVer) {
         $Version = $gitVer.Trim()
-    } else {
+    }
+    else {
         $Version = "dev"
     }
 }
@@ -86,10 +87,12 @@ if (-not $SkipFrontend) {
         }
         pnpm run build
         if ($LASTEXITCODE -ne 0) { throw "前端构建失败" }
-    } finally {
+    }
+    finally {
         Pop-Location
     }
-} else {
+}
+else {
     Write-Host "`n[*] [1/2] 跳过前端构建 (-SkipFrontend)" -ForegroundColor DarkGray
 }
 
@@ -110,7 +113,8 @@ function Build-Binary {
     $env:GOARCH = $Goarch
     if ($Goarm) {
         $env:GOARM = $Goarm
-    } else {
+    }
+    else {
         Remove-Item env:GOARM -ErrorAction SilentlyContinue
     }
 
@@ -118,9 +122,15 @@ function Build-Binary {
 
     Push-Location (Join-Path $root "controller")
     try {
-        go build -tags $Tags -ldflags $ldflags -o $outputPath .
+        $buildArgs = @("build")
+        if (-not [string]::IsNullOrWhiteSpace($Tags)) {
+            $buildArgs += @("-tags", $Tags)
+        }
+        $buildArgs += @("-ldflags", $ldflags, "-o", $outputPath, ".")
+        & go $buildArgs
         if ($LASTEXITCODE -ne 0) { throw "Go 编译失败: $Goos/$Goarch" }
-    } finally {
+    }
+    finally {
         Pop-Location
     }
 
@@ -149,10 +159,12 @@ switch ($Target) {
         if ($IsWindows -or $env:OS -eq 'Windows_NT') {
             Build-Binary -Goos 'windows' -Goarch 'amd64' -OutputName 'sing-controller.exe'
             # 同时拷贝到 controller/sing-controller.exe 便于根目录直接调试
-            Copy-Item (Join-Path $OutDir 'sing-controller.exe') (Join-Path $root 'controller/sing-controller.exe') -Force
-        } elseif ($IsMacOS) {
+            Copy-Item (Join-Path $OutDir 'sing-controller.exe') (Join-Path $root 'pkg_test/sing-controller.exe') -Force
+        }
+        elseif ($IsMacOS) {
             Build-Binary -Goos 'darwin' -Goarch 'arm64' -OutputName 'sing-controller-darwin-arm64'
-        } else {
+        }
+        else {
             Build-Binary -Goos 'linux' -Goarch 'amd64' -OutputName 'sing-controller-linux-amd64'
         }
     }
@@ -215,18 +227,31 @@ nfpms:
     homepage: https://github.com/qualvey/sing-controller
     maintainer: qualvey <wel@ryugo.org>
     description: |-
-      sing-box controller - RESTful configuration management service for sing-box.
-      Generates and validates sing-box config.json; does not run the proxy itself.
+      sing-box controller - RESTful configuration management service and process supervisor for sing-box.
+      Manages sing-box lifecycle, provides WebUI, configuration generation, and hot-reload.
     license: GPL-3.0
     formats:
       - deb
     bindir: /usr/bin
+    replaces:
+      - sing-box
     contents:
       - src: ./packaging/sing-controller.service
         dst: /etc/systemd/system/sing-controller.service
       - src: ./packaging/config.json
         dst: /etc/sing-controller/config.json
         type: config|noreplace
+      - src: ./core_bin/sing-box-arm64
+        dst: /usr/bin/sing-box
+        file_info:
+          mode: 0755
+      - src: ./core_bin/libcronet.so
+        dst: /usr/lib/libcronet.so
+        file_info:
+          mode: 0755
+      - src: /usr/lib/libcronet.so
+        dst: /usr/bin/libcronet.so
+        type: symlink
     scripts:
       postinstall: ./packaging/postinstall.sh
       postremove: ./packaging/postremove.sh
@@ -249,6 +274,12 @@ nfpms:
         Write-Host "  -> 调用 goreleaser 全量构建 deb/tar.gz ..." -ForegroundColor White
         goreleaser release --snapshot --skip=publish --clean -f (Join-Path $root ".goreleaser.yaml")
         if ($LASTEXITCODE -ne 0) { throw "goreleaser failed" }
+    }
+    'apk-arm64' {
+        & "$root/build-openwrt-apk.ps1" -Arch arm64 -SkipFrontend:$SkipFrontend
+    }
+    'apk-amd64' {
+        & "$root/build-openwrt-apk.ps1" -Arch amd64 -SkipFrontend:$SkipFrontend
     }
     'all' {
         Build-Binary -Goos 'windows' -Goarch 'amd64' -OutputName 'sing-controller-windows-amd64.exe'

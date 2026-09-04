@@ -3,7 +3,9 @@ import {
   type ConfigProfile,
   type NodeProvider,
 } from '@/api/controller'
+import { startBackendSession } from '@/assembly/session'
 import { showNotification } from '@/helper/notification'
+import { useStatusStore } from '@/store/status'
 import { ref } from 'vue'
 
 export const isProfileModalOpen = ref(false)
@@ -44,8 +46,13 @@ export const applyProfile = async (id: string) => {
   isApplyingProfileId.value = id
   try {
     await controllerApi.applyProfile(id)
-    showNotification({ content: '配置方案已应用', type: 'alert-success' })
+    showNotification({ content: '配置方案已应用，sing-box 内核正在启动...', type: 'alert-success' })
     await loadProfilesData()
+    const statusStore = useStatusStore()
+    await statusStore.refresh()
+    setTimeout(() => {
+      startBackendSession()
+    }, 600)
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '应用方案失败'
     showNotification({ content: msg, type: 'alert-error' })
@@ -71,6 +78,21 @@ export const refreshProvider = async (id: string) => {
     await controllerApi.refreshProvider(id)
     showNotification({ content: '订阅源已成功更新', type: 'alert-success' })
     await loadProfilesData()
+    const statusStore = useStatusStore()
+    await statusStore.refresh()
+
+    // 若当前处于冷启动待初始化状态（尚未生成主配置），自动应用默认方案
+    if (statusStore.status?.config_exists === false) {
+      const activeProf = profilesList.value.find(p => p.is_active) || profilesList.value[0]
+      if (activeProf) {
+        await applyProfile(activeProf.id)
+        return
+      }
+    }
+
+    setTimeout(() => {
+      startBackendSession()
+    }, 600)
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '刷新订阅失败'
     showNotification({ content: msg, type: 'alert-error' })

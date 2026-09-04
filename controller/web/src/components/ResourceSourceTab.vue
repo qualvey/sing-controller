@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { EditorView, keymap } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
 import { jsonc, jsoncLinter } from '../editor/jsonc'
-import { defaultKeymap, indentWithTab } from '@codemirror/commands'
+import { defaultKeymap, indentWithTab, insertNewlineAndIndent } from '@codemirror/commands'
+import { acceptCompletion } from '@codemirror/autocomplete'
 import { foldGutter } from '@codemirror/language'
 import { useCmTheme } from '../composables/useCmTheme'
 
@@ -12,7 +13,16 @@ const { ext: themeExt, watchTheme } = useCmTheme()
 
 // 编辑 dialog 内的「源码」tab：显示/编辑单个资源对象 JSON（JSONC）
 // 父组件保存时：isDirty() 为 true 则用 getText() 解析作为提交体，否则用表单构建结果
-const props = defineProps<{ initial: string }>()
+const props = withDefaults(
+  defineProps<{
+    initial: string
+    height?: number | string
+    minHeight?: number | string
+  }>(),
+  {
+    minHeight: 240,
+  }
+)
 const emit = defineEmits<{ update: [] }>()
 
 const editorHost = ref<HTMLElement>()
@@ -22,6 +32,20 @@ const dirty = ref(false)
 // updateListener → docChanged → dirty=true 永久卡住，后续切换编辑对象时源码不刷新
 // （表现为"源码永远指向第一个项目"，且保存时误用上一项的源码覆盖当前项）
 let applyingInitial = false
+
+const resolvedHeight = computed(() => {
+  if (props.height !== undefined && props.height !== null && props.height !== '') {
+    return typeof props.height === 'number' ? `${props.height}px` : String(props.height)
+  }
+  return '440px'
+})
+
+const resolvedMinHeight = computed(() => {
+  if (props.minHeight !== undefined && props.minHeight !== null && props.minHeight !== '') {
+    return typeof props.minHeight === 'number' ? `${props.minHeight}px` : String(props.minHeight)
+  }
+  return '240px'
+})
 
 watch(
   () => props.initial,
@@ -45,7 +69,12 @@ onMounted(() => {
       themeExt,
       foldGutter(),
       jsoncLinter(),
-      keymap.of([indentWithTab, ...defaultKeymap]),
+      keymap.of([
+        { key: 'Tab', run: acceptCompletion },
+        indentWithTab,
+        { key: 'Enter', run: insertNewlineAndIndent },
+        ...defaultKeymap
+      ]),
       EditorView.updateListener.of((u) => {
         if (u.docChanged && !applyingInitial && !dirty.value) {
           dirty.value = true
@@ -81,30 +110,25 @@ defineExpose({ getText, isDirty })
 </script>
 
 <template>
-  <div class="resource-source">
-    <div v-if="dirty" class="src-hint">已手动修改，保存时将使用源码内容（覆盖表单）</div>
-    <div ref="editorHost" class="src-editor" />
+  <div
+    class="flex flex-col gap-1.5 w-full"
+    :style="{ height: resolvedHeight, minHeight: resolvedMinHeight }"
+  >
+    <div v-if="dirty" class="text-xs text-warning leading-relaxed shrink-0">
+      {{ $t('sourceDirtyHint') }}
+    </div>
+    <div
+      ref="editorHost"
+      class="border border-base-300 rounded-md overflow-hidden text-left bg-base-100 flex-1 min-h-0 w-full"
+    />
   </div>
 </template>
 
 <style scoped>
-.resource-source {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.src-hint {
-  font-size: 12px;
-  color: #e6a23c;
-}
-.src-editor {
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  overflow: hidden;
-  height: 320px;
-  text-align: left;
-}
-.src-editor :deep(.cm-editor) {
+:deep(.cm-editor) {
   height: 100%;
+}
+:deep(.cm-scroller) {
+  overflow: auto;
 }
 </style>

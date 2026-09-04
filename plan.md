@@ -163,7 +163,55 @@ sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `
 
 ---
 
-## 六、 实施路线图 (Milestones)
+## 六、 出站节点与代理策略组全生命周期管控体系 (Outbound & Proxy Group Governance)
+
+### 1. 背景与核心矛盾 (Dashboard vs Controller)
+当前系统在节点展示与测速上复用了 Zashboard 代理视图：
+- **面板视角 (Dashboard)**：以策略组（Selector / URLTest）为核心容器，只渲染被策略组引用的出站。
+- **管控视角 (Controller)**：需对 `config.json` 中所有的出站资产拥有完整生命周期管理能力（增删改查、归属变更、健康检查）。
+- **核心痛点（孤立节点失联 / 幽灵节点）**：
+  若出站未加入任何策略组（如手动改 JSON 遗留、编辑时取消所有分组、或外部源解析的孤立出站），内核正常加载但 WebUI 代理面板直接过滤不展示，导致用户**看不见、无法测速、无法编辑、无法在 UI 上删除**。
+
+```
++-------------------------------------------------------------------------------+
+|                                出站资产总池 (All Outbounds)                     |
+|                                                                               |
+|  [Group: Proxy]              [Group: Auto]            【孤立节点 (Ungrouped)】 |
+|  ├─ VLESS-US                 ├─ VLESS-HK              ├─ Shadowsocks-Private  |
+|  └─ Tuic-JP                  └─ Tuic-JP               └─ Custom-VLESS-Test    |
+|       │                           │                            │              |
+|       ▼                           ▼                            ▼              |
+|  (Zashboard 正常展示)        (Zashboard 正常展示)      [❌ 丢失挂载，UI 幽灵隐身]  |
++-------------------------------------------------------------------------------+
+```
+
+### 2. 两阶段演进规划 (Phased Strategy)
+
+#### 阶段一：短期兜底与防呆机制 (Tactical Guard & Ungrouped Group)
+1. **未分组虚拟聚合卡片 (Virtual Ungrouped Card)**：
+   - 在前端 `ProxiesPage` 中，通过比对所有常规出站与已被分组引用的出站列表，动态计算出未归入任何 selector/urltest 的孤立节点集合；
+   - 自动在代理面板末尾渲染专属的 **「未分组节点 (Ungrouped)」** 卡片（带醒目标识）；
+   - 用户可对孤立节点执行单点测速、查看延迟、展开详情；
+   - 支持点击节点卡片编辑按钮，直接唤出 `OutboundEditDialog` 重新分配策略组，让其无缝回到正规分组。
+2. **表单防呆保护 (Form Guard)**：
+   - 在 `OutboundEditDialog.vue` 中，针对非 selector 类的普通代理出站，增加保存防呆校验：若用户清空了所有已选分组，提示或警示，避免手滑将正常节点保存为不可视的孤立节点。
+
+#### 阶段二：长期架构重构——双重视角与拓扑一致性 (Master View & Topology Governance)
+1. **双重视角分流 (Dual-View Architecture)**：
+   - **路由看板视角 (Proxies Board - 即当前 Zashboard)**：面向日常选路、流媒体解锁切换与测速，按 Selector / URLTest 组织卡片，专注极简顺畅的操作体验。
+   - **出站资产主数据视角 (Outbounds Master Table)**：
+     - 提供类似于 Inbounds / Rules 的专业配置数据表格（Table View）；
+     - 完整列出系统内所有 Outbound（包含自定义节点、订阅源注入节点、Direct/Block/DNS 系统节点）；
+     - 字段展示：Tag、协议类型、目标地址/端口、所属策略组 Pills、最后测速延迟、来源标识（手动创建 / 订阅导入）；
+     - 支持批量操作：批量测试连通性、批量迁移策略组、批量删除。
+2. **策略组拓扑与引用完整性保障 (Referential Integrity)**：
+   - **重命名/删除联动 (Cascade Update)**：后端已支持重命名自动迁移，后续补充删除分组时的保护拦截（若分组内存在独占节点，提示先重新指派或自动归入默认组）；
+   - **环形引用防护 (Cyclic Dependency Detection)**：校验 selector 相互包含造成的死循环并预先拦截；
+   - **来源标记与只读锁 (Source Provenance & Protection)**：为订阅源拉取的节点打上只读保护标签，避免用户在主列表误改导致下次订阅同步被覆盖。
+
+---
+
+## 七、 实施路线图 (Milestones)
 
 ### Phase 1: Schema 驱动与前端类型全自动流水线 (Schema & CodeGen)
 - [x] 接入 `json-schema-to-typescript` 工具链，建立 `pnpm gen:types` 自动化构建脚本并导出 `singbox.d.ts`。
@@ -199,5 +247,12 @@ sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `
 - [ ] 实现系统托盘 (System Tray) 支持：托盘菜单、快速切换代理模式/策略组、配置组一键切换。
 - [ ] 封装系统级能力：开机自启、原生通知提示、系统代理一键设置 (System Proxy)。
 - [ ] 桌面端跨平台打包流水线（Windows `.exe` / `.msi`、macOS `.app` / `.dmg`、Linux `.AppImage` / `.deb`）。
+
+### Phase 7: 出站与策略组全生命周期管控 (Outbounds & Proxy Groups Governance)
+- [ ] **前端「未分组节点」虚拟卡片 (Ungrouped Proxies Card)**：在 Proxies 页面中动态聚合无所属分组的孤立节点，支持测速与再分配。
+- [ ] **表单分组防呆拦截 (Empty Group Guard)**：OutboundEditDialog 阻止或警示无分组保存行为，防止节点脱离视图。
+- [ ] **出站资产总表 (Outbounds Master Table)**：提供类似 Inbounds/Rules 的平铺出站管理表格，支持来源标识、批量测速与批量分配。
+- [ ] **策略组拓扑校验与环路防护 (Topology & Cyclic Guard)**：后端增加分组嵌套合法性与环路检测机制。
+
 
 

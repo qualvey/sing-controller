@@ -141,7 +141,7 @@ export const hasSmartGroup = computed(() => {
 // ---------- 按后端路由的组装动作 ----------
 
 interface ProxiesBackend {
-  fetchProxies: () => Promise<unknown>
+  fetchProxies: (force?: boolean) => Promise<unknown>
   handlerProxySelect: (proxyGroupName: string, proxyName: string) => Promise<unknown>
   proxyLatencyTest: (
     proxyName: string,
@@ -156,7 +156,7 @@ interface ProxiesBackend {
 const load = (): Promise<ProxiesBackend> =>
   channel.value === Channel.Singbox ? import('./singbox') : import('./clash')
 
-export const fetchProxies = async () => (await load()).fetchProxies()
+export const fetchProxies = async (force = false) => (await load()).fetchProxies(force)
 
 export const handlerProxySelect = async (proxyGroupName: string, proxyName: string) =>
   (await load()).handlerProxySelect(proxyGroupName, proxyName)
