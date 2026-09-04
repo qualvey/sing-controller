@@ -441,6 +441,7 @@ const save = async () => {
   validateMsg.value = validateForm()
   if (validateMsg.value) return
   saving.value = true
+  statusStore.markReloading(4000)
   try {
     const body = srcTab.value?.isDirty() ? JSON.parse(srcTab.value.getText()) : buildBody()
     const res = props.isEdit ? await api.updateOutbound(props.tag || form.tag, body) : await api.createOutbound(body)
@@ -449,6 +450,7 @@ const save = async () => {
     emit('saved', res)
     await statusStore.refresh()
   } catch (e) {
+    statusStore.clearReloading()
     showToast((e as Error).message || t('outboundsDialog.operationFailed'), 'error')
   } finally {
     saving.value = false
@@ -468,6 +470,7 @@ const handleDelete = async () => {
   if (!first.confirmed) return
 
   saving.value = true
+  statusStore.markReloading(4000)
   try {
     await api.deleteOutbound(targetTag)
     showToast(t('outboundsDialog.deleteSuccess'), 'success')
@@ -485,16 +488,19 @@ const handleDelete = async () => {
       })
       if (!second.confirmed) return
       try {
+        statusStore.markReloading(4000)
         await api.deleteOutbound(targetTag, true)
         showToast(t('outboundsDialog.deleteSuccessCleanedRef'), 'success')
         emit('update:modelValue', false)
         emit('saved', null)
         await statusStore.refresh()
       } catch (e2) {
+        statusStore.clearReloading()
         showToast((e2 as Error).message || t('outboundsDialog.deleteFailed'), 'error')
       }
       return
     }
+    statusStore.clearReloading()
     showToast(err.message || t('outboundsDialog.deleteFailed'), 'error')
   } finally {
     saving.value = false

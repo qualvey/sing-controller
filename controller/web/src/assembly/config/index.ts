@@ -32,6 +32,7 @@ export const updateConfigs = async (cfg: Record<string, string | boolean | objec
   (await load()).updateConfigs(cfg)
 
 import { controllerApi } from '@/api/controller'
+import { markCoreReloading } from '@/store/status'
 import {
   flushDNSCacheAPI,
   flushFakeIPAPI,
@@ -41,10 +42,15 @@ import {
   updateGeoDataAPI,
 } from '@/api/clash'
 export const reloadConfigsAPI = async () => {
-  if (channel.value === Channel.Singbox) {
-    return controllerApi.reload()
+  markCoreReloading(4000)
+  try {
+    return await controllerApi.reload()
+  } catch (e) {
+    if (channel.value === Channel.Clash) {
+      return clashReloadConfigsAPI()
+    }
+    throw e
   }
-  return clashReloadConfigsAPI()
 }
 
 export {
