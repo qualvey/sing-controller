@@ -98,4 +98,4 @@ if ($LASTEXITCODE -ne 0) { throw 'goreleaser failed' }
 $deb = Get-ChildItem $distDir -Filter '*linux_arm64.deb' | Select-Object -First 1
 if (-not $deb) { throw 'deb 未生成' }
 Write-Host "[OK] 产物: $($deb.FullName) ($([math]::Round($deb.Length/1MB,1)) MB)"
-Write-Host "部署: scp $($deb.FullName) ryu@nanopi:/tmp/ && ssh ryu@nanopi 'sudo dpkg -i /tmp/$($deb.Name)'"
+Write-Host "部署: scp $($deb.FullName) armbian:/tmp/ && ssh armbian 'sudo dpkg -i /tmp/$($deb.Name)'"
