@@ -37,9 +37,20 @@ func (h *Handler) findRuleIndexByID(id string) int {
 func (h *Handler) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
 	h.store.AlignMeta()
-	items := make([]map[string]any, 0, len(h.store.Options.Route.Rules))
-	for i := range h.store.Options.Route.Rules {
-		content, err := json.MarshalContext(ctx, &h.store.Options.Route.Rules[i])
+
+	h.store.RLock()
+	defer h.store.RUnlock()
+
+	var rules []option.Rule
+	finalOutbound := ""
+	if h.store.Options.Route != nil {
+		rules = h.store.Options.Route.Rules
+		finalOutbound = h.store.Options.Route.Final
+	}
+
+	items := make([]map[string]any, 0, len(rules))
+	for i := range rules {
+		content, err := json.MarshalContext(ctx, &rules[i])
 		if err != nil {
 			logger.Error("序列化 route 规则 #%d 失败: %v", i+1, err)
 			writeError(w, http.StatusInternalServerError, err)
@@ -53,13 +64,16 @@ func (h *Handler) handleListRoutes(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	logger.Debug("查询 route 规则列表成功 (count=%d)", len(items))
-	writeJSON(w, http.StatusOK, map[string]any{"routes": items, "final": h.store.Options.Route.Final})
+	writeJSON(w, http.StatusOK, map[string]any{"routes": items, "final": finalOutbound})
 }
 
 func (h *Handler) handleGetRoute(w http.ResponseWriter, r *http.Request) {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	id := r.PathValue("id")
 	index := h.findRuleIndexByID(id)
-	if index < 0 || index >= len(h.store.Options.Route.Rules) {
+	if h.store.Options.Route == nil || index < 0 || index >= len(h.store.Options.Route.Rules) {
 		logger.Debug("获取 route 规则失败: id 未找到 [%s]", id)
 		writeError(w, http.StatusNotFound, errors.New("route 规则不存在: "+id))
 		return

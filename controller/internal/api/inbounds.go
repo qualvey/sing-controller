@@ -20,6 +20,9 @@ func (h *Handler) findInboundIndex(tag string) int {
 }
 
 func (h *Handler) handleListInbounds(w http.ResponseWriter, r *http.Request) {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	ctx := h.ctx(r)
 	items := make([]json.RawMessage, 0, len(h.store.Options.Inbounds))
 	for i := range h.store.Options.Inbounds {
@@ -69,6 +72,9 @@ func (h *Handler) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetInbound(w http.ResponseWriter, r *http.Request) {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	tag := r.PathValue("tag")
 	index := h.findInboundIndex(tag)
 	if index < 0 {

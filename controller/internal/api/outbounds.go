@@ -20,6 +20,9 @@ func (h *Handler) findOutboundIndex(tag string) int {
 }
 
 func (h *Handler) handleListOutbounds(w http.ResponseWriter, r *http.Request) {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	ctx := h.ctx(r)
 	items := make([]json.RawMessage, 0, len(h.store.Options.Outbounds))
 	for i := range h.store.Options.Outbounds {
@@ -176,6 +179,9 @@ func removeString(list []string, s string) []string {
 }
 
 func (h *Handler) handleGetOutbound(w http.ResponseWriter, r *http.Request) {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	tag := r.PathValue("tag")
 	index := h.findOutboundIndex(tag)
 	if index < 0 {

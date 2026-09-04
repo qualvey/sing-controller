@@ -77,7 +77,7 @@ type UserMeta struct {
 }
 
 type Store struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	path     string
 	metaPath string
 	Options  option.Options
@@ -89,6 +89,19 @@ func New(path string) *Store {
 }
 
 func (s *Store) Path() string { return s.path }
+
+func (s *Store) RLock() { s.mu.RLock() }
+func (s *Store) RUnlock() { s.mu.RUnlock() }
+
+// ConfigDir 返回配置所在目录
+func (s *Store) ConfigDir() string {
+	return filepath.Dir(s.path)
+}
+
+// OutboundsPath 返回动态生成的独立出站池路径
+func (s *Store) OutboundsPath() string {
+	return filepath.Join(filepath.Dir(s.path), "10-outbounds.json")
+}
 
 // Parse 严格解码（未知字段报错、重复 tag 检查），不做实例化。
 // 内部强制注入 include.Context（含全部 registry），保证任何调用入口
@@ -183,6 +196,37 @@ func Validate(ctx context.Context, content []byte) error {
 		return err
 	}
 	instance.Close()
+	return nil
+}
+
+// ValidateMulti 联合校验多个配置片段（例如 base 框架与 10-outbounds.json）：
+// 写入临时目录并通过宿主内核 `sing-box check -C <tmpDir>` 进行全量联合预检
+func ValidateMulti(ctx context.Context, files map[string][]byte) error {
+	bin := FindSingBoxBinary()
+	if bin != "" {
+		tmpDir, err := os.MkdirTemp("", "sing-box-check-multi-*")
+		if err == nil {
+			defer os.RemoveAll(tmpDir)
+			for name, data := range files {
+				tmpFile := filepath.Join(tmpDir, name)
+				if err := os.WriteFile(tmpFile, data, 0600); err != nil {
+					return err
+				}
+			}
+			cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(cctx, bin, "check", "-C", tmpDir)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				cleanErr := strings.TrimSpace(string(out))
+				if cleanErr != "" {
+					return errors.New(cleanErr)
+				}
+				return fmt.Errorf("sing-box check -C failed: %w", err)
+			}
+			return nil
+		}
+	}
 	return nil
 }
 
@@ -381,9 +425,9 @@ func (s *Store) saveRawLocked(ctx context.Context, content []byte) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	// 备份
-	if _, err := os.Stat(s.path); err == nil {
-		_ = os.WriteFile(s.path+".bak", content, 0o644)
+	// 备份原有旧配置
+	if oldData, err := os.ReadFile(s.path); err == nil && len(oldData) > 0 {
+		_ = os.WriteFile(s.path+".bak", oldData, 0o644)
 	}
 	tmp := s.path + ".tmp"
 	_ = os.Remove(tmp)
@@ -410,9 +454,9 @@ func (s *Store) saveLocked(ctx context.Context) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	// 备份
-	if _, err := os.Stat(s.path); err == nil {
-		_ = os.WriteFile(s.path+".bak", content, 0o644)
+	// 备份原有旧配置
+	if oldData, err := os.ReadFile(s.path); err == nil && len(oldData) > 0 {
+		_ = os.WriteFile(s.path+".bak", oldData, 0o644)
 	}
 	tmp := s.path + ".tmp"
 	_ = os.Remove(tmp)
@@ -473,10 +517,12 @@ func (s *Store) AlignMeta() {
 		dnsRuleCount = len(s.Options.DNS.Rules)
 	}
 	ruleSetCount := 0
+	routeRuleCount := 0
 	if s.Options.Route != nil {
 		ruleSetCount = len(s.Options.Route.RuleSet)
+		routeRuleCount = len(s.Options.Route.Rules)
 	}
-	s.Meta = loadMeta(s.metaPath, len(s.Options.Route.Rules), dnsRuleCount, ruleSetCount, len(s.Options.CertificateProviders))
+	s.Meta = loadMeta(s.metaPath, routeRuleCount, dnsRuleCount, ruleSetCount, len(s.Options.CertificateProviders))
 }
 
 // Update 加锁执行 mutate，然后全量校验（解码 + box.New 干跑）并原子写盘。
@@ -504,15 +550,23 @@ func (s *Store) Update(ctx context.Context, mutate func(*option.Options, *Meta) 
 func (s *Store) snapshot(ctx context.Context) (option.Options, *Meta) {
 	content, err := marshalOptions(ctx, s.Options)
 	if err != nil {
-		return s.Options, &s.Meta
+		return s.Options, s.cloneMeta()
 	}
 	options, err := Parse(ctx, content)
 	if err != nil {
-		return s.Options, &s.Meta
+		return s.Options, s.cloneMeta()
 	}
-	ruleIDs := make([]string, len(s.Meta.RuleIDs))
-	copy(ruleIDs, s.Meta.RuleIDs)
-	return options, &Meta{RuleIDs: ruleIDs}
+	return options, s.cloneMeta()
+}
+
+func (s *Store) cloneMeta() *Meta {
+	metaJSON, err := json.Marshal(s.Meta)
+	if err != nil {
+		return &s.Meta
+	}
+	var cloned Meta
+	_ = json.Unmarshal(metaJSON, &cloned)
+	return &cloned
 }
 
 func (s *Store) restore(options option.Options, meta *Meta) {

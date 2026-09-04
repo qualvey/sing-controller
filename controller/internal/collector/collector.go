@@ -44,13 +44,28 @@ func StartCollector(ctx context.Context, wg *sync.WaitGroup, cfg *settings.Manag
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+
+	// 每日定时清理超出保留期的时序明细日志（保留 60 天），防止数据库体积无限膨胀
+	cleanupTicker := time.NewTicker(24 * time.Hour)
+	defer cleanupTicker.Stop()
+	go func() {
+		_, _ = CleanOldLogs(ctx, 60)
+	}()
+
+	// 记录上一轮统计数值，用于在 ResetOnQuery=false 时计算真实增量 (Delta)
+	lastStats := make(map[string][2]int64)
+
 	for {
 		select {
 		case <-ctx.Done(): // 收到外部退出或取消信号
 			logger.Info("[Collector] stopped: %v", ctx.Err())
 			return // 触发 defer 释放 ticker 和 conn
+		case <-cleanupTicker.C:
+			go func() {
+				_, _ = CleanOldLogs(ctx, 60)
+			}()
 		case <-ticker.C:
-			collect(ctx, client, cfg, rt)
+			collect(ctx, client, cfg, rt, lastStats)
 			// 动态间隔：有实时监控订阅者时切换到前端指定/默认高频，否则回默认
 			target := interval
 			if fast := rt.EffectivePollInterval(); fast > 0 {
@@ -65,9 +80,11 @@ func StartCollector(ctx context.Context, wg *sync.WaitGroup, cfg *settings.Manag
 	}
 }
 
-func collect(parentCtx context.Context, client command.StatsServiceClient, cfg *settings.Manager, rt *realtime.Broadcaster) {
+func collect(parentCtx context.Context, client command.StatsServiceClient, cfg *settings.Manager, rt *realtime.Broadcaster, lastStats map[string][2]int64) {
 	ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 	defer cancel()
+
+	resetOnQuery := cfg.Values().Stats.ResetOnQuery
 
 	// 分 user / inbound 两类查询，避免大响应
 	categories := []struct{ pattern, category string }{
@@ -86,7 +103,7 @@ func collect(parentCtx context.Context, client command.StatsServiceClient, cfg *
 		}
 		resp, err := client.QueryStats(ctx, &command.QueryStatsRequest{
 			Pattern: queryPattern,
-			Reset_:  cfg.Values().Stats.ResetOnQuery,
+			Reset_:  resetOnQuery,
 		})
 		if err != nil {
 			logger.Error("[Collector] QueryStats(%s) error: %v", c.category, err)
@@ -117,11 +134,37 @@ func collect(parentCtx context.Context, client command.StatsServiceClient, cfg *
 		}
 
 		for tag, v := range perTarget {
-			if err := record(now, c.category, tag, v[0], v[1]); err != nil {
+			statKey := c.category + ">>>" + tag
+			var deltaUp, deltaDown int64
+
+			if resetOnQuery {
+				// 若开启了 reset_on_query，每次 query 内核已将计数器清零，返回的值即为周期增量
+				deltaUp = v[0]
+				deltaDown = v[1]
+			} else {
+				// 未开启 reset_on_query 时内核返回累计总量，需通过差值计算真实增量 (Delta)
+				last := lastStats[statKey]
+				if v[0] >= last[0] {
+					deltaUp = v[0] - last[0]
+				} else {
+					// 内核重启或计数器被外部重置
+					deltaUp = v[0]
+				}
+
+				if v[1] >= last[1] {
+					deltaDown = v[1] - last[1]
+				} else {
+					deltaDown = v[1]
+				}
+
+				lastStats[statKey] = [2]int64{v[0], v[1]}
+			}
+
+			if err := record(now, c.category, tag, deltaUp, deltaDown); err != nil {
 				logger.Error("[Collector] record %s/%s failed: %v", c.category, tag, err)
 				continue
 			}
-			rt.Submit(tag, v[0], v[1])
+			rt.Submit(tag, deltaUp, deltaDown)
 		}
 		if len(perTarget) > 0 {
 			logger.Debug("[Collector] %s: recorded %d targets", c.category, len(perTarget))
@@ -170,4 +213,21 @@ func record(ts time.Time, category, tag string, up, down int64) error {
 			"total_bytes":    gorm.Expr("total_bytes + ?", up+down),
 			"updated_at":     ts,
 		}).Error
+}
+
+// CleanOldLogs 定期清理指定天数前的 TrafficLog 增量明细，防止 SQLite/Postgres 时序表无限膨胀
+func CleanOldLogs(ctx context.Context, retentionDays int) (int64, error) {
+	if db.DB == nil || retentionDays <= 0 {
+		return 0, nil
+	}
+	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+	res := db.DB.WithContext(ctx).Where("timestamp < ?", cutoff).Delete(&models.TrafficLog{})
+	if res.Error != nil {
+		logger.Error("[Collector] CleanOldLogs error: %v", res.Error)
+		return 0, res.Error
+	}
+	if res.RowsAffected > 0 {
+		logger.Info("[Collector] Cleaned %d traffic logs older than %s", res.RowsAffected, cutoff.Format("2006-01-02"))
+	}
+	return res.RowsAffected, nil
 }

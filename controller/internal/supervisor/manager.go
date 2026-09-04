@@ -44,6 +44,7 @@ type Manager struct {
 	subMu       sync.RWMutex
 	subscribers map[chan LogLine]struct{}
 
+	restartMu   sync.Mutex
 	cancelFn context.CancelFunc
 }
 
@@ -152,10 +153,26 @@ func (m *Manager) Start(ctx context.Context) error {
 func (m *Manager) startLocked(ctx context.Context) error {
 	m.state = StateStarting
 
-	args := []string{"run"}
-	if m.cfg.ConfigPath != "" {
-		args = append(args, "-c", m.cfg.ConfigPath)
+	var args []string
+	if m.cfg.WorkingDir != "" {
+		args = append(args, "-D", m.cfg.WorkingDir)
 	}
+	if m.cfg.ConfigPath != "" {
+		fi, err := os.Stat(m.cfg.ConfigPath)
+		if err == nil && fi.IsDir() {
+			// 目录模式：直接使用 -C <ConfigDir>
+			args = append(args, "-C", m.cfg.ConfigPath)
+		} else {
+			// 文件模式：添加主配置
+			args = append(args, "-c", m.cfg.ConfigPath)
+			// 若同目录下存在动态生成的 10-outbounds.json，自动双挂载
+			outboundsPath := filepath.Join(filepath.Dir(m.cfg.ConfigPath), "10-outbounds.json")
+			if ofi, err := os.Stat(outboundsPath); err == nil && !ofi.IsDir() {
+				args = append(args, "-c", outboundsPath)
+			}
+		}
+	}
+	args = append(args, "run")
 
 	cmd := exec.Command(m.cfg.BinaryPath, args...)
 	if m.cfg.WorkingDir != "" {
@@ -440,6 +457,8 @@ func (m *Manager) Reload(ctx context.Context) error {
 }
 
 func (m *Manager) Restart(ctx context.Context) error {
+	m.restartMu.Lock()
+	defer m.restartMu.Unlock()
 	_ = m.Stop(ctx)
 	time.Sleep(200 * time.Millisecond)
 	return m.Start(ctx)

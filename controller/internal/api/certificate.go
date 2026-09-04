@@ -21,6 +21,10 @@ import (
 func (h *Handler) handleGetCertificate(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
 	h.store.AlignMeta()
+
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	cert := h.store.Options.Certificate
 	providers := make([]map[string]any, 0, len(h.store.Options.CertificateProviders))
 	for i := range h.store.Options.CertificateProviders {

@@ -18,6 +18,9 @@ type Diagnostic struct {
 }
 
 func (h *Handler) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	options := h.store.Options
 	var out []Diagnostic
 

@@ -120,6 +120,9 @@ func (h *Handler) clashTarget() (*url.URL, string, string) {
 }
 
 func (h *Handler) clashAPIConfig() *option.ClashAPIOptions {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	if h.store.Options.Experimental == nil {
 		return nil
 	}
@@ -194,6 +197,9 @@ func (h *Handler) serviceAPITarget() (*url.URL, string, string) {
 }
 
 func (h *Handler) serviceAPIConfig() *option.APIServiceOptions {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	for i := range h.store.Options.Services {
 		s := &h.store.Options.Services[i]
 		if s.Type == "api" {

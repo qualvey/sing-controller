@@ -144,6 +144,10 @@ func removeDNSRuleRefs(ctx context.Context, rule *option.DNSRule, tag string) er
 func (h *Handler) handleGetDNS(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
 	h.store.AlignMeta()
+
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	dns := h.store.Options.DNS
 	if dns == nil {
 		logger.Debug("查询 DNS 配置成功 (未配置 DNS 段)")

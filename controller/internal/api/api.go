@@ -404,6 +404,9 @@ func readRawBody(r *http.Request) ([]byte, error) {
 // ---------- status ----------
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	values := h.settings.Values()
 	ruleCount := 0
 	if h.store.Options.Route != nil {

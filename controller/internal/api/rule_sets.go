@@ -146,6 +146,10 @@ func removeRuleSetRef(ctx context.Context, rule any, tag string) error {
 func (h *Handler) handleListRuleSets(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
 	h.store.AlignMeta()
+
+	h.store.RLock()
+	defer h.store.RUnlock()
+
 	items := make([]map[string]any, 0)
 	if h.store.Options.Route != nil {
 		for i := range h.store.Options.Route.RuleSet {
