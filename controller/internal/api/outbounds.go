@@ -78,7 +78,7 @@ func (h *Handler) handleCreateOutbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("outbound 必须包含 tag"))
 		return
 	}
-	err = h.store.Update(h.ctx(r), func(options *option.Options, _ *metaType) error {
+	h.commit(w, r, func(options *option.Options, _ *metaType) error {
 		if h.findOutboundIndex(outbound.Tag) >= 0 {
 			logger.Warn("创建 outbound 失败: tag 已存在 [%s]", outbound.Tag)
 			return errors.New("outbound tag 已存在: " + outbound.Tag)
@@ -87,19 +87,13 @@ func (h *Handler) handleCreateOutbound(w http.ResponseWriter, r *http.Request) {
 		if attachGroups != nil && len(*attachGroups) > 0 {
 			syncTagToGroups(options, outbound.Tag, *attachGroups)
 		}
+		var attached []string
+		if attachGroups != nil {
+			attached = *attachGroups
+		}
+		logger.Info("成功创建 outbound [tag: %s, type: %s, attached_groups=%v]", outbound.Tag, outbound.Type, attached)
 		return nil
 	})
-	if err != nil {
-		logger.Warn("创建 outbound 校验或写盘失败: %v", err)
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	var attached []string
-	if attachGroups != nil {
-		attached = *attachGroups
-	}
-	logger.Info("成功创建 outbound [tag: %s, type: %s, attached_groups=%v]", outbound.Tag, outbound.Type, attached)
-	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
 }
 
 // syncTagToGroups 保持 tag 与目标 selector/urltest 分组列表同步

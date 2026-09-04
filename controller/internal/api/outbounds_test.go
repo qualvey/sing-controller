@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/sagernet/sing-box/include"
@@ -183,5 +184,28 @@ func TestParseOutboundPayload(t *testing.T) {
 		}
 	})
 }
+
+func TestHandleCreateOutboundWithCommit(t *testing.T) {
+	h := newTestHandler(t)
+	// 创建新出站节点（即使未显式传 ?reload=true，出站运维接口也自动触发重载）
+	body := `{"type":"direct","tag":"custom-direct","attach_groups":[]}`
+	rec := doRequest(t, h, "POST", "/api/outbounds", body)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"saved":true`) {
+		t.Fatalf("response missing saved:true: %s", rec.Body.String())
+	}
+
+	// 确认可以通过 GET /api/outbounds/custom-direct 查询到
+	getRec := doRequest(t, h, "GET", "/api/outbounds/custom-direct", "")
+	if getRec.Code != 200 {
+		t.Fatalf("status = %d, want 200, body: %s", getRec.Code, getRec.Body.String())
+	}
+	if !strings.Contains(getRec.Body.String(), `"tag":"custom-direct"`) {
+		t.Fatalf("expected tag custom-direct, got %s", getRec.Body.String())
+	}
+}
+
 
 

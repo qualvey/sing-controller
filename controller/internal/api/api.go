@@ -356,8 +356,8 @@ func (h *Handler) commit(w http.ResponseWriter, r *http.Request, mutate func(*op
 	}
 	logger.Info("配置更新已原子落盘 (path=%s)", r.URL.Path)
 	response := map[string]any{"saved": true}
-	// 保存后自动重载 sing-box（settings.reload.after_save）
-	if executed, err := h.reloadIfEnabled(); err != nil {
+	// 保存后自动重载 sing-box（settings.reload.after_save 或 ?reload=true）
+	if executed, err := h.reloadIfRequested(r); err != nil {
 		logger.Error("配置保存后自动重载 sing-box 失败: %v", err)
 		response["reload_error"] = err.Error()
 		response["message"] = "配置已保存，但 sing-box 重载失败"
@@ -634,8 +634,8 @@ func (h *Handler) handlePutConfigRaw(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Info("原样保存 sing-box 配置成功")
 	response := map[string]any{"saved": true}
-	// 保存后自动重载 sing-box（settings.reload.after_save）
-	if executed, err := h.reloadIfEnabled(); err != nil {
+	// 保存后自动重载 sing-box（settings.reload.after_save 或 ?reload=true）
+	if executed, err := h.reloadIfRequested(r); err != nil {
 		logger.Error("保存后自动重载 sing-box 失败: %v", err)
 		response["reload_error"] = err.Error()
 		response["message"] = "配置已保存，但 sing-box 重载失败"
