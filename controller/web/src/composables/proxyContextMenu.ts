@@ -3,6 +3,7 @@ import { ref } from 'vue'
 export interface ProxyContextMenuTarget {
   name: string
   groupName?: string
+  isGroup?: boolean
 }
 
 export const isProxyContextMenuVisible = ref(false)

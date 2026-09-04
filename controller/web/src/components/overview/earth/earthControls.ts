@@ -1,11 +1,13 @@
 import * as THREE from 'three/webgpu'
 import type { EarthLocation } from './types'
 import { toEarthVector } from './earthMath'
+import type { EarthViewState } from './rendererTypes'
 
 export interface EarthControlsOptions {
   camera: THREE.PerspectiveCamera
   domElement: HTMLElement
   earthGroup: THREE.Group
+  initialViewState?: EarthViewState
   minDistance?: number
   maxDistance?: number
   rotateSpeed?: number
@@ -62,6 +64,40 @@ export class EarthControls {
     this.targetDistance = this.currentDistance
 
     this.initEventListeners()
+
+    if (options.initialViewState) {
+      this.setViewState(options.initialViewState)
+    }
+  }
+
+  public getViewState(): EarthViewState {
+    return {
+      quaternion: [
+        this.earthGroup.quaternion.x,
+        this.earthGroup.quaternion.y,
+        this.earthGroup.quaternion.z,
+        this.earthGroup.quaternion.w,
+      ],
+      distance: this.targetDistance,
+    }
+  }
+
+  public setViewState(state: EarthViewState) {
+    if (Array.isArray(state.quaternion) && state.quaternion.length === 4) {
+      this.earthGroup.quaternion.fromArray(state.quaternion)
+    }
+    if (
+      typeof state.distance === 'number' &&
+      state.distance >= this.minDistance &&
+      state.distance <= this.maxDistance
+    ) {
+      this.targetDistance = state.distance
+      this.currentDistance = state.distance
+      const dir = this.camera.position.clone().sub(this.target).normalize()
+      this.camera.position.copy(this.target).addScaledVector(dir, this.currentDistance)
+      this.camera.lookAt(this.target)
+    }
+    this.emitChange()
   }
 
   private getTrackballVector(clientX: number, clientY: number): THREE.Vector3 {

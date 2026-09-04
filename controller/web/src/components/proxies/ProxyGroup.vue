@@ -3,7 +3,7 @@
     :name="proxyGroup.name"
     :force-open="forceOpen"
     :data-group-name="proxyGroup.name"
-    @contextmenu.prevent.stop="handlerLatencyTest"
+    @contextmenu.prevent.stop="openProxyContextMenu($event, { name: proxyGroup.name, isGroup: true })"
   >
     <template v-slot:title>
       <ProxyGroupHeaderForMobile
@@ -44,6 +44,7 @@
 <script setup lang="ts">
 import { useBounceOnVisible } from '@/composables/bouncein'
 import { useRenderProxyList } from '@/composables/renderProxies'
+import { openProxyContextMenu } from '@/composables/proxyContextMenu'
 import { isMiddleScreen } from '@/helper/utils'
 import { handlerProxySelect, proxyGroupLatencyTest } from '@/assembly/proxies'
 import { proxyMap } from '@/assembly/proxies'

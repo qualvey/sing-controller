@@ -79,6 +79,7 @@ export const createEarthRenderer = async (
       camera,
       domElement: renderer.domElement,
       earthGroup,
+      initialViewState: options.initialViewState,
       minDistance: 2.4,
       maxDistance: 8.0,
       rotateSpeed: 1.35,
@@ -245,11 +246,23 @@ export const createEarthRenderer = async (
     }, 60_000)
     registerCleanup(() => window.clearInterval(sunTimer))
 
+    let viewStateTimer: number | null = null
     const onControlsChange = () => {
       if (reducedMotion) render()
+      if (options.onViewStateChange) {
+        if (viewStateTimer !== null) window.clearTimeout(viewStateTimer)
+        viewStateTimer = window.setTimeout(() => {
+          if (!disposed) {
+            options.onViewStateChange?.(controls.getViewState())
+          }
+        }, 300)
+      }
     }
     controls.addEventListener('change', onControlsChange)
-    registerCleanup(() => controls.removeEventListener('change', onControlsChange))
+    registerCleanup(() => {
+      if (viewStateTimer !== null) window.clearTimeout(viewStateTimer)
+      controls.removeEventListener('change', onControlsChange)
+    })
 
     updateAnimationLoop()
 
@@ -276,8 +289,10 @@ export const createEarthRenderer = async (
         }
 
         initialLocationSet = true
-        controls.focusLocation(location)
-        render()
+        if (!options.initialViewState) {
+          controls.focusLocation(location)
+          render()
+        }
       },
       setReducedMotion(value) {
         if (disposed) return
@@ -308,6 +323,12 @@ export const createEarthRenderer = async (
         globeLayer.setColorScheme(scheme)
         routeLayer.setColorScheme(scheme)
         if (visualMode === 'flat') render()
+      },
+      getViewState: () => controls.getViewState(),
+      setViewState: (state) => {
+        if (disposed) return
+        controls.setViewState(state)
+        render()
       },
       dispose: disposeResources,
     }

@@ -326,7 +326,7 @@ import {
   PauseIcon,
   PlayIcon,
 } from '@heroicons/vue/24/outline'
-import { useMediaQuery } from '@vueuse/core'
+import { useMediaQuery, useStorage } from '@vueuse/core'
 import * as ipaddr from 'ipaddr.js'
 import type { CSSProperties } from 'vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
@@ -343,10 +343,12 @@ import {
   type GeoWorkerResponse,
 } from './earth/types'
 import type { EarthRenderer } from './earth/earthRenderer'
+import type { EarthViewState } from './earth/rendererTypes'
 
 const { t } = useI18n()
 const canvasRef = ref<HTMLElement>()
 const renderer = shallowRef<EarthRenderer>()
+const earthViewState = useStorage<EarthViewState | null>('cache/earth-view-state', null)
 const rendererError = ref('')
 const databaseStatus = ref<GeoDatabaseStatus>('checking')
 const databaseError = ref<GeoDatabaseError>()
@@ -689,6 +691,10 @@ const initialize = async () => {
       reducedMotion: reducedMotion.value,
       visualMode: earthVisualMode.value,
       colorScheme: getEarthColorScheme(),
+      initialViewState: earthViewState.value ?? undefined,
+      onViewStateChange: (state) => {
+        earthViewState.value = state
+      },
       onEndpointHover: handleEndpointHover,
     })
 

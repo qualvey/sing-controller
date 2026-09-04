@@ -379,6 +379,13 @@ onMounted(() => {
       lintGutter(),
       jsoncLinter(),
       keymap.of([
+        {
+          key: 'Mod-s',
+          run: () => {
+            void save()
+            return true
+          },
+        },
         { key: 'Tab', run: acceptCompletion },
         indentWithTab,
         { key: 'Enter', run: insertNewlineAndIndent },
@@ -394,6 +401,14 @@ onMounted(() => {
   })
   editor.value = new EditorView({ state, parent: editorHost.value })
 
+  const handleGlobalKeyDown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault()
+      void save()
+    }
+  }
+  window.addEventListener('keydown', handleGlobalKeyDown)
+
   watch(
     () => themeStore.mode,
     () => {
@@ -402,9 +417,10 @@ onMounted(() => {
   )
   void loadConfig()
   void statusStore.refresh()
-})
 
-onBeforeUnmount(() => {
-  editor.value?.destroy()
+  onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleGlobalKeyDown)
+    editor.value?.destroy()
+  })
 })
 </script>

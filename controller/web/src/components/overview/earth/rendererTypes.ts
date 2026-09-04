@@ -4,10 +4,17 @@ import type { EarthEndpointInfo, EarthLocation, EarthRoute } from './types'
 export type EarthColorScheme = 'dark' | 'light'
 export type EarthVisualMode = 'flat' | 'space'
 
+export interface EarthViewState {
+  quaternion: [number, number, number, number]
+  distance: number
+}
+
 export interface EarthRendererOptions {
   reducedMotion: boolean
   visualMode: EarthVisualMode
   colorScheme: EarthColorScheme
+  initialViewState?: EarthViewState
+  onViewStateChange?: (state: EarthViewState) => void
   onEndpointHover: (info: EarthEndpointInfo | null, x?: number, y?: number) => void
 }
 
@@ -19,6 +26,8 @@ export interface EarthRenderer {
   setCityLabelsVisible: (visible: boolean) => void
   setVisualMode: (mode: EarthVisualMode) => void
   setColorScheme: (scheme: EarthColorScheme) => void
+  getViewState: () => EarthViewState
+  setViewState: (state: EarthViewState) => void
   dispose: () => void
 }
 

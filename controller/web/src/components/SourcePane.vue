@@ -114,6 +114,13 @@ onMounted(() => {
       foldGutter(),
       jsoncLinter(),
       keymap.of([
+        {
+          key: 'Mod-s',
+          run: () => {
+            void save()
+            return true
+          }
+        },
         { key: 'Tab', run: acceptCompletion },
         indentWithTab,
         { key: 'Enter', run: insertNewlineAndIndent },
@@ -131,11 +138,21 @@ onMounted(() => {
   })
   editor.value = new EditorView({ state, parent: editorHost.value })
   watchTheme(() => editor.value)
-  load()
-})
 
-onBeforeUnmount(() => {
-  editor.value?.destroy()
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault()
+      void save()
+    }
+  }
+  window.addEventListener('keydown', handleKeyDown)
+
+  load()
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleKeyDown)
+    editor.value?.destroy()
+  })
 })
 </script>
 
