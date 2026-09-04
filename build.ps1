@@ -177,6 +177,7 @@ switch ($Target) {
         @'
 version: 2
 project_name: sing-controller
+dist: dist/deb
 builds:
   - id: sing-controller
     dir: controller
@@ -238,7 +239,7 @@ nfpms:
         goreleaser release --snapshot --skip=publish --clean -f $cfgFile
         if ($LASTEXITCODE -ne 0) { throw "goreleaser failed" }
 
-        $deb = Get-ChildItem $OutDir -Filter '*linux_arm64.deb' | Select-Object -First 1
+        $deb = Get-ChildItem (Join-Path $OutDir "deb") -Filter '*linux_arm64.deb' | Select-Object -First 1
         if ($deb) {
             Write-Host "     [OK] deb 产物: $($deb.FullName) ($([math]::Round($deb.Length/1MB,2)) MB)" -ForegroundColor Green
         }

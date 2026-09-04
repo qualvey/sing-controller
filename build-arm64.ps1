@@ -22,11 +22,14 @@ if (-not (Get-Command goreleaser -ErrorAction SilentlyContinue)) {
 }
 
 # 临时配置：仅 arm64（从 .goreleaser.yaml 精简，tags/打包逻辑保持一致）
+$distDir = "dist/deb"
 $cfgFile = Join-Path $env:TEMP 'goreleaser-arm64.yaml'
 @'
 version: 2
 
 project_name: sing-controller
+
+dist: dist/deb
 
 builds:
   - id: sing-controller
@@ -92,7 +95,7 @@ Write-Host "[*] goreleaser snapshot build (linux/arm64 deb only)..."
 goreleaser release --snapshot --skip=publish --clean -f $cfgFile
 if ($LASTEXITCODE -ne 0) { throw 'goreleaser failed' }
 
-$deb = Get-ChildItem dist -Filter '*linux_arm64.deb' | Select-Object -First 1
+$deb = Get-ChildItem $distDir -Filter '*linux_arm64.deb' | Select-Object -First 1
 if (-not $deb) { throw 'deb 未生成' }
 Write-Host "[OK] 产物: $($deb.FullName) ($([math]::Round($deb.Length/1MB,1)) MB)"
 Write-Host "部署: scp $($deb.FullName) ryu@nanopi:/tmp/ && ssh ryu@nanopi 'sudo dpkg -i /tmp/$($deb.Name)'"
