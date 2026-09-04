@@ -91,6 +91,7 @@ interface OutboundForm {
   interval: string
   tolerance?: number
   interrupt_exist_connections: boolean
+  attach_groups: string[]
 }
 
 const form = reactive<OutboundForm>({
@@ -117,7 +118,8 @@ const form = reactive<OutboundForm>({
   url: '',
   interval: '',
   tolerance: undefined,
-  interrupt_exist_connections: false
+  interrupt_exist_connections: false,
+  attach_groups: []
 })
 
 const networkOptions = ['tcp', 'udp', 'ws', 'grpc', 'h2', 'httpupgrade', 'xhttp']
@@ -134,6 +136,37 @@ const isUrlTest = computed(() => form.type === 'urltest')
 const groupCandidates = computed(() =>
   outbounds.value.map((o) => String(o.tag)).filter((t) => t && t !== form.tag)
 )
+
+// 当前可加入的代理分组（selector 或 urltest，且排除自身）
+const availableProxyGroups = computed(() =>
+  outbounds.value
+    .filter((o) => (o.type === 'selector' || o.type === 'urltest') && o.tag && o.tag !== form.tag)
+    .map((o) => String(o.tag))
+)
+
+// 默认自动勾选策略：首个或名为 Proxy / 节点选择 的常用分组，默认优先给首个 selector
+function getDefaultSelectedGroups(allOutbounds: Outbound[]): string[] {
+  const groups = allOutbounds.filter(
+    (o) => (o.type === 'selector' || o.type === 'urltest') && o.tag
+  )
+  if (!groups.length) return []
+
+  const commonNames = ['Proxy', '节点选择', 'PROXY', 'proxy', '节点']
+  const matchedCommon = groups.find((g) => commonNames.includes(String(g.tag)))
+  if (matchedCommon && matchedCommon.tag) {
+    return [String(matchedCommon.tag)]
+  }
+
+  const firstSelector = groups.find((g) => g.type === 'selector')
+  if (firstSelector && firstSelector.tag) {
+    return [String(firstSelector.tag)]
+  }
+
+  if (groups[0]?.tag) {
+    return [String(groups[0].tag)]
+  }
+  return []
+}
 
 const networkOptionsAll = computed(() =>
   form.network && !networkOptions.includes(form.network) ? [...networkOptions, form.network] : networkOptions
@@ -198,6 +231,7 @@ function resetForm(type: string) {
   form.interval = ''
   form.tolerance = undefined
   form.interrupt_exist_connections = false
+  form.attach_groups = []
 }
 
 function fillForm(obj: Outbound) {
@@ -235,6 +269,11 @@ function fillForm(obj: Outbound) {
     form.tolerance = num(obj.tolerance)
     form.interrupt_exist_connections = !!obj.interrupt_exist_connections
   }
+  if (Array.isArray(obj.attach_groups)) {
+    form.attach_groups = obj.attach_groups.map(String)
+  } else {
+    form.attach_groups = []
+  }
 }
 
 const loadTypesAndCandidates = async () => {
@@ -251,6 +290,7 @@ const openCreate = () => {
   sourceJson.value = '{}'
   const def = statusStore.status?.defaults?.outbound_type
   resetForm(def && outboundTypes.value.includes(def) ? def : outboundTypes.value[0] || 'vless')
+  form.attach_groups = getDefaultSelectedGroups(outbounds.value)
   validateMsg.value = ''
   activeTab.value = 'form'
 }
@@ -322,6 +362,9 @@ const doFillFromNode = async () => {
   try {
     const res = await api.parseNode(nodeImportText.value)
     fillForm(res.data as Outbound)
+    if (!form.attach_groups.length) {
+      form.attach_groups = getDefaultSelectedGroups(outbounds.value)
+    }
     nodeImportDialog.value = false
     showToast(t('outboundsDialog.parseAndFillSuccess'), 'success')
   } catch (e) {
@@ -333,6 +376,10 @@ function buildBody(): Outbound {
   const body: Outbound = { type: form.type, tag: form.tag.trim() }
   if (form.server.trim()) body.server = form.server.trim()
   if (typeof form.server_port === 'number') body.server_port = form.server_port
+
+  if (!isSelector.value && !isUrlTest.value) {
+    body.attach_groups = [...form.attach_groups]
+  }
 
   if (form.type === 'vless') {
     if (form.uuid.trim()) body.uuid = form.uuid.trim()
@@ -714,6 +761,47 @@ onMounted(() => {
                 </div>
               </div>
             </div>
+
+            <!-- 加入分组 (Proxy Groups) 多选区域 -->
+            <div class="col-span-2 collapse-row" :class="{ 'is-open': !isSelector && !isUrlTest }">
+              <div class="collapse-inner">
+                <div class="grid gap-x-4 gap-y-2 pt-3 border-t border-base-200" style="grid-template-columns: 170px minmax(0, 1fr)">
+                  <div class="flex flex-col gap-1">
+                    <label class="pt-1 text-sm font-medium text-base-content/80">
+                      {{ $t('outboundsDialog.attachGroups') }}
+                    </label>
+                    <span class="text-xs text-base-content/50 leading-tight">
+                      {{ $t('outboundsDialog.attachGroupsTip') }}
+                    </span>
+                  </div>
+
+                  <div class="pt-1">
+                    <div v-if="availableProxyGroups.length" class="flex flex-wrap items-center gap-2">
+                      <label
+                        v-for="grp in availableProxyGroups"
+                        :key="grp"
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs cursor-pointer select-none transition-all duration-150"
+                        :class="form.attach_groups.includes(grp)
+                          ? 'border-primary/50 bg-primary/10 text-primary font-medium shadow-xs'
+                          : 'border-base-300 hover:border-base-content/30 bg-base-100 text-base-content/80 hover:bg-base-200/50'"
+                      >
+                        <input
+                          type="checkbox"
+                          :value="grp"
+                          v-model="form.attach_groups"
+                          class="checkbox checkbox-primary checkbox-xs rounded"
+                        />
+                        <span class="font-mono tracking-tight">{{ grp }}</span>
+                      </label>
+                    </div>
+                    <div v-else class="text-xs text-base-content/50 py-1.5">
+                      {{ $t('outboundsDialog.noAvailableGroups') }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <p v-if="validateMsg" class="mt-3 text-[0.8rem] font-medium text-destructive">{{ validateMsg }}</p>
           </div>
         </div>

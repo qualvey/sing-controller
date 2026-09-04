@@ -63,6 +63,7 @@ export interface Outbound {
   tag: string
   server?: string
   server_port?: number
+  attach_groups?: string[]
   [key: string]: unknown
 }
 
