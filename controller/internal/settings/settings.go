@@ -371,6 +371,7 @@ func (m *Manager) saveLocked() error {
 		return err
 	}
 	tmp := m.path + ".tmp"
+	_ = os.Remove(tmp)
 	if err := os.WriteFile(tmp, content, 0o644); err != nil {
 		return err
 	}

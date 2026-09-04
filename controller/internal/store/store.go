@@ -386,6 +386,7 @@ func (s *Store) saveRawLocked(ctx context.Context, content []byte) error {
 		_ = os.WriteFile(s.path+".bak", content, 0o644)
 	}
 	tmp := s.path + ".tmp"
+	_ = os.Remove(tmp)
 	if err := os.WriteFile(tmp, content, 0o644); err != nil {
 		return err
 	}
@@ -414,6 +415,7 @@ func (s *Store) saveLocked(ctx context.Context) error {
 		_ = os.WriteFile(s.path+".bak", content, 0o644)
 	}
 	tmp := s.path + ".tmp"
+	_ = os.Remove(tmp)
 	if err := os.WriteFile(tmp, content, 0o644); err != nil {
 		return err
 	}

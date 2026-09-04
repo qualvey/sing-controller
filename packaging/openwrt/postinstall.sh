@@ -15,8 +15,8 @@ fi
 
 # 确保状态与配置目录存在并赋权
 mkdir -p /var/lib/sing-box /etc/sing-controller /etc/sing-box
-chown -R sing-box:sing-box /var/lib/sing-box /etc/sing-controller /etc/sing-box 2>/dev/null || true
-chmod 750 /var/lib/sing-box /etc/sing-controller /etc/sing-box 2>/dev/null || true
+chown -R root:sing-box /var/lib/sing-box /etc/sing-controller /etc/sing-box 2>/dev/null || true
+chmod 775 /var/lib/sing-box /etc/sing-controller /etc/sing-box 2>/dev/null || true
 
 # 确保内核二进制权限
 if [ -f /usr/bin/sing-box ]; then

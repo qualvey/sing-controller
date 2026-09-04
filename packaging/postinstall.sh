@@ -13,18 +13,18 @@ fi
 
 # controller 自身配置目录（config.json 属 dpkg conffiles，升级不覆盖）
 mkdir -p /etc/sing-controller
-chown -R sing-box:sing-box /etc/sing-controller
-chmod 750 /etc/sing-controller
+chown -R root:sing-box /etc/sing-controller
+chmod 775 /etc/sing-controller
 
-# 主配置目录（原子写盘 tmp+rename 需可写）
+# 主配置目录（原子写盘 tmp+rename 需可写，sing-controller 与 sing-box 共享读写）
 mkdir -p /etc/sing-box
-chown -R sing-box:sing-box /etc/sing-box
-chmod 750 /etc/sing-box
+chown -R root:sing-box /etc/sing-box
+chmod 775 /etc/sing-box
 
 # 状态与持久化缓存目录（存放 cache.db 与 GeoIP/GeoSite 缓存）
 mkdir -p /var/lib/sing-box
-chown -R sing-box:sing-box /var/lib/sing-box
-chmod 750 /var/lib/sing-box
+chown -R root:sing-box /var/lib/sing-box
+chmod 775 /var/lib/sing-box
 
 # 确保内核二进制与动态库权限及缓存刷新
 if [ -f /usr/bin/sing-box ]; then
