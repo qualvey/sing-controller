@@ -54,7 +54,7 @@ export type BackendAction = {
 export const showUpgradeCoreModal = ref(false)
 export const showUpdateConfigModal = ref(false)
 
-const reloadAll = () => {
+export const reloadAll = () => {
   fetchConfigs()
   fetchRules()
   fetchProxies()
