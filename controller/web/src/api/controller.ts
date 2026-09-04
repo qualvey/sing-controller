@@ -190,11 +190,17 @@ export const api = {
   outbounds: () => http.get<{ outbounds: Outbound[] }>('/outbounds').then((r) => r.data.outbounds),
   getOutbound: (tag: string) =>
     http.get<Outbound>(`/outbounds/${encodeURIComponent(tag)}`).then((r) => r.data),
-  createOutbound: (o: Outbound) => http.post('/outbounds', o).then((r) => r.data),
-  updateOutbound: (tag: string, o: Outbound) =>
-    http.put(`/outbounds/${encodeURIComponent(tag)}`, o).then((r) => r.data),
-  deleteOutbound: (tag: string, force = false) =>
-    http.delete(`/outbounds/${encodeURIComponent(tag)}${force ? '?force=true' : ''}`).then((r) => r.data),
+  createOutbound: (o: Outbound, reload = true) =>
+    http.post(`/outbounds${reload ? '?reload=true' : ''}`, o).then((r) => r.data),
+  updateOutbound: (tag: string, o: Outbound, reload = true) =>
+    http.put(`/outbounds/${encodeURIComponent(tag)}${reload ? '?reload=true' : ''}`, o).then((r) => r.data),
+  deleteOutbound: (tag: string, force = false, reload = true) => {
+    const params = new URLSearchParams()
+    if (force) params.set('force', 'true')
+    if (reload) params.set('reload', 'true')
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    return http.delete(`/outbounds/${encodeURIComponent(tag)}${qs}`).then((r) => r.data)
+  },
 
   // Inbound CRUD
   inbounds: () => http.get<{ inbounds: Inbound[] }>('/inbounds').then((r) => r.data.inbounds),

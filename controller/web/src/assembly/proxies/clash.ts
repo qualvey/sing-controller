@@ -40,7 +40,10 @@ import {
 
 let fetchTime = 0
 
-export const fetchProxies = async () => {
+export const fetchProxies = async (force = false) => {
+  if (force) {
+    await new Promise((resolve) => setTimeout(resolve, 300))
+  }
   const nowTime = Date.now()
 
   fetchTime = nowTime

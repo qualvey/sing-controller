@@ -47,7 +47,7 @@
       v-model="isProxyEditModalOpen"
       :tag="proxyEditTargetTag"
       :is-edit="isProxyEditModalIsEdit"
-      @saved="fetchProxies"
+      @saved="() => fetchProxies(true)"
     />
   </div>
 </template>
