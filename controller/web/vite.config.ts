@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { lezer } from '@lezer/generator/rollup'
 import tailwindcss from '@tailwindcss/vite'
@@ -7,6 +7,81 @@ import vueJsx from '@vitejs/plugin-vue-jsx' // 1. 引入插件
 import { version } from './package.json' with { type: 'json' }
 import { execSync } from 'child_process'
 
+function buildInfoPlugin(): Plugin {
+  const virtualModuleId = 'virtual:recent-changes'
+  const resolvedVirtualModuleId = '\0' + virtualModuleId
+
+  function getBuildInfo() {
+    let branch = ''
+    let commit = ''
+    try {
+      branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim()
+      commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim()
+    } catch {
+      // ignore
+    }
+
+    let commits: Array<{ hash: string; message: string; date: string; author: string }> = []
+    try {
+      const output = execSync('git log -5 --pretty=format:"%h%x09%s%x09%cd%x09%an" --date=format:"%Y-%m-%d %H:%M"', {
+        encoding: 'utf8',
+      }).trim()
+      if (output) {
+        commits = output
+          .split('\n')
+          .map((line) => {
+            const [hash, message, date, author] = line.split('\t')
+            return {
+              hash: hash?.trim() || '',
+              message: message?.trim() || '',
+              date: date?.trim() || '',
+              author: author?.trim() || '',
+            }
+          })
+          .filter((c) => Boolean(c.hash && c.message))
+      }
+    } catch {
+      // ignore
+    }
+
+    const now = new Date()
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    const buildTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+
+    return {
+      version,
+      branch,
+      commit,
+      buildTime,
+      latestChanges: commits,
+    }
+  }
+
+  return {
+    name: 'vite-plugin-recent-changes',
+    resolveId(id) {
+      if (id === virtualModuleId) {
+        return resolvedVirtualModuleId
+      }
+    },
+    load(id) {
+      if (id === resolvedVirtualModuleId) {
+        const info = getBuildInfo()
+        return `export const buildInfo = ${JSON.stringify(info)};`
+      }
+    },
+    configureServer(server) {
+      // dev 模式下每次请求自动刷新虚拟模块，保证本地新 commit 刷新页面即见
+      server.middlewares.use((_req, _res, next) => {
+        const mod = server.moduleGraph.getModuleById(resolvedVirtualModuleId)
+        if (mod) {
+          server.moduleGraph.invalidateModule(mod)
+        }
+        next()
+      })
+    },
+  }
+}
 
 // 子路径反代部署：构建时用 VITE_BASE_URL 指定挂载路径（必须以 / 开头、/ 结尾），
 // 产物资源与路由 base 均以此为前缀；默认 '/' 保持根路径部署不变。
@@ -60,7 +135,7 @@ export default defineConfig({
   //   drop: process.env.NODE_ENV === 'production' ? ['debugger', 'console'] : []
   // },
   base: resolveBase(),
-  plugins: [vue(), lezer(), tailwindcss(), vueJsx()],
+  plugins: [vue(), lezer(), tailwindcss(), vueJsx(), buildInfoPlugin()],
   resolve: {
     alias: {
       // 强制 @codemirror/state 单文件：rollup 可能因 ESM/CJS 双入口把它解析成
