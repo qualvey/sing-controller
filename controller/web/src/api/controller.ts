@@ -127,10 +127,25 @@ export interface CertConfigInfo {
   providers: Array<{ id: string; provider: Record<string, unknown> }>
 }
 
+import { getDesktopPort } from './desktop'
+
 const http = axios.create({
   // 与 vite base 对齐：根路径部署 -> '/api'；子路径部署（VITE_BASE_URL=/webui/）-> '/webui/api'
   baseURL: import.meta.env.BASE_URL + 'api',
   timeout: 15000,
+})
+
+http.interceptors.request.use((config) => {
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'wails.localhost' ||
+      window.location.protocol === 'wails:' ||
+      typeof (window as unknown as { go?: unknown }).go !== 'undefined')
+  ) {
+    const port = getDesktopPort() || 8080
+    config.baseURL = `http://127.0.0.1:${port}/api`
+  }
+  return config
 })
 
 // 非 2xx 响应统一 reject，并提取后端 error 字段；409 引用冲突时附带 references 列表（前端弹确认框用）
@@ -151,8 +166,18 @@ http.interceptors.response.use(
  */
 export const api = {
   // 健康检查与状态/配置
-  healthz: () =>
-    http.get<{ status: string }>('/healthz', { baseURL: window.location.origin }).then((r) => r.data),
+  healthz: () => {
+    let base = window.location.origin
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'wails.localhost' ||
+        window.location.protocol === 'wails:' ||
+        typeof (window as unknown as { go?: unknown }).go !== 'undefined')
+    ) {
+      base = `http://127.0.0.1:${getDesktopPort() || 8080}`
+    }
+    return http.get<{ status: string }>('/healthz', { baseURL: base }).then((r) => r.data)
+  },
   status: () => http.get<StatusInfo>('/status').then((r) => r.data),
   config: () => http.get<unknown>('/config').then((r) => r.data),
   saveConfig: (config: unknown) => http.put('/config', config).then((r) => r.data),

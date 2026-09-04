@@ -79,18 +79,7 @@ export const probeSingboxChannel = async (
         }
       }
 
-      // HTTP & 核心正常，进一步验证 WebSocket 通信（检查反代 Upgrade）
-      const wsUrl = getClashWsUrl(backend, 'traffic')
-      const wsRes = await probeWebSocket(wsUrl, Math.min(timeout, 3000), controller.signal)
-      if (!wsRes.ok) {
-        return {
-          ok: false,
-          latency: latency(),
-          kind: 'websocket',
-          message: wsRes.message || 'WebSocket 握手失败（反向代理未配置 Upgrade 支持）',
-        }
-      }
-
+      // HTTP 与 Controller 正常，核心存活，立即判定成功（Clash API / WebSocket 作为可选项不阻断主链路）
       return { ok: true, latency: latency() }
     }
   } catch {

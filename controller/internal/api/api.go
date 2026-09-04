@@ -248,12 +248,12 @@ func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// CORS（webui dev server 跨端口）
+		// CORS（webui dev server 跨端口与桌面端直连）
 		origin := r.Header.Get("Origin")
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Secret")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Secret, Authorization, Connect-Protocol-Version, X-User-Agent, X-Grpc-Web")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 		if r.Method == http.MethodOptions {

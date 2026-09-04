@@ -92,19 +92,15 @@ export const fetchVersionAPI = async (): Promise<{ data: { version: string } }> 
           return { data: { version: 'sing-box (未配置)' } }
         }
         if (status.core && !status.core.alive) {
-          throw new Error(status.core.error || 'sing-box 核心未运行')
+          throw new Error(`sing-box 核心未运行: ${status.core.error || '进程未存活'}`)
         }
         if (status.core_alive === false) {
-          throw new Error(status.core_error || 'sing-box 核心未运行')
+          throw new Error(`sing-box 核心未运行: ${status.core_error || '进程未存活'}`)
         }
-        if (status.core?.version || status.core_version) {
-          return { data: { version: status.core?.version || status.core_version || 'sing-box' } }
-        }
+        return { data: { version: status.core?.version || status.core_version || 'sing-box' } }
       }
     } catch (e) {
-      if (e instanceof Error && (e.message.includes('核心未运行') || e.message.includes('offline'))) {
-        throw e
-      }
+      throw e
     }
 
     // 2. 备选尝试 direct gRPC StartedService.getVersion

@@ -35,7 +35,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('local', 'windows', 'windows-amd64', 'windows-arm64', 'linux-amd64', 'linux-arm64', 'linux-armv7', 'deb-arm64', 'deb-all', 'apk-arm64', 'apk-amd64', 'all')]
+    [ValidateSet('local', 'windows', 'windows-amd64', 'windows-arm64', 'linux-amd64', 'linux-arm64', 'linux-armv7', 'deb-arm64', 'deb-all', 'apk-arm64', 'apk-amd64', 'desktop', 'desktop-windows', 'all')]
     [string]$Target = 'local',
 
     [switch]$SkipFrontend,
@@ -147,6 +147,18 @@ function Ensure-Goreleaser {
         $env:PATH = "$env:USERPROFILE\go\bin;$env:PATH"
         if (-not (Get-Command goreleaser -ErrorAction SilentlyContinue)) {
             throw "goreleaser 安装失败或未在 PATH 中找到"
+        }
+    }
+}
+
+# 检查 Wails
+function Ensure-Wails {
+    $env:PATH = "$env:USERPROFILE\go\bin;$env:PATH"
+    if (-not (Get-Command wails -ErrorAction SilentlyContinue)) {
+        Write-Host "[!] wails 未安装，尝试 go install ..." -ForegroundColor Yellow
+        go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        if (-not (Get-Command wails -ErrorAction SilentlyContinue)) {
+            throw "wails 安装失败或未在 PATH 中找到"
         }
     }
 }
@@ -280,6 +292,63 @@ nfpms:
     }
     'apk-amd64' {
         & "$root/build-openwrt-apk.ps1" -Arch amd64 -SkipFrontend:$SkipFrontend
+    }
+    { $_ -in @('desktop', 'desktop-windows') } {
+        Ensure-Wails
+        Write-Host "  -> 构建 Wails 桌面端 (sing-box-desktop) ..." -ForegroundColor White
+        
+        $desktopFrontendDist = Join-Path $root "desktop/frontend/dist"
+        if (-not (Test-Path $desktopFrontendDist)) {
+            New-Item -ItemType Directory -Path $desktopFrontendDist -Force | Out-Null
+        }
+        Copy-Item (Join-Path $root "controller/web/dist/*") $desktopFrontendDist -Recurse -Force
+
+        $desktopOutDir = Join-Path $OutDir "desktop"
+        if (-not (Test-Path $desktopOutDir)) {
+            New-Item -ItemType Directory -Path $desktopOutDir -Force | Out-Null
+        }
+
+        Push-Location (Join-Path $root "desktop")
+        try {
+            $wailsArgs = @("build", "-s", "-o", "sing-box-desktop.exe")
+            & wails $wailsArgs
+            if ($LASTEXITCODE -ne 0) { throw "Wails 构建失败" }
+        }
+        finally {
+            Pop-Location
+        }
+
+        $builtExe = Join-Path $root "desktop/build/bin/sing-box-desktop.exe"
+        Stop-Process -Name "sing-box-desktop", "sing-box" -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 300
+        Copy-Item $builtExe (Join-Path $desktopOutDir "sing-box-desktop.exe") -Force
+
+        # 拷贝内核核心 sing-box.exe 及依赖 dll
+        $coreCandidates = @(
+            (Join-Path $root "desktop/bin/sing-box.exe"),
+            (Join-Path $root "core_bin/sing-box.exe"),
+            (Join-Path $root "core_bin/extracted/sing-box-1.14.0-windows-amd64/sing-box.exe")
+        )
+        foreach ($cand in $coreCandidates) {
+            if (Test-Path $cand) {
+                Copy-Item $cand (Join-Path $desktopOutDir "sing-box.exe") -Force
+                $candDir = Split-Path $cand
+                $candDll = Join-Path $candDir "libcronet.dll"
+                if (Test-Path $candDll) {
+                    Copy-Item $candDll (Join-Path $desktopOutDir "libcronet.dll") -Force
+                }
+                break
+            }
+        }
+
+        # 打包为 zip 便携分发包
+        $zipName = "sing-box-desktop-windows-amd64-$Version.zip"
+        $zipPath = Join-Path $OutDir $zipName
+        if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+        Compress-Archive -Path "$desktopOutDir\*" -DestinationPath $zipPath -Force
+
+        Write-Host "     [OK] 桌面端便携产物目录: $desktopOutDir" -ForegroundColor Green
+        Write-Host "     [OK] 桌面端压缩发布包: $zipPath" -ForegroundColor Green
     }
     'all' {
         Build-Binary -Goos 'windows' -Goarch 'amd64' -OutputName 'sing-controller-windows-amd64.exe'

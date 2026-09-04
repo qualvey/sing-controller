@@ -8,11 +8,21 @@ import { activeBackend, activeUuid } from '@/store/setup'
 import axios, { AxiosError } from 'axios'
 import { nextTick } from 'vue'
 
+import { getDesktopPort } from '@/api/desktop'
+
 axios.interceptors.request.use((config) => {
   if (activeBackend.value) {
     config.baseURL = getUrlFromBackend(activeBackend.value)
     //暂时先不写header
     // config.headers['Authorization'] = 'Bearer ' + activeBackend.value.password
+  } else if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'wails.localhost' ||
+      window.location.protocol === 'wails:' ||
+      typeof (window as unknown as { go?: unknown }).go !== 'undefined')
+  ) {
+    const port = getDesktopPort() || 8080
+    config.baseURL = `http://127.0.0.1:${port}`
   }
   return config
 })

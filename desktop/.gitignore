@@ -1,0 +1,7 @@
+build/bin/
+bin/
+frontend/dist/
+*.exe
+*.dll
+sing-box.json*
+controller.json*

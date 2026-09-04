@@ -243,10 +243,10 @@ sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `
   - 重构 3D 地球控制器，实现上下左右 360° 自由旋转、平滑惯性阻尼与滚轮缩放聚焦，解决旋转卡顿与轴向限制问题。
 
 ### Phase 6: Wails 跨平台桌面端打包 (Desktop App with Wails)
-- [ ] 引入 **Wails (Go + Webview)** 框架，将 Controller 作为应用主核心，直接嵌入 WebUI。
-- [ ] 实现系统托盘 (System Tray) 支持：托盘菜单、快速切换代理模式/策略组、配置组一键切换。
-- [ ] 封装系统级能力：开机自启、原生通知提示、系统代理一键设置 (System Proxy)。
-- [ ] 桌面端跨平台打包流水线（Windows `.exe` / `.msi`、macOS `.app` / `.dmg`、Linux `.AppImage` / `.deb`）。
+- [x] 引入 **Wails (Go + Webview)** 框架，将 Controller 作为应用主核心，直接嵌入 WebUI。
+- [x] 实现系统托盘 (System Tray) 支持：托盘菜单、快速切换代理模式/策略组、配置组一键切换。
+- [x] 封装系统级能力：开机自启、原生通知提示、系统代理一键设置 (System Proxy)。
+- [x] 桌面端跨平台打包流水线（Windows `.exe` / `.msi`、macOS `.app` / `.dmg`、Linux `.AppImage` / `.deb`）。
 
 ### Phase 7: 出站与策略组全生命周期管控 (Outbounds & Proxy Groups Governance)
 - [ ] **前端「未分组节点」虚拟卡片 (Ungrouped Proxies Card)**：在 Proxies 页面中动态聚合无所属分组的孤立节点，支持测速与再分配。

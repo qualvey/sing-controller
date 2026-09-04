@@ -32,7 +32,10 @@
     </div>
 
     <!-- Actions & Stats Grid -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+    <div
+      class="grid gap-3 mt-3"
+      :class="isDesktop ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'"
+    >
       <!-- 动作 1: 重载配置 -->
       <div class="bg-base-200/30 hover:bg-base-200/50 transition-all rounded-xl p-3.5 flex flex-col justify-between gap-3">
         <div class="flex items-start justify-between">
@@ -120,19 +123,66 @@
           <span>{{ t('coreControl.openManager') }}</span>
         </button>
       </div>
+
+      <!-- 动作 4: 系统代理 (Desktop 原生能力) -->
+      <div
+        v-if="isDesktop"
+        class="bg-base-200/30 hover:bg-base-200/50 transition-all rounded-xl p-3.5 flex flex-col justify-between gap-3"
+      >
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="text-xs font-semibold text-base-content/80 flex items-center gap-1.5">
+              <span>系统代理</span>
+              <span
+                class="badge badge-xs font-normal"
+                :class="isSysProxyOn ? 'badge-success text-white' : 'badge-ghost text-base-content/50'"
+              >
+                {{ isSysProxyOn ? '已开启' : '未设置' }}
+              </span>
+            </div>
+            <div class="text-[11px] text-base-content/50 mt-0.5">
+              {{ isSysProxyOn ? '系统流量已接入 sing-box' : '一键配置操作系统代理' }}
+            </div>
+          </div>
+          <div
+            class="p-1.5 rounded-lg"
+            :class="isSysProxyOn ? 'bg-success/15 text-success' : 'bg-base-300/60 text-base-content/50'"
+          >
+            <GlobeAltIcon class="size-4" />
+          </div>
+        </div>
+        <button
+          class="btn btn-sm w-full gap-1.5 rounded-lg font-medium transition-all"
+          :class="isSysProxyOn ? 'btn-outline btn-error' : 'btn-success text-white'"
+          :disabled="isTogglingProxy"
+          @click="handleToggleSysProxy"
+        >
+          <span
+            v-if="isTogglingProxy"
+            class="loading loading-spinner loading-xs"
+          />
+          <GlobeAltIcon
+            v-else
+            class="size-4"
+          />
+          <span>{{ isSysProxyOn ? '关闭系统代理' : '开启系统代理' }}</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   CpuChipIcon,
   ArrowPathIcon,
   ArrowPathRoundedSquareIcon,
   RectangleGroupIcon,
+  GlobeAltIcon,
 } from '@heroicons/vue/24/outline'
+import { desktopApi } from '@/api/desktop'
 import { reloadConfigsAPI } from '@/assembly/config'
 import { restartCoreAPI, version } from '@/assembly/version'
 import { reloadAll } from '@/composables/backendActions'
@@ -148,6 +198,10 @@ const { t, te } = useI18n()
 
 const isReloading = ref(false)
 const isRestarting = ref(false)
+const isDesktop = ref(desktopApi.isDesktop())
+const isSysProxyOn = ref(false)
+const isTogglingProxy = ref(false)
+let unsubscribeProxyChange: (() => void) | null = null
 
 const coreName = computed(() => 'sing-box')
 const coreVersionText = computed(() => version.value || 'v1.11.x')
@@ -191,7 +245,38 @@ const handleRestartCore = async () => {
   }
 }
 
-onMounted(() => {
+const handleToggleSysProxy = async () => {
+  if (isTogglingProxy.value) return
+  isTogglingProxy.value = true
+  const target = !isSysProxyOn.value
+  try {
+    await desktopApi.setSystemProxy(target)
+    isSysProxyOn.value = target
+    showNotification({
+      content: target ? '系统代理已开启' : '系统代理已关闭',
+      type: 'alert-success',
+    })
+  } catch (err: unknown) {
+    notifyRequestError(err)
+  } finally {
+    isTogglingProxy.value = false
+  }
+}
+
+onMounted(async () => {
   loadProfilesData()
+  if (isDesktop.value) {
+    isSysProxyOn.value = await desktopApi.getSystemProxy()
+    unsubscribeProxyChange = desktopApi.onSystemProxyChanged((enabled) => {
+      isSysProxyOn.value = enabled
+    })
+  }
+})
+
+onUnmounted(() => {
+  if (unsubscribeProxyChange) {
+    unsubscribeProxyChange()
+    unsubscribeProxyChange = null
+  }
 })
 </script>

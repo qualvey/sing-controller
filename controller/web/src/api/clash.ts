@@ -110,9 +110,24 @@ export interface DNSQueryResult {
   Server?: string
 }
 
+import { getDesktopPort } from '@/api/desktop'
+
 // ============ REST 客户端 ============
 
 const http = axios.create({ baseURL: import.meta.env.BASE_URL + 'api/clash', timeout: 15000 })
+
+http.interceptors.request.use((config) => {
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'wails.localhost' ||
+      window.location.protocol === 'wails:' ||
+      typeof (window as unknown as { go?: unknown }).go !== 'undefined')
+  ) {
+    const port = getDesktopPort() || 8080
+    config.baseURL = `http://127.0.0.1:${port}/api/clash`
+  }
+  return config
+})
 
 export const fetchClashVersion = () => http.get<{ version: string }>('/version')
 
@@ -340,7 +355,17 @@ export const getClashWsUrl = (backend?: Omit<Backend, 'uuid'>, endpoint: string 
   const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
   const apiPath = `${cleanBase}/api/clash`
 
-  return `${proto}//${location.host}${apiPath}/${ep}`
+  let host = location.host
+  if (
+    location.hostname === 'wails.localhost' ||
+    location.protocol === 'wails:' ||
+    typeof (window as unknown as { go?: unknown }).go !== 'undefined'
+  ) {
+    const port = getDesktopPort() || (backend?.port ? Number(backend.port) : 8080)
+    host = `127.0.0.1:${port}`
+  }
+
+  return `${proto}//${host}${apiPath}/${ep}`
 }
 
 export const createClashWebSocket = <T>(url: string, searchParams?: Record<string, string>) => {

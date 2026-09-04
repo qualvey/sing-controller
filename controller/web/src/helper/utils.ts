@@ -69,8 +69,17 @@ export const getUrlFromBackend = (end?: {
   secondaryPath?: string
 }) => {
   const path = end?.secondaryPath || ''
-  // 确保以 '/' 开头
-  return path.startsWith('/') ? path : `/${path}`
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'wails.localhost' ||
+      window.location.protocol === 'wails:' ||
+      typeof (window as unknown as { go?: unknown }).go !== 'undefined')
+  ) {
+    const port = getDesktopPort() || 8080
+    return `http://127.0.0.1:${port}${normalized === '/' ? '' : normalized}`
+  }
+  return normalized
 }
 
 // sing-box 后端复用顶层连接字段作为 gRPC baseUrl(secondaryPath 留空)。
@@ -80,8 +89,17 @@ export const getUrlFromBackend = (end?: {
 //   if (end.type !== 'singbox' || !end.host) return ''
 //   return `${end.protocol}://${end.host}:${end.port}`
 // }
+import { getDesktopPort } from '@/api/desktop'
+
 export const getSingboxUrlFromBackend = () => {
-  // 返回带反代前缀的完整地址
+  if (
+    window.location.hostname === 'wails.localhost' ||
+    window.location.protocol === 'wails:' ||
+    typeof (window as unknown as { go?: unknown }).go !== 'undefined'
+  ) {
+    const port = getDesktopPort() || 8080
+    return `http://127.0.0.1:${port}/api/grpc`
+  }
   return `${window.location.origin}/api/grpc`
 }
 
