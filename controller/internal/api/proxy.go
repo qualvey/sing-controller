@@ -103,10 +103,10 @@ func normalizeAddr(addr string) string {
 
 func (h *Handler) clashTarget() (*url.URL, string, string) {
 	// 1. controller settings 显式配置优先
-	if v := h.settings.Values(); v.ClashAPI != nil && v.ClashAPI.Address != "" {
-		addr := normalizeAddr(v.ClashAPI.Address)
+	if v := h.settings.Values(); v.API.Clash != nil && v.API.Clash.Address != "" {
+		addr := normalizeAddr(v.API.Clash.Address)
 		if u, err := url.Parse(addr); err == nil {
-			return u, v.ClashAPI.Secret, "settings:" + addr
+			return u, v.API.Clash.Secret, "settings:" + addr
 		}
 	}
 	// 2. 从 sing-box 配置 experimental.clash_api 推断
@@ -164,10 +164,10 @@ func checkUpstreamReachable(rawTarget string, timeout time.Duration) error {
 
 func (h *Handler) serviceAPITarget() (*url.URL, string, string) {
 	// 1. controller settings 显式配置优先
-	if v := h.settings.Values(); v.ServiceAPI != nil && v.ServiceAPI.Address != "" {
-		addr := normalizeAddr(v.ServiceAPI.Address)
+	if v := h.settings.Values(); v.API.Service != nil && v.API.Service.Address != "" {
+		addr := normalizeAddr(v.API.Service.Address)
 		if u, err := url.Parse(addr); err == nil {
-			return u, v.ServiceAPI.Secret, "settings:" + addr
+			return u, v.API.Service.Secret, "settings:" + addr
 		}
 	}
 	// 2. 从 sing-box 配置顶层 services 段推断（type=api）

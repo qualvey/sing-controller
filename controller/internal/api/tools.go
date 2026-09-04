@@ -138,9 +138,9 @@ func (h *Handler) handleToolParseNode(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePortAvailable 返回可用端口：GET /api/ports/available?start=NNN
-// 未指定 start 时使用 controller 配置的 min_port（默认 8000）。
+// 未指定 start 时默认从 8000 起始探测。
 func (h *Handler) handlePortAvailable(w http.ResponseWriter, r *http.Request) {
-	start := h.settings.Values().MinPort
+	start := uint16(8000)
 	if raw := r.URL.Query().Get("start"); raw != "" {
 		parsed, err := strconv.ParseUint(raw, 10, 16)
 		if err != nil || parsed < 1024 {

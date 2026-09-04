@@ -16,7 +16,6 @@ import (
 	"os/exec"
 	"reflect"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -317,7 +316,7 @@ func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
 		"api":     "/api",
 		"status":  "/api/status",
 		"schema":  "/api/schema",
-		"listen":  values.Listen,
+		"listen":  values.Server.Addr(),
 		"config":  h.store.Path(),
 		"webui":   "独立部署（web/ 目录，npm run dev 或构建后静态托管）",
 	})
@@ -416,14 +415,17 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		tunDenied = h.supervisor.TunAccessDenied()
 	}
 
+	logLevel := "info"
+	if values.Log != nil && values.Log.Level != "" {
+		logLevel = values.Log.Level
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"config_path":        h.store.Path(),
 		"config_exists":      h.store.Exists(),
 		"controller_config":  h.settings.Path(),
-		"listen":             values.Listen,
-		"log_level":          values.Log.Level,
-		"min_port":           values.MinPort,
-		"defaults":           values.Defaults,
+		"listen":             values.Server.Addr(),
+		"log_level":          logLevel,
 		"inbounds":           len(h.store.Options.Inbounds),
 		"outbounds":          len(h.store.Options.Outbounds),
 		"rules":              ruleCount,
@@ -526,38 +528,27 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var privilegedPortWarning string
-	if newValues.Config == "" {
-		writeError(w, http.StatusBadRequest, errors.New("config 路径不能为空"))
+	if newValues.Core.ConfigPath == "" {
+		writeError(w, http.StatusBadRequest, errors.New("core.config_path 不能为空"))
 		return
 	}
-	if newValues.Listen != "" {
-		_, portText, err := net.SplitHostPort(newValues.Listen)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, errors.New("listen 格式应为 host:port，如 127.0.0.1:8080"))
-			return
+	if newValues.Server.ListenPort > 0 && newValues.Server.ListenPort < 1024 {
+		privilegedPortWarning = fmt.Sprintf("端口 %d 是特权端口（<1024）。deb 部署已支持（AmbientCapabilities），本机开发直跑需 root 或加 capabilities。", newValues.Server.ListenPort)
+	}
+	if newValues.Log != nil {
+		if newValues.Log.Level != "" {
+			if _, err := log.ParseLevel(newValues.Log.Level); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
 		}
-		port, parseErr := strconv.Atoi(portText)
-		if parseErr == nil && port > 0 && port < 1024 {
-			// 特权端口：允许保存（systemd unit 已带 CAP_NET_BIND_SERVICE），但给出提示
-			privilegedPortWarning = fmt.Sprintf("端口 %d 是特权端口（<1024）。deb 部署已支持（AmbientCapabilities），本机开发直跑需 root 或加 capabilities。", port)
-		}
+		// 动态调整 logger 实时生效
+		logger.Init(newValues.Log.Level, newValues.Log.Output, newValues.Log.Outfile)
 	}
-	if newValues.Log != nil && newValues.Log.Level != "" {
-		if _, err := log.ParseLevel(newValues.Log.Level); err != nil {
-			writeError(w, http.StatusBadRequest, err)
-			return
-		}
-		// 动态调整 logger 级别实时生效
-		logger.SetLevel(newValues.Log.Level)
+	if newValues.Core.Reload == nil {
+		newValues.Core.Reload = &settings.ReloadOptions{Mode: "auto"}
 	}
-	if newValues.MinPort < 1024 || newValues.MinPort > 65535 {
-		writeError(w, http.StatusBadRequest, errors.New("min_port 需在 1024-65535 之间"))
-		return
-	}
-	if newValues.Reload == nil {
-		newValues.Reload = &settings.ReloadOptions{Mode: "auto"}
-	}
-	if err := newValues.Reload.Validate(); err != nil {
+	if err := newValues.Core.Reload.Validate(); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -570,16 +561,16 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	logger.Info("Controller 设置已成功更新 (listen=%s, log_level=%s, min_port=%d, config=%s)",
-		newValues.Listen, logger.GetLevel().String(), newValues.MinPort, newValues.Config)
+	logger.Info("Controller 设置已成功更新 (listen=%s, log_level=%s, config_path=%s)",
+		newValues.Server.Addr(), logger.GetLevel().String(), newValues.Core.ConfigPath)
 	// config 路径变更 → 切换主配置存储
-	if h.store.Path() != newValues.Config {
-		logger.Info("切换 sing-box 配置文件路径: %s -> %s", h.store.Path(), newValues.Config)
-		h.store.SetPath(newValues.Config)
+	if h.store.Path() != newValues.Core.ConfigPath {
+		logger.Info("切换 sing-box 配置文件路径: %s -> %s", h.store.Path(), newValues.Core.ConfigPath)
+		h.store.SetPath(newValues.Core.ConfigPath)
 		if err := h.store.Load(ctx, store.DefaultConfig{
-			InboundType: newValues.Defaults.InboundType,
-			Listen:      newValues.Defaults.Listen,
-			ListenPort:  newValues.Defaults.ListenPort,
+			InboundType: "mixed",
+			Listen:      "127.0.0.1",
+			ListenPort:  2080,
 		}); err != nil {
 			logger.Error("加载新 sing-box 主配置失败: %v", err)
 			writeJSON(w, http.StatusOK, map[string]any{

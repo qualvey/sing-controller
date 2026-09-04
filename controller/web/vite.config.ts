@@ -40,7 +40,21 @@ export default defineConfig({
     __COMMIT_ID__: JSON.stringify(getGitCommitId()),
     __FONT__: JSON.stringify(font),
   },
-  build: { sourcemap: true },
+  build: {
+    sourcemap: process.env.VITE_SOURCEMAP === 'true',
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('three')) return 'vendor-three'
+            if (id.includes('@codemirror')) return 'vendor-codemirror'
+            if (id.includes('vue') || id.includes('vue-router') || id.includes('pinia')) return 'vendor-vue'
+          }
+        }
+      }
+    }
+  },
   // esbuild: {
   //   // 生产环境打包时自动丢弃所有 debugger 和 console.log
   //   drop: process.env.NODE_ENV === 'production' ? ['debugger', 'console'] : []
@@ -57,10 +71,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    sourcemapIgnoreList: false ,
+    sourcemapIgnoreList: false,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8880',
         changeOrigin: true,
         ws: true,
         configure: (proxy) => {

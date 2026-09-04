@@ -222,7 +222,7 @@ func (m *Manager) streamLogs(r io.Reader, source string) {
 		text := scanner.Text()
 		logger.Info("[Core/%s] %s", source, text)
 		lower := strings.ToLower(text)
-		if strings.Contains(lower, "access is denied") && strings.Contains(lower, "tun") {
+		if (strings.Contains(lower, "access is denied") || strings.Contains(lower, "operation not permitted")) && strings.Contains(lower, "tun") {
 			m.mu.Lock()
 			m.tunAccessDenied = true
 			m.mu.Unlock()
@@ -380,8 +380,8 @@ func (m *Manager) Stop(ctx context.Context) error {
 	})
 	m.mu.Unlock()
 
-	// 优雅终止：发送中断信号
-	_ = proc.Signal(os.Interrupt)
+	// 优雅终止：发送中断信号（POSIX 优先向进程组投递）
+	_ = signalInterruptGroup(proc)
 
 	// 等待 waitProcess 退出并关闭 waitDone，超时强制杀死
 	if waitDone != nil {
@@ -404,6 +404,38 @@ func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	m.state = StateStopped
 	m.mu.Unlock()
+	return nil
+}
+
+// Reload 原生热重载 sing-box 配置：
+// 在 POSIX/Linux 环境下向进程直接发送 SIGHUP 信号，实现连接不断流的原地重载；
+// 在 Windows 或进程未处于运行状态时，优雅降级为 Restart 或 Start。
+func (m *Manager) Reload(ctx context.Context) error {
+	m.mu.Lock()
+	if m.state != StateRunning || m.cmd == nil || m.cmd.Process == nil {
+		m.mu.Unlock()
+		return m.Start(ctx)
+	}
+	proc := m.cmd.Process
+	m.mu.Unlock()
+
+	start := time.Now()
+	err := signalReload(proc)
+	if errors.Is(err, errReloadNotSupported) {
+		logger.Info("[Supervisor] 当前平台不支持 SIGHUP 原地重载，平滑降级为进程重启...")
+		return m.Restart(ctx)
+	}
+	if err != nil {
+		logger.Warn("[Supervisor] 发送 SIGHUP 失败: %v，降级为进程重启", err)
+		return m.Restart(ctx)
+	}
+
+	m.broadcast(LogLine{
+		Timestamp: time.Now(),
+		Source:    "system",
+		Message:   fmt.Sprintf("[Supervisor] sing-box 内核已触发 SIGHUP 配置热重载 (耗时 %v)", time.Since(start)),
+	})
+	logger.Info("[Supervisor] 已向 sing-box (PID: %d) 发送 SIGHUP 热重载信号", proc.Pid)
 	return nil
 }
 

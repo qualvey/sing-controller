@@ -1,7 +1,7 @@
 <template>
   <DialogWrapper
     v-model="isOpen"
-    :title="t('profiles.inspectNodesTitle', `订阅节点预览 ({tag})`, { tag })"
+    :title="t('profiles.inspectNodesTitle',  { tag })"
     size="large"
   >
     <div class="flex flex-col gap-2 py-2 max-h-[460px] overflow-y-auto">
@@ -14,7 +14,7 @@
 
       <template v-else>
         <div class="text-xs text-base-content/60">
-          {{ t('profiles.extractedNodesCount', `共提取到 {count} 个代理节点：`, { count: nodes.length }) }}
+          {{ t('profiles.extractedNodesCount',  { count: nodes.length }) }}
         </div>
         <div
           v-if="nodes.length === 0"

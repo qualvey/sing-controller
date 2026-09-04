@@ -11,9 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/include"
@@ -95,17 +98,88 @@ func Parse(ctx context.Context, content []byte) (option.Options, error) {
 	return sjson.UnmarshalExtendedContext[option.Options](ctx, content)
 }
 
-// Validate 完整校验：解码 + box.New 干跑（复用 daemon.CheckConfig 模式）。
+// BinaryPath 允许主程序注入定位到的 sing-box 二进制路径
+var BinaryPath string
+
+// FindSingBoxBinary 自动查找宿主机上的 sing-box 二进制
+func FindSingBoxBinary() string {
+	if BinaryPath != "" {
+		if fi, err := os.Stat(BinaryPath); err == nil && !fi.IsDir() {
+			return BinaryPath
+		}
+	}
+	candidates := []string{
+		"./sing-box.exe",
+		"./sing-box",
+		"../sing-box.exe",
+		"../sing-box",
+	}
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		candidates = append([]string{
+			filepath.Join(exeDir, "sing-box.exe"),
+			filepath.Join(exeDir, "sing-box"),
+		}, candidates...)
+	}
+	candidates = append(candidates,
+		"/usr/bin/sing-box",
+		"/usr/local/bin/sing-box",
+	)
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+			return c
+		}
+	}
+	if path, err := exec.LookPath("sing-box"); err == nil {
+		return path
+	}
+	return ""
+}
+
+// Validate 校验配置：
+//  1. 纯语法与 Schema 严格解码（保证格式符合规范、无重复 tag）；
+//  2. 优先通过宿主环境外挂内核执行 `sing-box check -c <tmp>` 进行最权威校验；
+//  3. 若宿主未找到 sing-box 二进制，则使用纯内存 box.New 兜底（并豁免因 controller 裁剪 tags 引发的缺少驱动错误）。
 func Validate(ctx context.Context, content []byte) error {
 	ctx = include.Context(ctx)
 	options, err := Parse(ctx, content)
 	if err != nil {
 		return err
 	}
+
+	// 1. 优先使用宿主机原生内核进行实际 check -c 校验（100% 匹配宿主内核编译 tags）
+	bin := FindSingBoxBinary()
+	if bin != "" {
+		tmpDir, err := os.MkdirTemp("", "sing-box-check-*")
+		if err == nil {
+			defer os.RemoveAll(tmpDir)
+			tmpFile := filepath.Join(tmpDir, "config.json")
+			if err := os.WriteFile(tmpFile, content, 0600); err == nil {
+				cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(cctx, bin, "check", "-c", tmpFile)
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					cleanErr := strings.TrimSpace(string(out))
+					if cleanErr != "" {
+						return errors.New(cleanErr)
+					}
+					return fmt.Errorf("sing-box check failed: %w", err)
+				}
+				return nil
+			}
+		}
+	}
+
+	// 2. 降级备用：无外部内核时用内置 box.New 干跑（豁免缺 build tag 导致的误报）
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	instance, err := box.New(box.Options{Context: cctx, Options: options})
 	if err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "is not included in this build") || strings.Contains(errMsg, "rebuild with -tags") {
+			return nil
+		}
 		return err
 	}
 	instance.Close()

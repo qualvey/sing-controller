@@ -17,10 +17,14 @@ controller/sing-box-config.json
 go.work
 dist/
 *.deb
+*.apk
 *.tar.gz
 *.db
 *.exe
 pkg_test/
+core_bin/
+providers/
+controller/web/providers/
 go.work.sum
 
 !controller/web/dist/.gitkeep

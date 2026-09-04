@@ -75,3 +75,19 @@ func TestManagerCreation(t *testing.T) {
 		t.Fatalf("expected binary path 'sing-box', got %s", status.BinaryPath)
 	}
 }
+
+func TestManagerReloadWhenStopped(t *testing.T) {
+	mgr, err := New(Config{
+		BinaryPath:  "sing-box-nonexistent",
+		ConfigPath:  "config.json",
+		LogCapacity: 100,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer mgr.Close()
+
+	// 未运行时调用 Reload，应安全返回错误或尝试启动而不会 panic
+	_ = mgr.Reload(nil)
+}
+

@@ -1,8 +1,11 @@
 package supervisor
 
 import (
+	"errors"
 	"time"
 )
+
+var errReloadNotSupported = errors.New("platform does not support SIGHUP reload")
 
 type State string
 

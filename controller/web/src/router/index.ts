@@ -6,17 +6,16 @@ import { language } from '@/store/settings'
 
 
 import { activeBackend } from '@/store/setup'
-import ConnectionsPage from '@/views/ConnectionsPage.vue'
-import DnsPage from '@/views/DnsPage.vue'
-import HomePage from '@/views/HomePage.vue'
-import InboundsPage from '@/views/InboundsPage.vue'
-import LogsPage from '@/views/LogsPage.vue'
-import OverviewPage from '@/views/OverviewPage.vue'
-import ProxiesPage from '@/views/ProxiesPage.vue'
-import RulesPage from '@/views/RulesPage.vue'
-import SettingsPage from '@/views/SettingsPage.vue'
-// import SetupPage from '@/views/SetupPage.vue'
-import UsersPage from '@/views/UsersPage.vue'
+// 移除顶层静态 import xxxPage
+const ProxiesPage = () => import('@/views/ProxiesPage.vue')
+const OverviewPage = () => import('@/views/OverviewPage.vue')
+const ConnectionsPage = () => import('@/views/ConnectionsPage.vue')
+const LogsPage = () => import('@/views/LogsPage.vue')
+const InboundsPage = () => import('@/views/InboundsPage.vue')
+const DnsPage = () => import('@/views/DnsPage.vue')
+const SettingsPage = () => import('@/views/SettingsPage.vue')
+const HomePage = () => import('@/views/HomePage.vue')
+
 import { useTitle } from '@vueuse/core'
 import { watch } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'

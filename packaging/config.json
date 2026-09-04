@@ -1,14 +1,38 @@
 {
-  "config": "/etc/sing-controller/sing-box-config.json",
-  "listen": "127.0.0.1:8080",
-  "log": {
-    "level": "info"
+  "server": {
+    "listen": "::",
+    "listen_port": 8080
   },
-  "min_port": 8000,
-  "defaults": {
-    "inbound_type": "mixed",
-    "outbound_type": "vless",
-    "listen": "127.0.0.1",
-    "listen_port": 2080
+  "log": {
+    "level": "info",
+    "output": "stderr"
+  },
+  "core": {
+    "config_path": "/etc/sing-box/config.json",
+    "managed": false,
+    "reload": {
+      "mode": "auto",
+      "service": "sing-box",
+      "after_save": false
+    }
+  },
+  "api": {
+    "clash": {
+      "address": ""
+    },
+    "service": {
+      "address": ""
+    },
+    "v2ray": {
+      "address": "127.0.0.1:10085"
+    }
+  },
+  "stats": {
+    "poll_interval": "10s",
+    "real_time": {
+      "enabled": false,
+      "interval_ms": 1000,
+      "online_threshold_sec": 60
+    }
   }
 }

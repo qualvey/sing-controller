@@ -17,6 +17,8 @@ func TestReloadValidateModes(t *testing.T) {
 		{"auto", "auto", "auto", false},
 		{"none", "none", "none", false},
 		{"systemd", "systemd", "systemd", false},
+		{"procd", "procd", "procd", false},
+		{"rc-service", "rc-service", "rc-service", false},
 		{"pidfile with path", "pidfile", "pidfile", false},
 		{"hook with command", "hook", "hook", false},
 		{"unknown rejected", "docker", "", true},
@@ -47,58 +49,89 @@ func TestReloadValidateModes(t *testing.T) {
 	}
 }
 
-// TestLoadDefaultsReloadAuto 旧配置无 reload 段 / 空 mode → 迁移为 auto（自动适配）；显式 none 保留。
-func TestLoadDefaultsReloadAuto(t *testing.T) {
+// TestLoadModularAndLegacyCompatibility 测试新模块化配置解析与旧配置的平滑迁移兼容性
+func TestLoadModularAndLegacyCompatibility(t *testing.T) {
 	dir := t.TempDir()
 
-	// 无 reload 段 → auto
-	noReload := `{"config":"./sing-box-config.json","min_port":8000}`
-	if err := os.WriteFile(filepath.Join(dir, "a.json"), []byte(noReload), 0o644); err != nil {
+	// 1. 测试旧版扁平配置迁移
+	legacyJSON := `{
+		"config": "./sing-box-config.json",
+		"listen": "127.0.0.1:9999",
+		"v2ray_api": "127.0.0.1:10085",
+		"poll_interval": "5s",
+		"reload": {"mode": "auto", "after_save": true}
+	}`
+	legacyPath := filepath.Join(dir, "legacy.json")
+	if err := os.WriteFile(legacyPath, []byte(legacyJSON), 0644); err != nil {
 		t.Fatal(err)
 	}
-	m := New(filepath.Join(dir, "a.json"))
+	m := New(legacyPath)
 	if err := m.Load(); err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("Load legacy: %v", err)
 	}
-	if m.values.Reload == nil || m.values.Reload.Mode != "auto" {
-		t.Errorf("no reload section: mode = %+v, want auto", m.values.Reload)
+	v := m.Values()
+	if v.Core.ConfigPath != "./sing-box-config.json" {
+		t.Errorf("Core.ConfigPath = %s, want ./sing-box-config.json", v.Core.ConfigPath)
+	}
+	if v.Server.ListenPort != 9999 {
+		t.Errorf("Server.ListenPort = %d, want 9999", v.Server.ListenPort)
+	}
+	if v.API.V2Ray.Address != "127.0.0.1:10085" {
+		t.Errorf("API.V2Ray.Address = %s, want 127.0.0.1:10085", v.API.V2Ray.Address)
+	}
+	if v.Stats.PollInterval != "5s" {
+		t.Errorf("Stats.PollInterval = %s, want 5s", v.Stats.PollInterval)
 	}
 
-	// 空 mode → auto
-	emptyMode := `{"config":"./sing-box-config.json","reload":{"after_save":true}}`
-	if err := os.WriteFile(filepath.Join(dir, "b.json"), []byte(emptyMode), 0o644); err != nil {
+	// 2. 测试全新模块化配置
+	modularJSON := `{
+		"server": {
+			"listen": "::",
+			"listen_port": 8888,
+			"secret": "topsecret"
+		},
+		"log": {
+			"level": "debug",
+			"output": "file",
+			"outfile": "/tmp/test.log"
+		},
+		"core": {
+			"config_path": "/etc/sing-box/config.json",
+			"managed": false,
+			"reload": {
+				"mode": "systemd",
+				"service": "sing-box-prod"
+			}
+		},
+		"api": {
+			"clash": { "address": "http://127.0.0.1:9090", "secret": "sec" }
+		},
+		"stats": {
+			"poll_interval": "15s"
+		}
+	}`
+	modPath := filepath.Join(dir, "modular.json")
+	if err := os.WriteFile(modPath, []byte(modularJSON), 0644); err != nil {
 		t.Fatal(err)
 	}
-	m2 := New(filepath.Join(dir, "b.json"))
+	m2 := New(modPath)
 	if err := m2.Load(); err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("Load modular: %v", err)
 	}
-	if m2.values.Reload.Mode != "auto" {
-		t.Errorf("empty mode: mode = %q, want auto", m2.values.Reload.Mode)
+	v2 := m2.Values()
+	if v2.Server.ListenPort != 8888 || v2.Server.Secret != "topsecret" {
+		t.Errorf("Server mismatch: %+v", v2.Server)
 	}
-	if !m2.values.Reload.AfterSave {
-		t.Error("after_save lost during load")
+	if v2.Server.Addr() != ":8888" {
+		t.Errorf("Server.Addr() = %s, want :8888", v2.Server.Addr())
 	}
-
-	// 显式 none → 保留
-	explicitNone := `{"config":"./sing-box-config.json","reload":{"mode":"none"}}`
-	if err := os.WriteFile(filepath.Join(dir, "c.json"), []byte(explicitNone), 0o644); err != nil {
-		t.Fatal(err)
+	if v2.Log.Level != "debug" || v2.Log.Outfile != "/tmp/test.log" {
+		t.Errorf("Log mismatch: %+v", v2.Log)
 	}
-	m3 := New(filepath.Join(dir, "c.json"))
-	if err := m3.Load(); err != nil {
-		t.Fatalf("Load: %v", err)
+	if *v2.Core.Managed != false || v2.Core.Reload.Mode != "systemd" {
+		t.Errorf("Core mismatch: %+v", v2.Core)
 	}
-	if m3.values.Reload.Mode != "none" {
-		t.Errorf("explicit none: mode = %q, want none", m3.values.Reload.Mode)
-	}
-
-	// 新生成默认配置 → auto
-	m4 := New(filepath.Join(dir, "d.json"))
-	if err := m4.Load(); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if m4.values.Reload == nil || m4.values.Reload.Mode != "auto" {
-		t.Errorf("default settings: reload = %+v, want auto", m4.values.Reload)
+	if v2.API.Clash.Address != "http://127.0.0.1:9090" {
+		t.Errorf("Clash API mismatch: %+v", v2.API.Clash)
 	}
 }

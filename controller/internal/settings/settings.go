@@ -1,50 +1,59 @@
-// Package settings 管理 sing-box-controller 自身的配置。
-// controller 配置格式（config.json）：
-//
-//	{
-//	  "config": "./sing-box-config.json",   // sing-box 主配置文件路径
-//	  "min_port": 8000,                     // 自动分配端口的起点（默认 8000）
-//	  "defaults": {                         // 新建 inbound/outbound 的默认值
-//	    "inbound_type": "mixed",
-//	    "outbound_type": "vless",
-//	    "listen": "127.0.0.1",
-//	    "listen_port": 2080
-//	  }
-//	}
+// Package settings 管理 sing-controller 自身的配置。
+// 遵循 sing-box 模块化理念设计。
 package settings
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
-type Defaults struct {
-	InboundType  string `json:"inbound_type,omitempty"`
-	OutboundType string `json:"outbound_type,omitempty"`
-	Listen       string `json:"listen,omitempty"`
-	ListenPort   uint16 `json:"listen_port,omitempty"`
-	// 新建 outbound 时自动并入指定 selector（默认开；指针区分"缺失"与"显式 false"）
-	AttachToSelector *bool  `json:"attach_to_selector,omitempty"`
-	ProxySelector    string `json:"proxy_selector,omitempty"`
+// ServerOptions 定义 Controller HTTP / WebUI 服务的监听配置
+type ServerOptions struct {
+	Listen     string `json:"listen,omitempty"`
+	ListenPort uint16 `json:"listen_port,omitempty"`
+	Secret     string `json:"secret,omitempty"`
 }
 
-// LogOptions 与 sing-box 配置的 log 段同构（level 枚举复用 sing-box 的）。
+// Addr 返回供 http.Server 使用的标准化监听地址（如 "127.0.0.1:8080" 或 ":8080"）
+func (s *ServerOptions) Addr() string {
+	if s == nil {
+		return ":8080"
+	}
+	listen := strings.TrimSpace(s.Listen)
+	port := s.ListenPort
+	if port == 0 {
+		port = 8080
+	}
+
+	// 兼容：如果 listen 已经显式包含了端口（如 127.0.0.1:8080）且 listen_port 未指定
+	if strings.Contains(listen, ":") && !strings.HasPrefix(listen, "[") && s.ListenPort == 0 {
+		if _, _, err := net.SplitHostPort(listen); err == nil {
+			return listen
+		}
+	}
+
+	if listen == "" || listen == "::" || listen == "0.0.0.0" {
+		return ":" + strconv.Itoa(int(port))
+	}
+	return net.JoinHostPort(listen, strconv.Itoa(int(port)))
+}
+
+// LogOptions 与 sing-box 配置的 log 段同构
 type LogOptions struct {
-	Level string `json:"level,omitempty"`
+	Level   string `json:"level,omitempty"`
+	Output  string `json:"output,omitempty"`  // stderr | stdout | file
+	Outfile string `json:"outfile,omitempty"` // 日志落盘路径
 }
 
-// ReloadOptions 配置保存后/手动触发 sing-box 重载的方式。
-// sing-box 官方重载机制只有 SIGHUP（cmd_run.go 收到 SIGHUP 重载配置）：
-//   - auto（默认）：自动探测可用的 init 机制（systemd → openrc/rc-service → OpenWrt/procd → SysV service）
-//   - systemd：systemctl reload <service>（推荐，默认服务名 sing-box）
-//   - pidfile：读 pid 文件后 kill -HUP
-//   - hook：自定义 shell 命令（最灵活）
-//   - none：不启用
+// ReloadOptions sing-box 重载机制选项
 type ReloadOptions struct {
 	Mode      string `json:"mode,omitempty"`
 	Service   string `json:"service,omitempty"`
@@ -63,7 +72,7 @@ func (o *ReloadOptions) Validate() error {
 		return nil
 	case "none":
 		return nil
-	case "systemd":
+	case "systemd", "procd", "rc-service":
 		return nil
 	case "pidfile":
 		if o.PidFile == "" {
@@ -76,40 +85,104 @@ func (o *ReloadOptions) Validate() error {
 		}
 		return nil
 	default:
-		return errors.New("未知 reload 模式: " + o.Mode + "（auto/systemd/pidfile/hook/none）")
+		return errors.New("未知 reload 模式: " + o.Mode + "（auto/systemd/procd/rc-service/pidfile/hook/none）")
 	}
 }
 
-// ClashAPIOptions controller 连接 clash API 的配置（可选）
-type ClashAPIOptions struct {
-	Address string `json:"address,omitempty"` // 例如: http://127.0.0.1:9090
+// CoreOptions 管理 sing-box 内核生命周期
+type CoreOptions struct {
+	ConfigPath string         `json:"config_path,omitempty"`
+	Managed    *bool          `json:"managed,omitempty"`
+	BinaryPath string         `json:"binary_path,omitempty"`
+	WorkingDir string         `json:"working_dir,omitempty"`
+	Reload     *ReloadOptions `json:"reload,omitempty"`
+}
+
+// EndpointAPI 通用的上游 API 地址与密钥配置
+type EndpointAPI struct {
+	Address string `json:"address,omitempty"`
 	Secret  string `json:"secret,omitempty"`
 }
 
-// ServiceAPIOptions controller 连接 service API（gRPC-Web）的配置（可选）
-type ServiceAPIOptions struct {
-	Address string `json:"address,omitempty"` // 例如: http://127.0.0.1:9900
-	Secret  string `json:"secret,omitempty"`
+// APIOptions 定义与 sing-box 交互的各类端点
+type APIOptions struct {
+	Clash   *EndpointAPI `json:"clash,omitempty"`
+	Service *EndpointAPI `json:"service,omitempty"`
+	V2Ray   *EndpointAPI `json:"v2ray,omitempty"`
 }
 
+// RealTimeStats 实时推送统计配置
+type RealTimeStats struct {
+	Enabled            bool `json:"enabled"`
+	IntervalMS         int  `json:"interval_ms"`
+	OnlineThresholdSec int  `json:"online_threshold_sec"`
+}
+
+// StatsOptions 流量监控统计采集配置
+type StatsOptions struct {
+	PollInterval string        `json:"poll_interval,omitempty"`
+	Pattern      string        `json:"pattern,omitempty"`
+	ResetOnQuery bool          `json:"reset_on_query,omitempty"`
+	RealTime     RealTimeStats `json:"real_time"`
+}
+
+// Settings 是 controller 的主配置根结构
 type Settings struct {
-	Config       string             `json:"config"`
-	Listen       string             `json:"listen,omitempty"`
-	Log          *LogOptions        `json:"log,omitempty"`
-	MinPort      uint16             `json:"min_port,omitempty"`
-	Defaults     Defaults           `json:"defaults,omitempty"`
-	Reload       *ReloadOptions     `json:"reload,omitempty"`
-	ClashAPI     *ClashAPIOptions   `json:"clash_api,omitempty"`
-	ServiceAPI   *ServiceAPIOptions `json:"service_api,omitempty"`
-	V2rayAPI     string             `json:"v2ray_api,omitempty"`
-	PollInterval string             `json:"poll_interval"`
-	Pattern      string             `json:"pattern"`
-	ResetOnQuery bool               `json:"reset_on_query"`
-	RealTime     struct {
-		Enabled            bool `json:"enabled"`
-		IntervalMS         int  `json:"interval_ms"`
-		OnlineThresholdSec int  `json:"online_threshold_sec"`
-	} `json:"real_time"`
+	Server ServerOptions `json:"server"`
+	Log    *LogOptions   `json:"log,omitempty"`
+	Core   CoreOptions   `json:"core"`
+	API    APIOptions    `json:"api"`
+	Stats  StatsOptions  `json:"stats"`
+}
+
+func (s *Settings) UnmarshalJSON(data []byte) error {
+	type Alias Settings
+	aux := (*Alias)(s)
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	var old rawOldSettings
+	if err := json.Unmarshal(data, &old); err == nil {
+		if old.Config != "" && s.Core.ConfigPath == "" {
+			s.Core.ConfigPath = old.Config
+		}
+		if old.Listen != "" && s.Server.Listen == "" && s.Server.ListenPort == 0 {
+			if h, p, err := net.SplitHostPort(old.Listen); err == nil {
+				s.Server.Listen = h
+				if pu, err := strconv.ParseUint(p, 10, 16); err == nil {
+					s.Server.ListenPort = uint16(pu)
+				}
+			} else {
+				s.Server.Listen = old.Listen
+			}
+		}
+		if old.V2RayAPI != "" && (s.API.V2Ray == nil || s.API.V2Ray.Address == "") {
+			s.API.V2Ray = &EndpointAPI{Address: old.V2RayAPI}
+		}
+		if old.ClashAPI != nil && s.API.Clash == nil {
+			s.API.Clash = old.ClashAPI
+		}
+		if old.ServiceAPI != nil && s.API.Service == nil {
+			s.API.Service = old.ServiceAPI
+		}
+		if old.PollInterval != "" && s.Stats.PollInterval == "" {
+			s.Stats.PollInterval = old.PollInterval
+		}
+		if old.Pattern != "" && s.Stats.Pattern == "" {
+			s.Stats.Pattern = old.Pattern
+		}
+		if old.ResetOnQuery {
+			s.Stats.ResetOnQuery = true
+		}
+		if old.RealTime != nil && !s.Stats.RealTime.Enabled {
+			s.Stats.RealTime = *old.RealTime
+		}
+		if old.Reload != nil && s.Core.Reload == nil {
+			s.Core.Reload = old.Reload
+		}
+	}
+	return nil
 }
 
 type Manager struct {
@@ -118,22 +191,12 @@ type Manager struct {
 	values Settings
 }
 
-// singBoxServiceConfig 用于提取 sing-box 主配置中 services 数组的最小结构
-type singBoxServiceConfig struct {
-	Services []struct {
-		Type       string `json:"type"`
-		Listen     string `json:"listen"`
-		ListenPort uint16 `json:"listen_port"`
-		Secret     string `json:"secret"`
-	} `json:"services"`
-}
-
 func New(path string) *Manager { return &Manager{path: path} }
 
 func (m *Manager) Path() string { return m.path }
 
 func (m *Manager) PollIntervalDuration() time.Duration {
-	d, err := time.ParseDuration(m.values.PollInterval)
+	d, err := time.ParseDuration(m.values.Stats.PollInterval)
 	if err != nil || d <= 0 {
 		return 10 * time.Second
 	}
@@ -142,32 +205,63 @@ func (m *Manager) PollIntervalDuration() time.Duration {
 
 func defaultSettings() Settings {
 	singBoxCfg := "/etc/sing-box/config.json"
+	managed := runtime.GOOS == "windows"
 	if runtime.GOOS == "windows" {
 		singBoxCfg = "sing-box.json"
 	}
+
 	return Settings{
-		Config:  singBoxCfg,
-		Listen:  "127.0.0.1:8080",
-		Log:     &LogOptions{Level: "info"},
-		MinPort: 8000,
-		Reload:  &ReloadOptions{Mode: "auto"},
-		Defaults: Defaults{
-			InboundType:   "mixed",
-			OutboundType:  "vless",
-			Listen:        "127.0.0.1",
-			ListenPort:    2080,
-			ProxySelector: "Proxy",
+		Server: ServerOptions{
+			Listen:     "::",
+			ListenPort: 8080,
+		},
+		Log: &LogOptions{
+			Level:  "info",
+			Output: "stderr",
+		},
+		Core: CoreOptions{
+			ConfigPath: singBoxCfg,
+			Managed:    &managed,
+			Reload:     &ReloadOptions{Mode: "auto"},
+		},
+		API: APIOptions{
+			Clash:   &EndpointAPI{},
+			Service: &EndpointAPI{},
+			V2Ray:   &EndpointAPI{},
+		},
+		Stats: StatsOptions{
+			PollInterval: "10s",
+			RealTime: RealTimeStats{
+				Enabled:            false,
+				IntervalMS:         1000,
+				OnlineThresholdSec: 60,
+			},
 		},
 	}
 }
 
-// Load 读取 controller 配置；不存在时生成默认配置。
+// rawOldSettings 仅用于平滑迁移旧版扁平化配置
+type rawOldSettings struct {
+	Config       string          `json:"config"`
+	Listen       string          `json:"listen"`
+	MinPort      uint16          `json:"min_port"`
+	V2RayAPI     string          `json:"v2ray_api"`
+	PollInterval string          `json:"poll_interval"`
+	Pattern      string          `json:"pattern"`
+	ResetOnQuery bool            `json:"reset_on_query"`
+	ClashAPI     *EndpointAPI    `json:"clash_api"`
+	ServiceAPI   *EndpointAPI    `json:"service_api"`
+	Reload       *ReloadOptions  `json:"reload"`
+	RealTime     *RealTimeStats  `json:"real_time"`
+}
+
+// Load 读取 controller 配置，自动兼容旧版配置并完成缺省值补全。
 func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
 	content, err := os.ReadFile(m.path)
 	if errors.Is(err, os.ErrNotExist) {
-		// 平滑回退检查：如果默认的 controller.json 不存在但有旧的 config.json，尝试读取旧文件
 		if m.path == "controller.json" {
 			if oldContent, oldErr := os.ReadFile("config.json"); oldErr == nil {
 				content = oldContent
@@ -182,32 +276,74 @@ func (m *Manager) Load() error {
 	if err != nil {
 		return err
 	}
-	// 场景 2：文件存在，先用 defaultSettings() 填底
+
 	values := defaultSettings()
-	// Unmarshal 只会覆盖 JSON 文件里明确写了的字段，缺省字段直接继承默认值
+	// 1. 尝试反序列化新版模块化配置
 	if err := json.Unmarshal(content, &values); err != nil {
 		return err
 	}
-	if values.ServiceAPI == nil || values.ServiceAPI.Address == "" {
-		if detected := m.autoDetectServiceAPI(values.Config); detected != nil {
-			values.ServiceAPI = detected
+
+	// 2. 检查并兼容旧版扁平字段
+	var old rawOldSettings
+	_ = json.Unmarshal(content, &old)
+
+	if old.Config != "" && (values.Core.ConfigPath == "" || values.Core.ConfigPath == defaultSettings().Core.ConfigPath) {
+		values.Core.ConfigPath = old.Config
+	}
+	if old.Listen != "" && values.Server.Listen == "::" && values.Server.ListenPort == 8080 {
+		// 旧格式如果带有端口，解析它
+		if h, p, err := net.SplitHostPort(old.Listen); err == nil {
+			values.Server.Listen = h
+			if pu, err := strconv.ParseUint(p, 10, 16); err == nil {
+				values.Server.ListenPort = uint16(pu)
+			}
+		} else {
+			values.Server.Listen = old.Listen
+		}
+	}
+	if old.V2RayAPI != "" && values.API.V2Ray.Address == "" {
+		values.API.V2Ray.Address = old.V2RayAPI
+	}
+	if old.ClashAPI != nil && values.API.Clash.Address == "" {
+		values.API.Clash = old.ClashAPI
+	}
+	if old.ServiceAPI != nil && values.API.Service.Address == "" {
+		values.API.Service = old.ServiceAPI
+	}
+	if old.PollInterval != "" && (values.Stats.PollInterval == "" || values.Stats.PollInterval == "10s") {
+		values.Stats.PollInterval = old.PollInterval
+	}
+	if old.Pattern != "" && values.Stats.Pattern == "" {
+		values.Stats.Pattern = old.Pattern
+	}
+	if old.ResetOnQuery {
+		values.Stats.ResetOnQuery = true
+	}
+	if old.RealTime != nil && !values.Stats.RealTime.Enabled {
+		values.Stats.RealTime = *old.RealTime
+	}
+	if old.Reload != nil && values.Core.Reload == nil {
+		values.Core.Reload = old.Reload
+	}
+
+	// 3. 校验与默认值强化
+	if values.Core.Reload == nil {
+		values.Core.Reload = &ReloadOptions{Mode: "auto"}
+	} else if values.Core.Reload.Mode == "" {
+		values.Core.Reload.Mode = "auto"
+	}
+	if values.Core.Managed == nil {
+		defaultManaged := runtime.GOOS == "windows"
+		values.Core.Managed = &defaultManaged
+	}
+
+	// 4. 自动推断 service API
+	if values.API.Service == nil || values.API.Service.Address == "" {
+		if detected := m.autoDetectServiceAPI(values.Core.ConfigPath); detected != nil {
+			values.API.Service = detected
 		}
 	}
 
-	// 旧配置迁移：attach_to_selector 字段缺失时默认开启
-	if values.Defaults.AttachToSelector == nil {
-		attached := true
-		values.Defaults.AttachToSelector = &attached
-	}
-	// 重载默认自动适配：未配置/空模式 → auto（systemd → rc-service → OpenWrt service）；显式 none 保留
-	if values.Reload == nil {
-		values.Reload = &ReloadOptions{Mode: "auto"}
-	} else if values.Reload.Mode == "" {
-		values.Reload.Mode = "auto"
-	}
-	if values.MinPort == 0 {
-		values.MinPort = 8000
-	}
 	m.values = values
 	return nil
 }
@@ -241,7 +377,16 @@ func (m *Manager) saveLocked() error {
 	return os.Rename(tmp, m.path)
 }
 
-func (m *Manager) autoDetectServiceAPI(singBoxConfigPath string) *ServiceAPIOptions {
+type singBoxServiceConfig struct {
+	Services []struct {
+		Type       string `json:"type"`
+		Listen     string `json:"listen"`
+		ListenPort uint16 `json:"listen_port"`
+		Secret     string `json:"secret"`
+	} `json:"services"`
+}
+
+func (m *Manager) autoDetectServiceAPI(singBoxConfigPath string) *EndpointAPI {
 	data, err := os.ReadFile(singBoxConfigPath)
 	if err != nil {
 		return nil
@@ -255,11 +400,10 @@ func (m *Manager) autoDetectServiceAPI(singBoxConfigPath string) *ServiceAPIOpti
 	for _, s := range sbCfg.Services {
 		if s.Type == "api" && s.ListenPort > 0 {
 			listenHost := s.Listen
-			// 处理通配地址，controller 在本机访问需转为 loopback
 			if listenHost == "" || listenHost == "::" || listenHost == "0.0.0.0" {
 				listenHost = "127.0.0.1"
 			}
-			return &ServiceAPIOptions{
+			return &EndpointAPI{
 				Address: fmt.Sprintf("http://%s:%d", listenHost, s.ListenPort),
 				Secret:  s.Secret,
 			}
