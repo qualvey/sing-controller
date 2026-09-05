@@ -50,6 +50,7 @@ type Handler struct {
 	secret      string
 	version     string
 	static      http.Handler
+	wrapped     http.Handler
 
 	schemaOnce sync.Once
 	schemaJSON []byte
@@ -61,7 +62,15 @@ type Handler struct {
 // metaType 别名，简化 handler 签名书写
 type metaType = store.Meta
 
-func NewHandler(opts HandlerOptions) http.Handler {
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.wrapped != nil {
+		h.wrapped.ServeHTTP(w, r)
+		return
+	}
+	http.NotFound(w, r)
+}
+
+func NewHandler(opts HandlerOptions) *Handler {
 	logger.Debug("New handler initing")
 	h := &Handler{
 		store:       opts.Store,
@@ -194,7 +203,8 @@ func NewHandler(opts HandlerOptions) http.Handler {
 	// 重载 sing-box
 	mux.HandleFunc("POST /api/reload", h.handleReload)
 
-	return h.withMiddleware(mux)
+	h.wrapped = h.withMiddleware(mux)
+	return h
 }
 
 type statusResponseWriter struct {

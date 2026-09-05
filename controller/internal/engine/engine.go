@@ -87,6 +87,7 @@ type Engine struct {
 	provMgr    *provider.Manager
 	rt         *realtime.Broadcaster
 	handler    http.Handler
+	apiHandler *api.Handler
 	server     *http.Server
 
 	opts       Config
@@ -194,7 +195,7 @@ func New(opts Config) (*Engine, error) {
 	}
 
 	// Provider & Profile 管理器
-	provMgr, err := provider.NewManager(opts.ProvidersDir, cfgStore, e.supervisor)
+	provMgr, err := provider.NewManager(opts.ProvidersDir, cfgStore, &engineSupervisorAdapter{engine: e})
 	if err != nil {
 		slog.Warn("provider manager init failed", "error", err)
 	} else {
@@ -202,7 +203,7 @@ func New(opts Config) (*Engine, error) {
 	}
 
 	// API Handler
-	e.handler = api.NewHandler(api.HandlerOptions{
+	apiH := api.NewHandler(api.HandlerOptions{
 		Store:       cfgStore,
 		Settings:    cfg,
 		Supervisor:  e.supervisor,
@@ -211,6 +212,8 @@ func New(opts Config) (*Engine, error) {
 		Version:     opts.Version,
 		Static:      opts.StaticHandler,
 	})
+	e.apiHandler = apiH
+	e.handler = apiH
 
 	return e, nil
 }
@@ -355,4 +358,18 @@ func (e *Engine) Broadcaster() *realtime.Broadcaster {
 // ListenAddr 返回监听地址
 func (e *Engine) ListenAddr() string {
 	return e.listenAddr
+}
+
+type engineSupervisorAdapter struct {
+	engine *Engine
+}
+
+func (a *engineSupervisorAdapter) Restart(ctx context.Context) error {
+	if a.engine.supervisor != nil {
+		return a.engine.supervisor.Restart(ctx)
+	}
+	if a.engine.apiHandler != nil {
+		return a.engine.apiHandler.RestartCore(ctx)
+	}
+	return nil
 }

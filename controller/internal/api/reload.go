@@ -172,6 +172,38 @@ func (h *Handler) reloadIfEnabled() (bool, error) {
 	return h.reloadIfRequested(nil)
 }
 
+// detectServiceActionCommand 自动探测可用的 init 管理机制执行指定动作（reload / restart / start / stop / status）
+func detectServiceActionCommand(service string, action string) (*exec.Cmd, string, error) {
+	// systemd：/run/systemd/system 是 systemd 作为 PID 1 的标准标志（比 systemctl 二进制更可靠）
+	if _, err := os.Stat("/run/systemd/system"); err == nil {
+		if _, err := exec.LookPath("systemctl"); err == nil {
+			return exec.Command("systemctl", action, service), "systemd", nil
+		}
+	}
+	// openrc（Alpine 默认 init）
+	if path, err := exec.LookPath("rc-service"); err == nil {
+		return exec.Command(path, service, action), "openrc", nil
+	}
+	// OpenWrt / procd
+	if _, err := os.Stat("/etc/openwrt_release"); err == nil {
+		initScript := "/etc/init.d/" + service
+		if _, err := os.Stat(initScript); err == nil {
+			return exec.Command(initScript, action), "openwrt", nil
+		}
+		if _, err := exec.LookPath("service"); err == nil {
+			return exec.Command("service", service, action), "openwrt", nil
+		}
+		return nil, "", errors.New("OpenWrt 下未找到 /etc/init.d/" + service + "（请先安装 sing-box init 脚本）")
+	}
+	// 通用 SysV service
+	if _, err := os.Stat("/etc/init.d/" + service); err == nil {
+		if path, err := exec.LookPath("service"); err == nil {
+			return exec.Command(path, service, action), "sysv", nil
+		}
+	}
+	return nil, "", errors.New("未检测到 systemd / openrc(rc-service) / OpenWrt(procd) 等服务管理机制（请安装对应 init 脚本，或在 Settings 配置 pidfile/hook）")
+}
+
 // detectReloadCommand 自动探测可用的 init 重载机制（按优先级）：
 //  1. systemd：/run/systemd/system 存在（systemd 为 PID 1）→ systemctl reload <service>
 //  2. openrc（Alpine 等）：rc-service 在 PATH → rc-service <service> reload
@@ -180,34 +212,104 @@ func (h *Handler) reloadIfEnabled() (bool, error) {
 //
 // 返回 (命令, 探测到的机制名, 错误)。
 func detectReloadCommand(service string) (*exec.Cmd, string, error) {
-	// systemd：/run/systemd/system 是 systemd 作为 PID 1 的标准标志（比 systemctl 二进制更可靠）
-	if _, err := os.Stat("/run/systemd/system"); err == nil {
-		if _, err := exec.LookPath("systemctl"); err == nil {
-			return exec.Command("systemctl", "reload", service), "systemd", nil
-		}
+	return detectServiceActionCommand(service, "reload")
+}
+
+// controlService 按 settings 配置或自动探测执行指定动作 (restart / start / stop)。
+func (h *Handler) controlService(ctx context.Context, action string) error {
+	values := h.settings.Values()
+	service := "sing-box"
+	if values.Core.Reload != nil && values.Core.Reload.Service != "" {
+		service = values.Core.Reload.Service
 	}
-	// openrc（Alpine 默认 init）
-	if path, err := exec.LookPath("rc-service"); err == nil {
-		return exec.Command(path, service, "reload"), "openrc", nil
+
+	mode := "auto"
+	if values.Core.Reload != nil && values.Core.Reload.Mode != "" && values.Core.Reload.Mode != "none" {
+		mode = values.Core.Reload.Mode
 	}
-	// OpenWrt / procd
-	if _, err := os.Stat("/etc/openwrt_release"); err == nil {
-		initScript := "/etc/init.d/" + service
-		if _, err := os.Stat(initScript); err == nil {
-			return exec.Command(initScript, "reload"), "openwrt", nil
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	switch mode {
+	case "auto":
+		cmd, detected, err := detectServiceActionCommand(service, action)
+		if err != nil {
+			logger.Warn("服务控制探测失败: %v", err)
+			return err
 		}
-		if _, err := exec.LookPath("service"); err == nil {
-			return exec.Command("service", service, "reload"), "openwrt", nil
+		out, runErr := cmd.CombinedOutput()
+		if runErr != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail == "" {
+				detail = runErr.Error()
+			}
+			logger.Warn("sing-box %s 失败: detected=%s service=%s error=%s", action, detected, service, detail)
+			return fmt.Errorf("%s %s %s 失败: %s", detected, action, service, detail)
 		}
-		return nil, "", errors.New("OpenWrt 下未找到 /etc/init.d/" + service + "（请先安装 sing-box init 脚本）")
+		logger.Info("sing-box %s 成功 (mode=auto, detected=%s, service=%s)", action, detected, service)
+		return nil
+
+	case "systemd":
+		cmd := exec.CommandContext(timeoutCtx, "systemctl", action, service)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail == "" {
+				detail = err.Error()
+			}
+			return fmt.Errorf("systemctl %s %s 失败: %s", action, service, detail)
+		}
+		logger.Info("sing-box %s 成功 (systemd, service=%s)", action, service)
+		return nil
+
+	case "hook":
+		if values.Core.Reload.Hook == "" {
+			return errors.New("hook 模式未配置命令")
+		}
+		cmd := exec.CommandContext(timeoutCtx, "sh", "-c", values.Core.Reload.Hook)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail == "" {
+				detail = err.Error()
+			}
+			return fmt.Errorf("hook 执行失败: %s", detail)
+		}
+		logger.Info("sing-box %s 成功 (hook, output=%s)", action, strings.TrimSpace(string(out)))
+		return nil
+
+	default:
+		cmd, detected, err := detectServiceActionCommand(service, action)
+		if err != nil {
+			return fmt.Errorf("未配置服务控制模式且自动探测失败: %w", err)
+		}
+		out, runErr := cmd.CombinedOutput()
+		if runErr != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail == "" {
+				detail = runErr.Error()
+			}
+			return fmt.Errorf("%s %s %s 失败: %s", detected, action, service, detail)
+		}
+		logger.Info("sing-box %s 成功 (detected=%s, service=%s)", action, detected, service)
+		return nil
 	}
-	// 通用 SysV service
-	if _, err := os.Stat("/etc/init.d/" + service); err == nil {
-		if path, err := exec.LookPath("service"); err == nil {
-			return exec.Command(path, service, "reload"), "sysv", nil
-		}
+}
+
+// RestartCore 统一重启或热重载内核（支持 Supervisor 托管模式与系统服务 / 热重载降级模式）
+func (h *Handler) RestartCore(ctx context.Context) error {
+	if h.supervisor != nil {
+		return h.supervisor.Restart(ctx)
 	}
-	return nil, "", errors.New("未检测到 systemd / openrc(rc-service) / OpenWrt(procd) 等重载机制（请安装对应 init 脚本，或在 Settings 配置 pidfile/hook）")
+	if err := h.controlService(ctx, "restart"); err == nil {
+		h.waitCoreReady(2 * time.Second)
+		return nil
+	}
+	if _, reloadErr := h.reloadNow(); reloadErr == nil {
+		return nil
+	}
+	return errors.New("内核守护管理器未启用，且未检测到可用的系统服务 (systemd/openrc/init.d)")
 }
 
 func (h *Handler) handleReload(w http.ResponseWriter, r *http.Request) {
