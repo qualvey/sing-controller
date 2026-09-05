@@ -13,7 +13,8 @@ import { api } from '@/api'
 import { showToast } from '@/helper/toast'
 import { showConfirmDialog } from '@/helper/confirmDialog'
 import { useStatusStore } from '@/store/status'
-import { BoltIcon, PencilSquareIcon, DocumentDuplicateIcon, TrashIcon, StarIcon } from '@heroicons/vue/24/outline'
+import { BoltIcon, PencilSquareIcon, DocumentDuplicateIcon, TrashIcon, StarIcon, FolderPlusIcon } from '@heroicons/vue/24/outline'
+import { openAssignModal } from '@/composables/ungroupedProxies'
 
 const { t } = useI18n()
 const statusStore = useStatusStore()
@@ -181,6 +182,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown)
   window.removeEventListener('scroll', handleScroll, { capture: true })
 })
+const handleAssignToGroup = () => {
+  if (!target.value) return
+  const name = target.value.name
+  closeProxyContextMenu()
+  openAssignModal(name)
+}
 </script>
 
 <template>
@@ -232,6 +239,15 @@ onBeforeUnmount(() => {
             >
               <StarIcon class="h-4 w-4 shrink-0 text-amber-500" />
               <span>设为分组默认</span>
+            </button>
+          </li>
+          <li v-else-if="!target.groupName && !target.isGroup">
+            <button
+              class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
+              @click="handleAssignToGroup"
+            >
+              <FolderPlusIcon class="h-4 w-4 shrink-0 text-primary" />
+              <span>分配至策略组</span>
             </button>
           </li>
           <div class="h-px bg-base-200 dark:bg-base-300 my-0.5" />

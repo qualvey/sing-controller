@@ -249,7 +249,7 @@ sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `
 - [x] 桌面端跨平台打包流水线（Windows `.exe` / `.msi`、macOS `.app` / `.dmg`、Linux `.AppImage` / `.deb`）。
 
 ### Phase 7: 出站与策略组全生命周期管控 (Outbounds & Proxy Groups Governance)
-- [ ] **前端「未分组节点」虚拟卡片 (Ungrouped Proxies Card)**：在 Proxies 页面中动态聚合无所属分组的孤立节点，支持测速与再分配。
+- [x] **前端「未分组节点」虚拟卡片 (Ungrouped Proxies Card)**：在 Proxies 页面中动态聚合无所属分组的孤立节点，支持测速与再分配。
 - [ ] **表单分组防呆拦截 (Empty Group Guard)**：OutboundEditDialog 阻止或警示无分组保存行为，防止节点脱离视图。
 - [ ] **出站资产总表 (Outbounds Master Table)**：提供类似 Inbounds/Rules 的平铺出站管理表格，支持来源标识、批量测速与批量分配。
 - [ ] **策略组拓扑校验与环路防护 (Topology & Cyclic Guard)**：后端增加分组嵌套合法性与环路检测机制。

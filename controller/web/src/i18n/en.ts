@@ -892,6 +892,26 @@ const en = {
     keypairGenFailed: 'Failed to generate keypair',
     passwordGenFailed: 'Failed to generate password',
   },
+  ungroupedProxies: {
+    title: 'Ungrouped Nodes',
+    desc: 'These outbound nodes do not belong to any proxy group and will not be routed',
+    countBadge: '{count} orphan nodes',
+    speedtestAll: 'Test All',
+    testing: 'Testing...',
+    batchAssign: 'Batch Assign to Groups',
+    assignTitle: 'Assign Nodes to Proxy Groups',
+    assignDescSingle: 'Assign node "{tag}" to target proxy group(s):',
+    assignDescBatch: 'Assign {count} selected nodes to target proxy group(s):',
+    selectGroups: 'Select Target Groups',
+    selectAtLeastOneGroup: 'Please select at least one target proxy group',
+    noGroupsAvailable: 'No available proxy groups',
+    assignSuccess: 'Successfully assigned nodes to proxy groups',
+    assignFailed: 'Failed to assign nodes',
+    quickAssign: 'Assign',
+    selectAll: 'Select All',
+    deselectAll: 'Deselect All',
+    selectedCount: '{count} selected',
+  },
 }
 
 export type LANG_MESSAGE = typeof en

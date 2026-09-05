@@ -881,6 +881,26 @@ const zh: LANG_MESSAGE = {
     keypairGenFailed: '密钥对生成失败',
     passwordGenFailed: '密码生成失败',
   },
+  ungroupedProxies: {
+    title: '未分组节点',
+    desc: '以下出站节点未加入任何策略组，无法通过分流规则生效',
+    countBadge: '{count} 个孤立节点',
+    speedtestAll: '批量测速',
+    testing: '测速中...',
+    batchAssign: '批量加入策略组',
+    assignTitle: '分配节点至策略组',
+    assignDescSingle: '将节点「{tag}」分配至指定策略组：',
+    assignDescBatch: '将选中的 {count} 个未分组节点分配至指定策略组：',
+    selectGroups: '选择目标策略组',
+    selectAtLeastOneGroup: '请至少选择一个目标策略组',
+    noGroupsAvailable: '暂无可用的目标策略组',
+    assignSuccess: '已成功将节点分配至目标策略组',
+    assignFailed: '分配失败',
+    quickAssign: '加入策略组',
+    selectAll: '全选',
+    deselectAll: '取消全选',
+    selectedCount: '已选 {count} 个',
+  },
 }
 
 export default zh

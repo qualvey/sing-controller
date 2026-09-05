@@ -13,6 +13,15 @@
     >
       <ProxiesCtrl />
       <FolderTopBar v-if="foldersUiVisible" />
+
+      <!-- 未分组独立出站节点虚拟卡片 -->
+      <div
+        v-if="proxiesTabShow === PROXY_TAB_TYPE.PROXIES && ungroupedNodeNames.length > 0"
+        class="px-3 pt-3 md:pr-2"
+      >
+        <UngroupedProxiesCard />
+      </div>
+
       <template v-if="displayTwoColumns">
         <div class="grid grid-cols-2 gap-3 p-3 md:pr-2">
           <div
@@ -43,6 +52,7 @@
     </div>
     <ProxyGroupChainModal />
     <ProxyContextMenu />
+    <AssignGroupModal />
     <OutboundEditDialog
       v-model="isProxyEditModalOpen"
       :tag="proxyEditTargetTag"
@@ -62,6 +72,9 @@ import ProxyProvider from '@/components/proxies/ProxyProvider.vue'
 import ProxyGroupChainModal from '@/components/proxies/ProxyGroupChainModal.vue'
 import ProxyContextMenu from '@/components/proxies/ProxyContextMenu.vue'
 import OutboundEditDialog from '@/components/outbounds/OutboundEditDialog.vue'
+import UngroupedProxiesCard from '@/components/proxies/UngroupedProxiesCard.vue'
+import AssignGroupModal from '@/components/proxies/AssignGroupModal.vue'
+import { useUngroupedProxies } from '@/composables/ungroupedProxies'
 import {
   isProxyEditModalOpen,
   isProxyEditModalIsEdit,
@@ -86,6 +99,7 @@ const { padding } = usePaddingForViews({
   offsetTop: 0,
   offsetBottom: 0,
 })
+const { ungroupedNodeNames } = useUngroupedProxies()
 const renderPageItems = renderProxiesPageItems
 const proxiesRef = ref()
 const scrollStatus = useSessionStorage('cache/proxies-scroll-status', {
