@@ -233,8 +233,8 @@ func ValidateMulti(ctx context.Context, files map[string][]byte) error {
 
 // Exists 检查主配置文件是否真实存在于磁盘
 func (s *Store) Exists() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if _, err := os.Stat(s.path); err == nil {
 		return true
 	}
@@ -339,8 +339,8 @@ func (s *Store) SetPath(path string) {
 
 // Content 返回当前配置的格式化 JSON。
 func (s *Store) Content(ctx context.Context) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return marshalOptions(ctx, s.Options)
 }
 
@@ -370,8 +370,8 @@ func (s *Store) Save(ctx context.Context) error {
 // RawContent 返回主配置文件的原始内容（未解析，保留注释/格式）；文件不存在返回 nil。
 // Users 返回用户池副本（nil → 空切片，保证 JSON 输出 []）
 func (s *Store) Users() []UserMeta {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if len(s.Meta.Users) == 0 {
 		return []UserMeta{}
 	}
@@ -393,8 +393,8 @@ func (s *Store) UpdateUsers(mutate func([]UserMeta) error) error {
 }
 
 func (s *Store) RawContent() []byte {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	content, err := os.ReadFile(s.path)
 	if err != nil {
 		return nil

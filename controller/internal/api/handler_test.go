@@ -132,6 +132,18 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestStatusEndpoint(t *testing.T) {
+	h := newTestHandler(t)
+	rec := doRequest(t, h, http.MethodGet, "/api/status", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status endpoint failed: %d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"config_exists":true`) {
+		t.Errorf("expected config_exists:true, got %s", body)
+	}
+}
+
 func TestPutSettingsUpdatesLogLevelDynamically(t *testing.T) {
 	h, cfgPath := newTestHandlerWithPaths(t)
 	escapedPath := strings.ReplaceAll(cfgPath, "\\", "\\\\")

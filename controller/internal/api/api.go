@@ -414,33 +414,40 @@ func readRawBody(r *http.Request) ([]byte, error) {
 // ---------- status ----------
 
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
-	h.store.RLock()
-	defer h.store.RUnlock()
-
-	values := h.settings.Values()
 	ruleCount := 0
+	inboundsCount := 0
+	outboundsCount := 0
+
+	h.store.RLock()
 	if h.store.Options.Route != nil {
 		ruleCount = len(h.store.Options.Route.Rules)
 	}
+	inboundsCount = len(h.store.Options.Inbounds)
+	outboundsCount = len(h.store.Options.Outbounds)
+	configPath := h.store.Path()
+	h.store.RUnlock()
+
+	configExists := h.store.Exists()
 	coreStatus := h.probeCoreHealth(1 * time.Second)
 	tunDenied := false
 	if h.supervisor != nil {
 		tunDenied = h.supervisor.TunAccessDenied()
 	}
 
+	values := h.settings.Values()
 	logLevel := "info"
 	if values.Log != nil && values.Log.Level != "" {
 		logLevel = values.Log.Level
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"config_path":        h.store.Path(),
-		"config_exists":      h.store.Exists(),
+		"config_path":        configPath,
+		"config_exists":      configExists,
 		"controller_config":  h.settings.Path(),
 		"listen":             values.Server.Addr(),
 		"log_level":          logLevel,
-		"inbounds":           len(h.store.Options.Inbounds),
-		"outbounds":          len(h.store.Options.Outbounds),
+		"inbounds":           inboundsCount,
+		"outbounds":          outboundsCount,
 		"rules":              ruleCount,
 		"core":               coreStatus,
 		"core_alive":         coreStatus.Alive,
