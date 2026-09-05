@@ -1,6 +1,7 @@
 // Package store 负责 sing-box 配置文件的加载、校验、持久化。
 // 校验管线完全复用 sing-box 自身的解码器 + 实例化器：
-//   parse(严格解码+checkOptions) → box.New 干跑 → 原子写 → (runner reload)
+//
+//	parse(严格解码+checkOptions) → box.New 干跑 → 原子写 → (runner reload)
 package store
 
 import (
@@ -18,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sagernet/sing-box"
+	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 	sjson "github.com/sagernet/sing/common/json"
@@ -27,12 +28,12 @@ import (
 // Meta 是配置的旁车元数据（sing-box 配置本身没有的字段，如规则 id）。
 // 存于 <config>.meta，与配置同目录，保证规则 CRUD 有稳定 id。
 type Meta struct {
-	RuleIDs               []string    `json:"rules,omitempty"`
-	DNSRuleIDs            []string    `json:"dns_rules,omitempty"`
-	RuleSetIDs            []string    `json:"rule_sets,omitempty"`
+	RuleIDs                []string   `json:"rules,omitempty"`
+	DNSRuleIDs             []string   `json:"dns_rules,omitempty"`
+	RuleSetIDs             []string   `json:"rule_sets,omitempty"`
 	CertificateProviderIDs []string   `json:"certificate_providers,omitempty"`
-	Users                 []UserMeta  `json:"users,omitempty"`
-	DisabledRuleIDs       []string    `json:"disabled_rules,omitempty"`
+	Users                  []UserMeta `json:"users,omitempty"`
+	DisabledRuleIDs        []string   `json:"disabled_rules,omitempty"`
 }
 
 func (m *Meta) IsRuleDisabled(id string) bool {
@@ -90,7 +91,7 @@ func New(path string) *Store {
 
 func (s *Store) Path() string { return s.path }
 
-func (s *Store) RLock() { s.mu.RLock() }
+func (s *Store) RLock()   { s.mu.RLock() }
 func (s *Store) RUnlock() { s.mu.RUnlock() }
 
 // ConfigDir 返回配置所在目录
@@ -269,7 +270,6 @@ func DefaultOptions(defaults DefaultConfig) option.Options {
   ],
   "outbounds": [
     { "type": "direct", "tag": "direct" },
-    { "type": "block", "tag": "block" }
   ],
   "route": { "final": "direct" }
 }`)

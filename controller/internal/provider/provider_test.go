@@ -133,7 +133,6 @@ func TestProfileMergingAndValidation(t *testing.T) {
   "outbounds": [
     { "type": "selector", "tag": "Proxy", "outbounds": ["direct"] },
     { "type": "direct", "tag": "direct" },
-    { "type": "block", "tag": "block" }
   ],
   "route": { "final": "Proxy" }
 }`

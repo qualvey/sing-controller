@@ -673,10 +673,6 @@ func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, e
 	if directOb, err := sjson.UnmarshalExtendedContext[option.Outbound](include.Context(ctx), directJSON); err == nil {
 		outbounds = append(outbounds, directOb)
 	}
-	blockJSON := []byte(`{"type": "block", "tag": "block"}`)
-	if blockOb, err := sjson.UnmarshalExtendedContext[option.Outbound](include.Context(ctx), blockJSON); err == nil {
-		outbounds = append(outbounds, blockOb)
-	}
 
 	// 构建 Proxy 选择器组
 	proxyCandidateTags := make([]string, 0, len(providerNodeTags)+2)

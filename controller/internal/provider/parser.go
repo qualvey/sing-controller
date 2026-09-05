@@ -95,7 +95,7 @@ func filterProxyOutbounds(list []option.Outbound) []option.Outbound {
 	res := make([]option.Outbound, 0, len(list))
 	for _, ob := range list {
 		switch ob.Type {
-		case "direct", "block", "dns", "selector", "urltest":
+		case "direct", "selector", "urltest":
 			continue
 		default:
 			res = append(res, ob)

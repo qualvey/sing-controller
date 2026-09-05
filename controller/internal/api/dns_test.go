@@ -91,7 +91,6 @@ func TestRuleReferencesDNS(t *testing.T) {
 		{"outbound single match", `{"outbound":"proxy"}`, "proxy", true},
 		{"outbound single miss", `{"outbound":"proxy"}`, "direct", false},
 		{"outbound array contains", `{"outbound":["proxy","direct"]}`, "proxy", true},
-		{"outbound array miss", `{"outbound":["proxy","direct"]}`, "block", false},
 		{"no ref fields", `{"protocol":"http"}`, "proxy", false},
 	}
 	for _, tc := range cases {
