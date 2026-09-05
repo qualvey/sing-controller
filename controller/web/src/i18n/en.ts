@@ -820,6 +820,7 @@ const en = {
     flowNone: '(None)',
     flowPlaceholder: 'Leave empty to disable',
     network: 'Network',
+    networkNone: 'none (TCP + UDP)',
     tls: 'TLS',
     tlsEnabled: 'Enable TLS',
     serverName: 'tls.server_name',

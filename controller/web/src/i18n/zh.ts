@@ -809,6 +809,7 @@ const zh: LANG_MESSAGE = {
     flowNone: '（无）',
     flowPlaceholder: '留空则不启用',
     network: '传输协议',
+    networkNone: 'none (TCP/UDP 都支持)',
     tls: 'TLS',
     tlsEnabled: '启用 TLS',
     serverName: 'tls.server_name',

@@ -101,7 +101,7 @@ const form = reactive<OutboundForm>({
   server_port: undefined,
   uuid: '',
   flow: '',
-  network: 'tcp',
+  network: 'none',
   password: '',
   congestion_control: 'bbr',
   udp_relay_mode: 'native',
@@ -122,7 +122,16 @@ const form = reactive<OutboundForm>({
   attach_groups: []
 })
 
-const networkOptions = ['tcp', 'udp', 'ws', 'grpc', 'h2', 'httpupgrade', 'xhttp']
+const networkOptions = computed(() => [
+  { value: 'none', label: t('outboundsDialog.networkNone') },
+  { value: 'tcp', label: 'tcp' },
+  { value: 'udp', label: 'udp' },
+  { value: 'ws', label: 'ws' },
+  { value: 'grpc', label: 'grpc' },
+  { value: 'h2', label: 'h2' },
+  { value: 'httpupgrade', label: 'httpupgrade' },
+  { value: 'xhttp', label: 'xhttp' }
+])
 const fingerprintOptions = ['chrome', 'firefox', 'edge', 'ios', 'android', 'random']
 const congestionOptions = ['bbr', 'cubic', 'new_reno']
 const udpRelayOptions = ['native', 'quic']
@@ -168,9 +177,11 @@ function getDefaultSelectedGroups(allOutbounds: Outbound[]): string[] {
   return []
 }
 
-const networkOptionsAll = computed(() =>
-  form.network && !networkOptions.includes(form.network) ? [...networkOptions, form.network] : networkOptions
-)
+const networkOptionsAll = computed(() => {
+  const opts = networkOptions.value
+  const has = opts.some((o) => (typeof o === 'string' ? o : o.value) === form.network)
+  return form.network && !has ? [...opts, { value: form.network, label: form.network }] : opts
+})
 
 const flowOptions = computed(() => [
   { value: 'none', label: t('outboundsDialog.flowNone') },
@@ -213,7 +224,7 @@ function resetForm(type: string) {
   form.server_port = undefined
   form.uuid = ''
   form.flow = ''
-  form.network = 'tcp'
+  form.network = 'none'
   form.password = ''
   form.congestion_control = 'bbr'
   form.udp_relay_mode = 'native'
@@ -245,7 +256,14 @@ function fillForm(obj: Outbound) {
   form.server_port = num(obj.server_port)
   form.uuid = str(obj.uuid)
   form.flow = str(obj.flow)
-  form.network = str(transport.type) || str(obj.network) || 'tcp'
+  let net = ''
+  if (Array.isArray(obj.network)) {
+    net = obj.network.length === 1 ? String(obj.network[0]) : 'none'
+  } else if (typeof obj.network === 'string' && obj.network.trim()) {
+    net = obj.network.trim()
+  }
+  const transportType = str(transport.type)
+  form.network = transportType || net || 'none'
   form.password = str(obj.password)
   form.congestion_control = str(obj.congestion_control) || 'bbr'
   form.udp_relay_mode = str(obj.udp_relay_mode) || 'native'
@@ -327,7 +345,7 @@ watch(
   () => form.type,
   (newType) => {
     if (!newType) return
-    if (!form.network) form.network = 'tcp'
+    if (!form.network) form.network = 'none'
     if (newType === 'tuic') {
       if (!form.congestion_control) form.congestion_control = 'bbr'
       if (!form.udp_relay_mode) form.udp_relay_mode = 'native'
@@ -383,8 +401,8 @@ function buildBody(): Outbound {
 
   if (form.type === 'vless') {
     if (form.uuid.trim()) body.uuid = form.uuid.trim()
-    if (form.flow.trim()) body.flow = form.flow.trim()
-    if (form.network.trim()) body.network = form.network.trim()
+    if (form.flow.trim() && form.flow !== 'none') body.flow = form.flow.trim()
+    if (form.network.trim() && form.network !== 'none') body.network = form.network.trim()
     body.tls = {
       enabled: form.tls.enabled,
       server_name: form.tls.server_name.trim(),

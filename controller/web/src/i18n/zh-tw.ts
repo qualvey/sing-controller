@@ -741,6 +741,7 @@ const zhTW: LANG_MESSAGE = {
     flowNone: '（無）',
     flowPlaceholder: '留空則不啟用',
     network: '傳輸協定',
+    networkNone: 'none (TCP/UDP 皆支援)',
     tls: 'TLS',
     tlsEnabled: '啟用 TLS',
     serverName: 'tls.server_name',

@@ -755,6 +755,7 @@ const ru: LANG_MESSAGE = {
     flowNone: '(Нет)',
     flowPlaceholder: 'Оставьте пустым для отключения',
     network: 'Сеть',
+    networkNone: 'none (TCP + UDP)',
     tls: 'TLS',
     tlsEnabled: 'Включить TLS',
     serverName: 'tls.server_name',
