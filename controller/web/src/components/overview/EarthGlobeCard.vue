@@ -268,7 +268,8 @@
     <Teleport to="body">
       <div
         v-if="hoveredEndpoint"
-        class="bg-base-100/95 border-base-300 pointer-events-none fixed z-[10000] min-w-44 max-w-80 rounded-xl border p-2.5 text-xs shadow-2xl backdrop-blur-md"
+        ref="tooltipRef"
+        class="bg-base-100/95 border-base-300 pointer-events-none fixed z-[10000] min-w-44 max-w-80 max-h-[calc(100vh-24px)] overflow-y-auto rounded-xl border p-2.5 text-xs shadow-2xl backdrop-blur-md"
         :style="tooltipStyle"
       >
         <div class="font-bold text-sm text-base-content">
@@ -326,7 +327,7 @@ import {
   PauseIcon,
   PlayIcon,
 } from '@heroicons/vue/24/outline'
-import { useMediaQuery, useStorage } from '@vueuse/core'
+import { useElementSize, useMediaQuery, useStorage, useWindowSize } from '@vueuse/core'
 import * as ipaddr from 'ipaddr.js'
 import type { CSSProperties } from 'vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
@@ -366,6 +367,9 @@ const routesLoading = ref(false)
 const initialRoutesLoaded = ref(false)
 const hoveredEndpoint = ref<EarthEndpointInfo | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
+const tooltipRef = ref<HTMLElement>()
+const { width: tooltipWidth, height: tooltipHeight } = useElementSize(tooltipRef)
+const { width: windowWidth, height: windowHeight } = useWindowSize()
 const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
 const locationCache = earthLocationCache
 const lookupRequests = new Map<number, (locations: Record<string, EarthLocation | null>) => void>()
@@ -437,10 +441,67 @@ const showNoData = computed(
     !refreshRunning &&
     routeCount.value === 0,
 )
-const tooltipStyle = computed<CSSProperties>(() => ({
-  left: `${Math.min(window.innerWidth - 190, tooltipPosition.value.x + 12)}px`,
-  top: `${Math.min(window.innerHeight - 100, tooltipPosition.value.y + 12)}px`,
-}))
+const tooltipStyle = computed<CSSProperties>(() => {
+  const cursorX = tooltipPosition.value.x
+  const cursorY = tooltipPosition.value.y
+
+  // 视口可用宽高与安全内边距
+  const viewportWidth = windowWidth.value || window.innerWidth || 1024
+  const viewportHeight = windowHeight.value || window.innerHeight || 768
+  const MARGIN = 12
+  const OFFSET = 14
+
+  // 获取提示框实际测量尺寸（初次挂载前提供保底合理尺寸避免闪烁）
+  const w = tooltipWidth.value > 0 ? tooltipWidth.value : 240
+  const h = tooltipHeight.value > 0 ? tooltipHeight.value : 120
+
+  // 1. 水平方向（X轴）空间判断与位置计算
+  // 默认尝试在鼠标右侧展示 (cursorX + OFFSET)
+  const rightSpace = viewportWidth - (cursorX + OFFSET)
+  const leftSpace = cursorX - OFFSET
+
+  let targetX = cursorX + OFFSET
+  if (rightSpace < w + MARGIN) {
+    // 右侧空间不足
+    if (leftSpace >= w + MARGIN) {
+      // 左侧空间足够，翻转到鼠标左侧展示
+      targetX = cursorX - OFFSET - w
+    } else {
+      // 屏幕两侧空间都非常紧张（例如窄屏移动端），居中或对齐视口
+      targetX = Math.max(MARGIN, Math.min(viewportWidth - w - MARGIN, cursorX - w / 2))
+    }
+  }
+
+  // 2. 垂直方向（Y轴）空间判断与位置计算
+  // 默认尝试在鼠标下方展示 (cursorY + OFFSET)
+  const bottomSpace = viewportHeight - (cursorY + OFFSET)
+  const topSpace = cursorY - OFFSET
+
+  let targetY = cursorY + OFFSET
+  if (bottomSpace < h + MARGIN) {
+    // 下方空间不足
+    if (topSpace >= h + MARGIN) {
+      // 上方空间足够，翻转到鼠标上方展示
+      targetY = cursorY - OFFSET - h
+    } else {
+      // 上下空间都紧张，偏向可用空间较大的一侧
+      if (topSpace > bottomSpace) {
+        targetY = Math.max(MARGIN, cursorY - OFFSET - h)
+      } else {
+        targetY = Math.min(viewportHeight - h - MARGIN, cursorY + OFFSET)
+      }
+    }
+  }
+
+  // 3. 终极视口安全边界收敛，确保 100% 完整显示在可视视口内
+  const safeX = Math.max(MARGIN, Math.min(viewportWidth - w - MARGIN, targetX))
+  const safeY = Math.max(MARGIN, Math.min(viewportHeight - h - MARGIN, targetY))
+
+  return {
+    left: `${Math.round(safeX)}px`,
+    top: `${Math.round(safeY)}px`,
+  }
+})
 
 const getEarthColorScheme = (): 'dark' | 'light' => {
   const colorScheme = getComputedStyle(document.body).getPropertyValue('color-scheme').trim()
