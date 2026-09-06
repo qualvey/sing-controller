@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { cn } from '@/lib/utils'
 import { useMutationObserver, useResizeObserver } from '@vueuse/core'
-import { TabsList, type TabsListProps, useForwardProps } from 'reka-ui'
-import { computed, nextTick, onMounted, ref, type ComponentPublicInstance, type HTMLAttributes } from 'vue'
+import { computed, nextTick, onMounted, ref, type HTMLAttributes } from 'vue'
 
-const props = defineProps<TabsListProps & { class?: HTMLAttributes['class'] }>()
-const forwarded = useForwardProps(props)
+const props = defineProps<{ class?: HTMLAttributes['class'] }>()
 
-const listRef = ref<ComponentPublicInstance | HTMLElement | null>(null)
+const listRef = ref<HTMLElement | null>(null)
 const indicatorLeft = ref(0)
 const indicatorWidth = ref(0)
 const ready = ref(false)
@@ -17,19 +15,8 @@ const indicatorStyle = computed(() => ({
   width: `${indicatorWidth.value}px`,
 }))
 
-function getRootElement(): HTMLElement | null {
-  if (!listRef.value) return null
-  if ('$el' in listRef.value && listRef.value.$el instanceof HTMLElement) {
-    return listRef.value.$el
-  }
-  if (listRef.value instanceof HTMLElement) {
-    return listRef.value
-  }
-  return null
-}
-
 function updateIndicator() {
-  const root = getRootElement()
+  const root = listRef.value
   if (!root) return
   const activeTrigger = root.querySelector('[data-state="active"]') as HTMLElement | null
   if (!activeTrigger) return
@@ -47,7 +34,7 @@ onMounted(() => {
   void nextTick(() => {
     updateIndicator()
   })
-  const root = getRootElement()
+  const root = listRef.value
   if (root) {
     useMutationObserver(
       root,
@@ -68,9 +55,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <TabsList
+  <div
     ref="listRef"
-    v-bind="forwarded"
+    role="tablist"
     :class="cn(
       'bg-base-300/50 relative inline-flex self-start h-9 items-center justify-center rounded-[0.625rem] p-[3px]',
       props.class
@@ -83,7 +70,7 @@ onMounted(() => {
       :style="indicatorStyle"
     />
     <slot />
-  </TabsList>
+  </div>
 </template>
 
 <style scoped>

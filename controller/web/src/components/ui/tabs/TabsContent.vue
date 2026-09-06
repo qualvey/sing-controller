@@ -1,20 +1,27 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from 'vue'
-import { TabsContent, type TabsContentProps, useForwardProps } from 'reka-ui'
+import { computed, inject, type HTMLAttributes } from 'vue'
+import { tabsContextKey } from './tabsContext'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<TabsContentProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps<{
+  value: string | number
+  class?: HTMLAttributes['class']
+}>()
 
-const forwarded = useForwardProps(props)
+const context = inject(tabsContextKey, null)
+
+const isActive = computed(() => context?.modelValue.value === props.value)
 </script>
 
 <template>
-  <TabsContent
-    v-bind="forwarded"
+  <div
+    v-show="isActive"
+    role="tabpanel"
+    :data-state="isActive ? 'active' : 'inactive'"
     :class="cn('tab-content-panel mt-2 min-h-[280px] outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]', props.class)"
   >
     <slot />
-  </TabsContent>
+  </div>
 </template>
 
 <style scoped>

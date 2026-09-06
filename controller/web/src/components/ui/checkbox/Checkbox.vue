@@ -1,46 +1,70 @@
 <script setup lang="ts">
-import { computed, type HTMLAttributes } from 'vue'
-import { CheckboxRoot, CheckboxIndicator, type CheckboxRootProps } from 'reka-ui'
-import { Check } from '@lucide/vue'
-import { cn } from '@/lib/utils'
+import { computed, onMounted, ref, watch, type HTMLAttributes } from 'vue'
 
-const props = defineProps<
-  CheckboxRootProps & {
-    modelValue?: boolean | 'indeterminate'
+const props = withDefaults(
+  defineProps<{
+    modelValue?: boolean | 'indeterminate' | null
+    checked?: boolean | 'indeterminate' | null
+    disabled?: boolean
+    required?: boolean
+    name?: string
+    value?: string
     class?: HTMLAttributes['class']
+  }>(),
+  {
+    modelValue: undefined,
+    checked: undefined,
   }
->()
+)
 
 const emit = defineEmits<{
-  (e: 'update:checked', payload: boolean | 'indeterminate'): void
-  (e: 'update:modelValue', payload: boolean | 'indeterminate'): void
+  (e: 'update:modelValue', value: boolean): void
+  (e: 'update:checked', value: boolean): void
+  (e: 'change', value: Event): void
 }>()
 
+const inputRef = ref<HTMLInputElement | null>(null)
+
 const isChecked = computed({
-  get: () => (props.modelValue !== undefined ? props.modelValue : props.checked),
-  set: (val: boolean | 'indeterminate') => {
-    emit('update:checked', val)
+  get: () => {
+    if (props.modelValue !== undefined && props.modelValue !== null) {
+      return props.modelValue === true
+    }
+    if (props.checked !== undefined && props.checked !== null) {
+      return props.checked === true
+    }
+    return false
+  },
+  set: (val: boolean) => {
     emit('update:modelValue', val)
+    emit('update:checked', val)
   }
 })
+
+const updateIndeterminate = () => {
+  if (inputRef.value) {
+    const val =
+      props.modelValue !== undefined && props.modelValue !== null
+        ? props.modelValue
+        : props.checked
+    inputRef.value.indeterminate = val === 'indeterminate'
+  }
+}
+
+watch(() => [props.modelValue, props.checked], updateIndeterminate)
+onMounted(updateIndeterminate)
 </script>
 
 <template>
-  <CheckboxRoot
-    v-model:checked="isChecked"
+  <input
+    ref="inputRef"
+    v-model="isChecked"
+    type="checkbox"
     :disabled="props.disabled"
     :required="props.required"
     :name="props.name"
     :value="props.value"
-    :as="props.as"
-    :as-child="props.asChild"
-    :class="cn(
-      'peer size-4 shrink-0 rounded-sm border border-base-300 dark:border-base-content/30 shadow-xs transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-content',
-      props.class
-    )"
-  >
-    <CheckboxIndicator class="flex h-full w-full items-center justify-center text-current">
-      <Check class="size-3.5" />
-    </CheckboxIndicator>
-  </CheckboxRoot>
+    class="checkbox checkbox-primary checkbox-sm rounded shrink-0"
+    :class="props.class"
+  />
 </template>
