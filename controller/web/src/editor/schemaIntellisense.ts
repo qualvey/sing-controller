@@ -174,15 +174,28 @@ function collectPropertyCompletions(
         typeLabel = expanded.enum.map((e) => `"${e}"`).join(' | ')
       } else if (expanded?.$ref) {
         typeLabel = expanded.$ref.replace('#/$defs/', '')
+      } else if (Array.isArray(expanded?.type)) {
+        typeLabel = expanded.type.join(' | ')
       }
 
       results.set(key, {
         label: `"${key}"`,
         displayLabel: key,
         type: 'property',
-        detail: `: ${typeLabel}`,
+        detail: typeLabel,
         info: expanded?.description || undefined,
-        apply: `"${key}": `,
+        apply: (view, _completion, from, to) => {
+          const doc = view.state.doc
+          const hasClosingQuote = to < doc.length && doc.sliceString(to, to + 1) === '"'
+          const endPos = hasClosingQuote ? to + 1 : to
+          const tail = doc.sliceString(endPos, endPos + 10)
+          const hasColon = /^\s*:/.test(tail)
+          const insert = hasColon ? `"${key}"` : `"${key}": `
+          view.dispatch({
+            changes: { from, to: endPos, insert },
+            selection: { anchor: from + insert.length },
+          })
+        },
         boost: key === 'type' ? 10 : key === 'tag' ? 8 : 0,
       })
     }
@@ -229,11 +242,21 @@ function collectValueCompletions(targetSchema: SchemaObject | null, currentObj?:
   if (s.enum) {
     for (const val of s.enum) {
       const isStr = typeof val === 'string'
+      const label = isStr ? `"${val}"` : String(val)
       list.push({
-        label: isStr ? `"${val}"` : String(val),
+        label,
+        displayLabel: String(val),
         type: 'enum',
         detail: 'enum',
-        apply: isStr ? `"${val}"` : String(val),
+        apply: (view, _completion, from, to) => {
+          const doc = view.state.doc
+          const hasClosingQuote = isStr && to < doc.length && doc.sliceString(to, to + 1) === '"'
+          const endPos = hasClosingQuote ? to + 1 : to
+          view.dispatch({
+            changes: { from, to: endPos, insert: label },
+            selection: { anchor: from + label.length },
+          })
+        },
       })
     }
   }
@@ -241,10 +264,21 @@ function collectValueCompletions(targetSchema: SchemaObject | null, currentObj?:
   // 2. const 常量
   if (s.const !== undefined) {
     const isStr = typeof s.const === 'string'
+    const label = isStr ? `"${s.const}"` : String(s.const)
     list.push({
-      label: isStr ? `"${s.const}"` : String(s.const),
+      label,
+      displayLabel: String(s.const),
       type: 'constant',
-      apply: isStr ? `"${s.const}"` : String(s.const),
+      detail: 'const',
+      apply: (view, _completion, from, to) => {
+        const doc = view.state.doc
+        const hasClosingQuote = isStr && to < doc.length && doc.sliceString(to, to + 1) === '"'
+        const endPos = hasClosingQuote ? to + 1 : to
+        view.dispatch({
+          changes: { from, to: endPos, insert: label },
+          selection: { anchor: from + label.length },
+        })
+      },
     })
   }
 

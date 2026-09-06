@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { acceptCompletion, closeCompletion, moveCompletionSelection, startCompletion } from '@codemirror/autocomplete'
+import { defaultKeymap, indentWithTab, insertNewlineAndIndent, toggleBlockComment, toggleComment } from '@codemirror/commands'
+import { foldGutter, foldKeymap } from '@codemirror/language'
+import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
-import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
-import { jsonc, jsoncLinter } from '../editor/jsonc'
-import { defaultKeymap, indentWithTab, insertNewlineAndIndent } from '@codemirror/commands'
-import { acceptCompletion } from '@codemirror/autocomplete'
-import { foldGutter } from '@codemirror/language'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useCmTheme } from '../composables/useCmTheme'
+import { jsonc, jsoncLinter } from '../editor/jsonc'
 
 const { ext: themeExt, watchTheme } = useCmTheme()
 
@@ -69,11 +69,30 @@ onMounted(() => {
       themeExt,
       foldGutter(),
       jsoncLinter(),
+      Prec.highest(
+        keymap.of([
+          { key: 'Tab', run: acceptCompletion },
+          {
+            key: 'Enter',
+            run: (view) => {
+              closeCompletion(view)
+              return insertNewlineAndIndent(view)
+            },
+          },
+          { key: 'Mod-/', run: toggleComment },
+          { key: 'Shift-Alt-a', run: toggleBlockComment },
+        ]),
+      ),
       keymap.of([
-        { key: 'Tab', run: acceptCompletion },
+        { key: 'Ctrl-Space', run: startCompletion },
+        { key: 'Escape', run: closeCompletion },
+        { key: 'ArrowDown', run: moveCompletionSelection(true) },
+        { key: 'ArrowUp', run: moveCompletionSelection(false) },
+        { key: 'PageDown', run: moveCompletionSelection(true, 'page') },
+        { key: 'PageUp', run: moveCompletionSelection(false, 'page') },
         indentWithTab,
-        { key: 'Enter', run: insertNewlineAndIndent },
-        ...defaultKeymap
+        ...foldKeymap,
+        ...defaultKeymap,
       ]),
       EditorView.updateListener.of((u) => {
         if (u.docChanged && !applyingInitial && !dirty.value) {

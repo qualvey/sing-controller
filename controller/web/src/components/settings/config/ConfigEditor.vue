@@ -51,10 +51,39 @@
       >
         查找 / 替换
       </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        title="折叠全部代码块 (Ctrl+Alt+[)"
+        @click="foldAllBlocks"
+      >
+        折叠全部
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs"
+        title="展开全部代码块 (Ctrl+Alt+])"
+        @click="unfoldAllBlocks"
+      >
+        展开全部
+      </button>
       <div class="flex-1"></div>
       <span class="text-base-content/50 hidden text-xs lg:inline">
-        原样编辑主配置（JSONC：支持注释与尾逗号；Ctrl+F 搜索、Ctrl+Shift+F 格式化）
+        原样编辑主配置（JSONC：支持注释与尾逗号；Ctrl+S 保存、Ctrl+/ 注释、Ctrl+F 查找、Ctrl+Shift+F 格式化）
       </span>
+      <button
+        type="button"
+        class="btn btn-outline btn-primary btn-xs gap-1"
+        :disabled="reloading"
+        title="热重载配置到内核（不中断已有网络连接）"
+        @click="reloadConfig"
+      >
+        <ArrowPathIcon
+          class="h-3.5 w-3.5"
+          :class="{ 'animate-spin': reloading }"
+        />
+        重载配置
+      </button>
       <button
         type="button"
         class="btn btn-primary btn-xs"
@@ -90,18 +119,31 @@
 
 <script setup lang="ts">
 import { api } from '@/api'
+import { reloadConfigsAPI } from '@/assembly/config'
 import { formatJsoncDoc, jsonc, jsoncLinter, parseJsonc } from '@/editor/jsonc'
 import { showToast } from '@/helper/toast'
 import { useStatusStore } from '@/store/status'
 import { useThemeStore } from '@/store/theme'
-import { acceptCompletion } from '@codemirror/autocomplete'
-import { defaultKeymap, indentWithTab, insertNewlineAndIndent } from '@codemirror/commands'
-import { foldGutter } from '@codemirror/language'
+import {
+  acceptCompletion,
+  closeCompletion,
+  moveCompletionSelection,
+  startCompletion,
+} from '@codemirror/autocomplete'
+import {
+  defaultKeymap,
+  indentWithTab,
+  insertNewlineAndIndent,
+  toggleBlockComment,
+  toggleComment,
+} from '@codemirror/commands'
+import { foldAll, foldGutter, foldKeymap, unfoldAll } from '@codemirror/language'
 import { lintGutter } from '@codemirror/lint'
 import { openSearchPanel } from '@codemirror/search'
-import { Compartment, EditorState } from '@codemirror/state'
+import { Compartment, EditorState, Prec } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView, keymap } from '@codemirror/view'
+import { editorUiTheme } from '@/composables/useCmTheme'
 import { ArrowPathIcon } from '@heroicons/vue/24/outline'
 import { basicSetup } from 'codemirror'
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
@@ -113,6 +155,7 @@ const editorHost = ref<HTMLElement>()
 const editor = shallowRef<EditorView>()
 const loading = ref(false)
 const saving = ref(false)
+const reloading = ref(false)
 const dirty = ref(false)
 const configPath = ref('')
 
@@ -120,183 +163,14 @@ const cursor = ref({ line: 1, col: 1 })
 const selected = ref(0)
 const docLines = ref(1)
 
-const uiTheme = (dark: boolean) =>
-  EditorView.theme(
-    dark
-      ? {
-          '&': {
-            height: '100%',
-            fontSize: '13px',
-          },
-          '.cm-scroller': {
-            fontFamily:
-              "ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
-            fontVariantLigatures: 'normal',
-            lineHeight: '1.7',
-          },
-          '.cm-gutters': {
-            backgroundColor: '#1e1e1f',
-            color: '#636d83',
-            borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-          },
-          '.cm-activeLineGutter': {
-            backgroundColor: 'rgba(255, 255, 255, 0.06)',
-            color: '#abb2bf',
-          },
-          '.cm-activeLine': {
-            backgroundColor: 'rgba(255, 255, 255, 0.03)',
-          },
-          '.cm-panels': {
-            backgroundColor: '#1e1e1f',
-            color: '#abb2bf',
-          },
-          '.cm-panels-top': {
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          },
-          '.cm-search': {
-            backgroundColor: '#1e1e1f',
-            color: '#abb2bf',
-            padding: '6px 10px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          },
-          '.cm-search input, .cm-search select': {
-            backgroundColor: '#2b2b2d',
-            color: '#abb2bf',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '4px',
-            padding: '3px 8px',
-            outline: 'none',
-          },
-          '.cm-search input:focus': {
-            borderColor: '#61afef',
-          },
-          '.cm-search button': {
-            backgroundColor: '#2b2b2d',
-            color: '#abb2bf',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '4px',
-            padding: '3px 10px',
-            cursor: 'pointer',
-          },
-          '.cm-search button:hover': {
-            backgroundColor: '#3e4451',
-          },
-          '.cm-search .cm-textfield': {
-            backgroundColor: '#2b2b2d',
-          },
-          '.cm-tooltip': {
-            backgroundColor: '#1e1e1f',
-            color: '#abb2bf',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-          },
-          '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-            backgroundColor: '#3e4451',
-            color: '#abb2bf',
-          },
-          '&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket': {
-            backgroundColor: '#3e4451',
-          },
-          '.cm-cursor': {
-            borderLeftColor: '#abb2bf',
-          },
-          '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
-            backgroundColor: 'rgba(62, 68, 81, 0.6)',
-          },
-        }
-      : {
-          '&': {
-            height: '100%',
-            fontSize: '13px',
-          },
-          '.cm-scroller': {
-            fontFamily:
-              "ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
-            fontVariantLigatures: 'normal',
-            lineHeight: '1.7',
-          },
-          '.cm-gutters': {
-            backgroundColor: '#f8f9fa',
-            color: '#909399',
-            borderRight: '1px solid rgba(0, 0, 0, 0.08)',
-          },
-          '.cm-activeLineGutter': {
-            backgroundColor: '#edf0f5',
-            color: '#606266',
-          },
-          '.cm-activeLine': {
-            backgroundColor: 'rgba(0, 0, 0, 0.02)',
-          },
-          '.cm-panels': {
-            backgroundColor: '#ffffff',
-            color: '#303133',
-          },
-          '.cm-panels-top': {
-            borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
-          },
-          '.cm-search': {
-            backgroundColor: '#ffffff',
-            color: '#303133',
-            padding: '6px 10px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          },
-          '.cm-search input, .cm-search select': {
-            backgroundColor: '#ffffff',
-            color: '#303133',
-            border: '1px solid rgba(0, 0, 0, 0.15)',
-            borderRadius: '4px',
-            padding: '3px 8px',
-            outline: 'none',
-          },
-          '.cm-search input:focus': {
-            borderColor: '#3b82f6',
-          },
-          '.cm-search button': {
-            backgroundColor: '#f3f4f6',
-            color: '#303133',
-            border: '1px solid rgba(0, 0, 0, 0.15)',
-            borderRadius: '4px',
-            padding: '3px 10px',
-            cursor: 'pointer',
-          },
-          '.cm-search button:hover': {
-            backgroundColor: '#e5e7eb',
-          },
-          '.cm-search .cm-textfield': {
-            backgroundColor: '#ffffff',
-          },
-          '.cm-tooltip': {
-            backgroundColor: '#ffffff',
-            color: '#303133',
-            border: '1px solid rgba(0, 0, 0, 0.15)',
-          },
-          '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-            backgroundColor: '#e0edff',
-            color: '#1e40af',
-          },
-          '&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket': {
-            backgroundColor: '#e5e7eb',
-          },
-          '.cm-cursor': {
-            borderLeftColor: '#303133',
-          },
-          '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
-            backgroundColor: 'rgba(59, 130, 246, 0.2)',
-          },
-        },
-  )
-
 const themeComp = new Compartment()
 const themeExtension = () =>
-  themeComp.of(themeStore.mode === 'dark' ? [oneDark, uiTheme(true)] : [uiTheme(false)])
+  themeComp.of(themeStore.mode === 'dark' ? [oneDark, editorUiTheme(true)] : [editorUiTheme(false)])
 
 const syncEditorTheme = (view: EditorView) => {
   view.dispatch({
     effects: themeComp.reconfigure(
-      themeStore.mode === 'dark' ? [oneDark, uiTheme(true)] : [uiTheme(false)],
+      themeStore.mode === 'dark' ? [oneDark, editorUiTheme(true)] : [editorUiTheme(false)],
     ),
   })
 }
@@ -367,6 +241,27 @@ const openSearch = () => {
   editor.value && openSearchPanel(editor.value)
 }
 
+const reloadConfig = async () => {
+  reloading.value = true
+  try {
+    await reloadConfigsAPI()
+    showToast('配置重载成功', 'success')
+    await statusStore.refresh()
+  } catch (e) {
+    showToast((e as Error).message || '重载配置失败', 'error')
+  } finally {
+    reloading.value = false
+  }
+}
+
+const foldAllBlocks = () => {
+  if (editor.value) foldAll(editor.value)
+}
+
+const unfoldAllBlocks = () => {
+  if (editor.value) unfoldAll(editor.value)
+}
+
 onMounted(() => {
   if (!editorHost.value) return
   const state = EditorState.create({
@@ -378,19 +273,53 @@ onMounted(() => {
       foldGutter(),
       lintGutter(),
       jsoncLinter(),
-      keymap.of([
-        {
-          key: 'Mod-s',
-          run: () => {
-            void save()
-            return true
+      Prec.highest(
+        keymap.of([
+          {
+            key: 'Mod-s',
+            run: () => {
+              void save()
+              return true
+            },
           },
-        },
-        { key: 'Tab', run: acceptCompletion },
+          {
+            key: 'Tab',
+            run: acceptCompletion,
+          },
+          {
+            key: 'Enter',
+            run: (view) => {
+              closeCompletion(view)
+              return insertNewlineAndIndent(view)
+            },
+          },
+          {
+            key: 'Mod-Shift-f',
+            run: (view) => {
+              formatJsoncDoc(view)
+              return true
+            },
+          },
+          {
+            key: 'Mod-/',
+            run: toggleComment,
+          },
+          {
+            key: 'Shift-Alt-a',
+            run: toggleBlockComment,
+          },
+        ]),
+      ),
+      keymap.of([
+        { key: 'Ctrl-Space', run: startCompletion },
+        { key: 'Escape', run: closeCompletion },
+        { key: 'ArrowDown', run: moveCompletionSelection(true) },
+        { key: 'ArrowUp', run: moveCompletionSelection(false) },
+        { key: 'PageDown', run: moveCompletionSelection(true, 'page') },
+        { key: 'PageUp', run: moveCompletionSelection(false, 'page') },
         indentWithTab,
-        { key: 'Enter', run: insertNewlineAndIndent },
-        { key: 'Mod-Shift-f', run: formatJsoncDoc },
-        ...defaultKeymap
+        ...foldKeymap,
+        ...defaultKeymap,
       ]),
       EditorView.lineWrapping,
       EditorView.updateListener.of((u) => {
@@ -402,12 +331,13 @@ onMounted(() => {
   editor.value = new EditorView({ state, parent: editorHost.value })
 
   const handleGlobalKeyDown = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 's' || e.code === 'KeyS')) {
       e.preventDefault()
+      e.stopPropagation()
       void save()
     }
   }
-  window.addEventListener('keydown', handleGlobalKeyDown)
+  window.addEventListener('keydown', handleGlobalKeyDown, { capture: true })
 
   watch(
     () => themeStore.mode,
@@ -419,7 +349,7 @@ onMounted(() => {
   void statusStore.refresh()
 
   onBeforeUnmount(() => {
-    window.removeEventListener('keydown', handleGlobalKeyDown)
+    window.removeEventListener('keydown', handleGlobalKeyDown, { capture: true } as any)
     editor.value?.destroy()
   })
 })

@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { acceptCompletion, closeCompletion, moveCompletionSelection, startCompletion } from '@codemirror/autocomplete'
+import { defaultKeymap, indentWithTab, insertNewlineAndIndent, toggleBlockComment, toggleComment } from '@codemirror/commands'
+import { foldGutter, foldKeymap } from '@codemirror/language'
+import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
-import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
-import { jsonc, jsoncLinter, formatJsoncDoc, parseJsonc } from '../editor/jsonc'
-import { foldGutter } from '@codemirror/language'
-import { acceptCompletion } from '@codemirror/autocomplete'
-import { defaultKeymap, indentWithTab, insertNewlineAndIndent } from '@codemirror/commands'
+import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { api } from '../api'
 import { useCmTheme } from '../composables/useCmTheme'
+import { formatJsoncDoc, jsonc, jsoncLinter, parseJsonc } from '../editor/jsonc'
 import { showToast } from '../helper/toast'
 
 const { ext: themeExt, watchTheme } = useCmTheme()
@@ -113,18 +113,37 @@ onMounted(() => {
       themeExt,
       foldGutter(),
       jsoncLinter(),
+      Prec.highest(
+        keymap.of([
+          {
+            key: 'Mod-s',
+            run: () => {
+              void save()
+              return true
+            }
+          },
+          { key: 'Tab', run: acceptCompletion },
+          {
+            key: 'Enter',
+            run: (view) => {
+              closeCompletion(view)
+              return insertNewlineAndIndent(view)
+            }
+          },
+          { key: 'Mod-Shift-f', run: formatJsoncDoc },
+          { key: 'Mod-/', run: toggleComment },
+          { key: 'Shift-Alt-a', run: toggleBlockComment }
+        ])
+      ),
       keymap.of([
-        {
-          key: 'Mod-s',
-          run: () => {
-            void save()
-            return true
-          }
-        },
-        { key: 'Tab', run: acceptCompletion },
+        { key: 'Ctrl-Space', run: startCompletion },
+        { key: 'Escape', run: closeCompletion },
+        { key: 'ArrowDown', run: moveCompletionSelection(true) },
+        { key: 'ArrowUp', run: moveCompletionSelection(false) },
+        { key: 'PageDown', run: moveCompletionSelection(true, 'page') },
+        { key: 'PageUp', run: moveCompletionSelection(false, 'page') },
         indentWithTab,
-        { key: 'Enter', run: insertNewlineAndIndent },
-        { key: 'Mod-Shift-f', run: formatJsoncDoc },
+        ...foldKeymap,
         ...defaultKeymap
       ]),
       EditorView.theme({
@@ -140,17 +159,18 @@ onMounted(() => {
   watchTheme(() => editor.value)
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 's' || e.code === 'KeyS')) {
       e.preventDefault()
+      e.stopPropagation()
       void save()
     }
   }
-  window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('keydown', handleKeyDown, { capture: true })
 
   load()
 
   onBeforeUnmount(() => {
-    window.removeEventListener('keydown', handleKeyDown)
+    window.removeEventListener('keydown', handleKeyDown, { capture: true } as any)
     editor.value?.destroy()
   })
 })

@@ -1,7 +1,7 @@
 // JSONC 编辑器支持：语法高亮（Lezer grammar）+ lint + 格式化 + 解析
 // 格式化引擎用微软 jsonc-parser —— 与 VSCode 格式化 JSON/JSONC 完全同款：
 // 支持 // 与 /* */ 注释、尾逗号，格式化后原样保留注释。
-import { LRLanguage, LanguageSupport, indentNodeProp, continuedIndent, foldNodeProp, foldInside } from '@codemirror/language'
+import { LRLanguage, LanguageSupport, indentNodeProp, continuedIndent, foldNodeProp } from '@codemirror/language'
 import { styleTags, tags as t } from '@lezer/highlight'
 import { linter } from '@codemirror/lint'
 import type { Diagnostic } from '@codemirror/lint'
@@ -34,19 +34,30 @@ export const jsoncLanguage = LRLanguage.define({
         Array: continuedIndent({ except: /^\s*\]/ })
       }),
       foldNodeProp.add({
-        'Object Array': foldInside
+        'Object Array': (node) => {
+          if (node.to <= node.from + 2) return null
+          return { from: node.from + 1, to: node.to - 1 }
+        },
+        BlockComment: (node) => {
+          if (node.to <= node.from + 4) return null
+          return { from: node.from + 2, to: node.to - 2 }
+        }
       })
     ]
   }),
   languageData: {
     closeBrackets: { brackets: ['[', '{', '"'] },
-    indentOnInput: /^\s*[\}\]]$/
+    indentOnInput: /^\s*[\}\]]$/,
+    commentTokens: { line: '//', block: { open: '/*', close: '*/' } }
   }
 })
 
 export function jsonc(): LanguageSupport {
   return new LanguageSupport(jsoncLanguage, [
-    autocompletion({ override: [jsoncCompletionSource] }),
+    autocompletion({
+      override: [jsoncCompletionSource],
+      defaultKeymap: false
+    }),
     hoverTooltip(jsoncHoverTooltip)
   ])
 }

@@ -78,6 +78,20 @@
           {{ displayErrorDetail }}
         </div>
 
+        <!-- 核心离线时的配置修复快捷引导 -->
+        <div
+          v-if="isCoreOffline"
+          class="border-warning/30 bg-warning/10 text-warning flex items-center justify-between rounded-lg border px-3 py-1.5 text-xs"
+        >
+          <span class="truncate">配置文件写错导致启动失败？</span>
+          <button
+            class="btn btn-warning btn-xs h-6 min-h-0 px-2 font-medium"
+            @click="openConfigRepair"
+          >
+            就地修复配置
+          </button>
+        </div>
+
         <!-- WebSocket 异常时展示 Nginx / 反代配置指导与一键复制 -->
         <div
           v-if="isWsError"
@@ -157,10 +171,12 @@ proxy_set_header Connection "upgrade";</code></pre>
         </div>
 
         <div class="flex flex-col gap-2">
-          <div class="flex gap-2">
-            <!-- 核心离线时提供一键启动/重启核心 -->
+          <!-- 核心离线操作栏：启动、重启、修复配置 -->
+          <div
+            v-if="isCoreOffline"
+            class="flex gap-2"
+          >
             <button
-              v-if="isCoreOffline"
               class="btn btn-primary btn-sm flex-1"
               :disabled="isStarting || isRetrying"
               @click="handleCoreAction('start')"
@@ -177,7 +193,6 @@ proxy_set_header Connection "upgrade";</code></pre>
             </button>
 
             <button
-              v-if="isCoreOffline"
               class="btn btn-neutral btn-sm flex-1"
               :disabled="isRestarting || isRetrying"
               @click="handleCoreAction('restart')"
@@ -193,6 +208,16 @@ proxy_set_header Connection "upgrade";</code></pre>
               {{ isRestarting ? '正在重启...' : '重启核心' }}
             </button>
 
+            <button
+              class="btn btn-warning btn-sm flex-1 gap-1"
+              @click="openConfigRepair"
+            >
+              <WrenchScrewdriverIcon class="h-4 w-4" />
+              修复配置
+            </button>
+          </div>
+
+          <div class="flex gap-2">
             <button
               class="btn btn-sm flex-1"
               :class="{ 'btn-primary': !isCoreOffline, 'btn-outline': isCoreOffline }"
@@ -251,6 +276,14 @@ proxy_set_header Connection "upgrade";</code></pre>
       </div>
     </div>
   </Transition>
+
+  <!-- 主配置修复弹窗 -->
+  <ConfigRepairModal
+    v-model="showConfigRepair"
+    :error-detail="displayErrorDetail"
+    :recent-logs="coreLogs"
+    @restarted="handleConfigRestarted"
+  />
 </template>
 
 <script setup lang="ts">
@@ -276,15 +309,18 @@ import {
   ExclamationTriangleIcon,
   PlayIcon,
   ServerIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/vue/24/outline'
 import dayjs from 'dayjs'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import ConfigRepairModal from './ConfigRepairModal.vue'
 
 const statusStore = useStatusStore()
 const detail = ref('')
 const isStarting = ref(false)
 const isRestarting = ref(false)
+const showConfigRepair = ref(false)
 const copiedNginx = ref(false)
 
 const showLogs = ref(false)
@@ -464,6 +500,8 @@ const startAutoRetry = () => {
   stopAutoRetry()
   autoRetryCountdown.value = 5
   autoRetryTimer = setInterval(() => {
+    // 正在编辑/抢救配置时暂停自动重试，避免被频繁重试打断
+    if (showConfigRepair.value) return
     if (autoRetryCountdown.value > 1) {
       autoRetryCountdown.value--
     } else {
@@ -474,6 +512,23 @@ const startAutoRetry = () => {
     }
   }, 1000)
 }
+
+const openConfigRepair = () => {
+  showConfigRepair.value = true
+}
+
+const handleConfigRestarted = () => {
+  showToast('配置已修复并保存，正在重新建立会话...', 'info')
+  retry()
+}
+
+watch(showConfigRepair, (open) => {
+  if (open) {
+    stopAutoRetry()
+  } else if (visible.value) {
+    startAutoRetry()
+  }
+})
 
 watch(
   visible,
