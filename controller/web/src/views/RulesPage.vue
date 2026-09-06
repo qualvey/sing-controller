@@ -23,6 +23,10 @@
               :key="rule.payload"
               :rule="rule"
               :index="rules.indexOf(rule) + 1"
+              :id="'rule-card-' + (rules.indexOf(rule) + 1)"
+              :class="{
+                'rule-highlight-pulse': highlightedRuleIndex === rules.indexOf(rule) + 1,
+              }"
             />
           </div>
         </template>
@@ -41,6 +45,10 @@
           :key="rule.payload"
           :rule="rule"
           :index="rules.indexOf(rule) + 1"
+          :id="'rule-card-' + (rules.indexOf(rule) + 1)"
+          :class="{
+            'rule-highlight-pulse': highlightedRuleIndex === rules.indexOf(rule) + 1,
+          }"
         />
       </template>
     </VirtualScroller>
@@ -78,6 +86,9 @@ import {
   isRouteEditModalOpen,
   isRouteEditMode,
   routeEditTargetId,
+  openEditRouteModal,
+  closeRouteEditModal,
+  closeRuleContextMenu,
 } from '@/composables/ruleContextMenu'
 import {
   editingRuleSetData,
@@ -88,9 +99,13 @@ import { usePaddingForViews } from '@/composables/paddingViews'
 import { RULE_TAB_TYPE } from '@/constant'
 import { fetchRules, renderRules, renderRulesProvider, rules, rulesTabShow } from '@/assembly/rules'
 import type { Rule } from '@/types'
-import { computed, provide, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 fetchRules()
+
+const route = useRoute()
+const highlightedRuleIndex = ref<number | null>(null)
 
 const expandedRule = ref<string | null>(null)
 provide('expandedRule', expandedRule)
@@ -102,4 +117,79 @@ const { padding } = usePaddingForViews({
 const isVirtualScroller = computed(() => {
   return rulesTabShow.value === RULE_TAB_TYPE.RULES && renderRules.value.length > 200
 })
+
+const handleRuleJump = async () => {
+  const ruleParam = route.query.rule
+  if (!ruleParam) return
+  const ruleIndex = Number(ruleParam)
+  if (!ruleIndex || isNaN(ruleIndex)) return
+
+  // 确保切换到规则列表页
+  rulesTabShow.value = RULE_TAB_TYPE.RULES
+
+  if (rules.value.length === 0) {
+    await fetchRules()
+  }
+  await nextTick()
+
+  highlightedRuleIndex.value = ruleIndex
+
+  // 平滑滚动至目标规则卡片
+  setTimeout(() => {
+    const el = document.getElementById(`rule-card-${ruleIndex}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, 120)
+
+  // 若带 edit 参数，自动唤起编辑模态框进行修改
+  if (route.query.edit === '1' || route.query.edit === 'true') {
+    openEditRouteModal(ruleIndex)
+  }
+
+  // 3.5秒后自动清除高亮
+  setTimeout(() => {
+    if (highlightedRuleIndex.value === ruleIndex) {
+      highlightedRuleIndex.value = null
+    }
+  }, 3500)
+}
+
+onMounted(() => {
+  handleRuleJump()
+})
+
+watch(
+  () => route.query.rule,
+  () => {
+    handleRuleJump()
+  }
+)
+
+onBeforeUnmount(() => {
+  closeRouteEditModal()
+  closeRuleContextMenu()
+})
 </script>
+
+<style scoped>
+:deep(.rule-highlight-pulse) {
+  animation: rulePulse 2.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+  border-radius: 0.5rem;
+}
+
+@keyframes rulePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+    background-color: rgba(59, 130, 246, 0.16);
+  }
+  40% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    background-color: transparent;
+  }
+}
+</style>

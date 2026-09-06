@@ -1,9 +1,27 @@
 import { i18n } from '@/i18n'
+import router from '@/router'
 import { type Ref } from 'vue'
+import type { RouteLocationRaw } from 'vue-router'
 const { t, te } = i18n.global
 
-type NotificationType = 'alert-warning' | 'alert-success' | 'alert-error' | 'alert-info' | ''
-type NotificationKind = 'warning' | 'success' | 'error' | 'info' | 'neutral'
+export type NotificationType = 'alert-warning' | 'alert-success' | 'alert-error' | 'alert-info' | ''
+export type NotificationKind = 'warning' | 'success' | 'error' | 'info' | 'neutral'
+
+export interface NotificationAction {
+  text: string
+  to?: RouteLocationRaw | string
+  onClick?: () => void
+  closeOnClick?: boolean
+}
+
+export interface ShowNotificationOptions {
+  content: string
+  params?: Record<string, string>
+  key?: string
+  type?: NotificationType
+  timeout?: number
+  action?: NotificationAction
+}
 
 const NOTIFICATION_ICONS: Record<NotificationKind, string> = {
   success: `
@@ -139,6 +157,7 @@ const setAlert = (
   params: Record<string, string>,
   type: NotificationType,
   alertKey: string,
+  action?: NotificationAction,
 ): HTMLElement | null => {
   const kind = getNotificationKind(type)
 
@@ -158,8 +177,48 @@ const setAlert = (
 
   const contentDiv = document.createElement('div')
   contentDiv.className = 'app-toast__content'
-// 检查是否为合法的 i18n key，避免原生报错信息触发缺失告警
-  contentDiv.innerHTML = te(content) ? t(content, params) : content
+
+  const messageDiv = document.createElement('div')
+  messageDiv.className = 'app-toast__message'
+  // 检查是否为合法的 i18n key，避免原生报错信息触发缺失告警
+  messageDiv.innerHTML = te(content) ? t(content, params) : content
+  contentDiv.appendChild(messageDiv)
+
+  if (action) {
+    const actionsDiv = document.createElement('div')
+    actionsDiv.className = 'app-toast__actions'
+
+    const actionBtn = document.createElement('button')
+    actionBtn.type = 'button'
+    actionBtn.className = 'app-toast__action-btn'
+    actionBtn.innerHTML = `
+      <span>${action.text}</span>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+      </svg>
+    `
+
+    actionBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      try {
+        if (action.onClick) {
+          action.onClick()
+        }
+        if (action.to) {
+          router.push(action.to)
+        }
+      } catch (err) {
+        console.error('Toast action navigation failed:', err)
+      }
+      if (action.closeOnClick !== false) {
+        closeAlert(alert, alertKey)
+      }
+    })
+
+    actionsDiv.appendChild(actionBtn)
+    contentDiv.appendChild(actionsDiv)
+  }
+
   const closeButton = document.createElement('button')
   closeButton.type = 'button'
   closeButton.className = 'app-toast__close btn btn-circle btn-ghost btn-xs'
@@ -226,27 +285,22 @@ export const showNotification = ({
   key,
   type = 'alert-warning',
   timeout = 3000,
-}: {
-  content: string
-  params?: Record<string, string>
-  key?: string
-  type?: NotificationType
-  timeout?: number
-}) => {
+  action,
+}: ShowNotificationOptions) => {
   const alertKey = key || content
 
   if (alertKey && alertMap.has(alertKey)) {
     const { alert, timer } = alertMap.get(alertKey)!
     clearTimeout(timer)
 
-    const progressBar = setAlert(alert, content, params, type, alertKey)
+    const progressBar = setAlert(alert, content, params, type, alertKey, action)
     setTimer(alert, timeout, alertKey, progressBar)
     return
   }
 
   const alert = document.createElement('div')
 
-  const progressBar = setAlert(alert, content, params, type, alertKey)
+  const progressBar = setAlert(alert, content, params, type, alertKey, action)
   toastRef?.value?.insertBefore(alert, toastRef?.value?.firstChild)
   setTimer(alert, timeout, alertKey, progressBar)
 }
