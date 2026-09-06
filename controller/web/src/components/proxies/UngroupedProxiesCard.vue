@@ -19,7 +19,21 @@ import {
   FolderPlusIcon,
   QueueListIcon,
   CheckIcon,
+  XMarkIcon,
 } from '@heroicons/vue/24/outline'
+
+const props = withDefaults(
+  defineProps<{
+    closeable?: boolean
+  }>(),
+  {
+    closeable: false,
+  },
+)
+
+const emit = defineEmits<{
+  (e: 'close'): void
+}>()
 
 const { t } = useI18n()
 const { ungroupedNodeNames, batchSpeedtest } = useUngroupedProxies()
@@ -178,6 +192,17 @@ const handleContextMenu = (e: MouseEvent, name: string) => {
             class="size-4"
           />
         </button>
+
+        <!-- 关闭按钮 (Dropdown 模式下有效) -->
+        <button
+          v-if="closeable"
+          type="button"
+          class="btn btn-xs sm:btn-sm btn-ghost btn-circle rounded-lg text-base-content/50 hover:text-base-content"
+          title="关闭"
+          @click="emit('close')"
+        >
+          <XMarkIcon class="size-4" />
+        </button>
       </div>
     </div>
 
@@ -266,6 +291,38 @@ const handleContextMenu = (e: MouseEvent, name: string) => {
           </div>
         </div>
       </ProxyNodeGrid>
+    </div>
+  </div>
+
+  <!-- 独立节点为空时的空态展示 (仅在下拉模式下展示，非下拉模式自隐) -->
+  <div
+    v-else-if="closeable"
+    class="ungrouped-proxies-card base-container w-full rounded-2xl p-4 border border-base-content/10 shadow-sm select-none"
+  >
+    <div class="flex items-center justify-between pb-2 mb-2 border-b border-base-content/5">
+      <div class="flex items-center gap-2">
+        <div class="size-7 rounded-lg bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
+          <QueueListIcon class="size-4 stroke-2" />
+        </div>
+        <span class="font-bold text-sm text-base-content">
+          {{ t('ungroupedProxies.title') || '未分组节点' }}
+        </span>
+      </div>
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle btn-xs text-base-content/50 hover:text-base-content"
+        title="关闭"
+        @click="emit('close')"
+      >
+        <XMarkIcon class="size-4" />
+      </button>
+    </div>
+    <div class="py-6 flex flex-col items-center justify-center text-center">
+      <div class="size-10 rounded-full bg-success/15 text-success flex items-center justify-center mb-2">
+        <CheckIcon class="size-5 stroke-2" />
+      </div>
+      <div class="text-sm font-medium text-base-content">暂无独立出站节点</div>
+      <div class="text-xs text-base-content/50 mt-1">所有代理节点均已分配至策略组中</div>
     </div>
   </div>
 </template>

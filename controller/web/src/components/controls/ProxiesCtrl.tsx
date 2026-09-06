@@ -38,13 +38,19 @@ import {
   ChevronUpIcon,
   GlobeAltIcon,
   PlusIcon,
+  QueueListIcon,
   RectangleGroupIcon,
   WrenchScrewdriverIcon,
 } from '@heroicons/vue/24/outline'
 import { every } from 'lodash'
-import { computed, defineComponent, ref } from 'vue'
+import { computed, defineComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import {
+  useUngroupedProxies,
+  isUngroupedDropdownOpen,
+} from '@/composables/ungroupedProxies'
+import UngroupedProxiesCard from '@/components/proxies/UngroupedProxiesCard.vue'
 import CtrlsBar from '../common/CtrlsBar.vue'
 import DialogWrapper from '../common/DialogWrapper.vue'
 import SegmentedControl from '../common/SegmentedControl.vue'
@@ -60,6 +66,25 @@ export default defineComponent({
     const isAllLatencyTesting = ref(false)
     const settingsModel = ref(false)
     const { isLargeCtrlsBar } = useCtrlsBar()
+    const { ungroupedNodeNames } = useUngroupedProxies()
+
+    const handleWindowPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (!isUngroupedDropdownOpen.value) return
+      const container = document.getElementById('ungrouped-dropdown-container')
+      if (container && !container.contains(e.target as Node)) {
+        const isInModal = (e.target as HTMLElement)?.closest?.('.modal, .dialog-wrapper, [role="dialog"]')
+        if (!isInModal) {
+          isUngroupedDropdownOpen.value = false
+        }
+      }
+    }
+
+    onMounted(() => {
+      window.addEventListener('pointerdown', handleWindowPointerDown)
+    })
+    onBeforeUnmount(() => {
+      window.removeEventListener('pointerdown', handleWindowPointerDown)
+    })
     const handlerClickUpdateAllProviders = async () => {
       if (isUpgrading.value) return
       isUpgrading.value = true
@@ -153,7 +178,7 @@ export default defineComponent({
       )
       const modeSelect = configs.value && (
         <SelectInput
-          class={['select select-sm', isLargeCtrlsBar.value ? 'min-w-40' : 'min-w-24']}
+          class={['select select-sm w-auto min-w-[70px] max-w-[96px] px-2 text-xs font-medium shrink-0']}
           modelValue={configs.value.mode}
           onUpdate:modelValue={(value) => (configs.value!.mode = value as string)}
           onChange={(value) => handlerModeChange(value as string)}
@@ -230,6 +255,43 @@ export default defineComponent({
             clearable={true}
             class="w-full pl-7"
           />
+        </div>
+      )
+
+      const ungroupedButton = (
+        <div id="ungrouped-dropdown-container" class="relative inline-flex shrink-0">
+          <button
+            class={[
+              'btn btn-circle btn-sm relative transition-all',
+              isUngroupedDropdownOpen.value
+                ? 'btn-warning text-warning-content shadow-sm'
+                : 'btn-ghost text-base-content/80 hover:text-base-content',
+            ]}
+            title={t('ungroupedProxies.title') || '未分组独立出站节点'}
+            onClick={(e) => {
+              e.stopPropagation()
+              isUngroupedDropdownOpen.value = !isUngroupedDropdownOpen.value
+            }}
+          >
+            <QueueListIcon class="h-4 w-4" />
+            {ungroupedNodeNames.value.length > 0 && (
+              <span class="badge badge-warning badge-xs absolute -top-1 -right-1 font-mono font-bold scale-90">
+                {ungroupedNodeNames.value.length}
+              </span>
+            )}
+          </button>
+
+          {isUngroupedDropdownOpen.value && (
+            <div
+              class="absolute right-0 top-full mt-2 z-50 w-[92vw] sm:w-[540px] md:w-[620px] max-w-[calc(100vw-1.5rem)] rounded-2xl bg-base-100 dark:bg-base-200 shadow-2xl border border-base-content/10 backdrop-blur-xl p-3 sm:p-4 text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <UngroupedProxiesCard
+                closeable={true}
+                onClose={() => (isUngroupedDropdownOpen.value = false)}
+              />
+            </div>
+          )}
         </div>
       )
 
@@ -374,6 +436,7 @@ export default defineComponent({
           <div class="flex w-full gap-2">
             {modeSelect}
             {searchInput}
+            {ungroupedButton}
             {createButton}
             {profileButton}
             {settingsModal}
@@ -386,6 +449,7 @@ export default defineComponent({
           {hasProviders.value && tabs}
           {modeSelect}
           <div class="flex flex-1">{searchInput}</div>
+          {ungroupedButton}
           {createButton}
           {profileButton}
           {upgradeAllIcon}

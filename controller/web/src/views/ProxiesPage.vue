@@ -14,14 +14,6 @@
       <ProxiesCtrl />
       <FolderTopBar v-if="foldersUiVisible" />
 
-      <!-- 未分组独立出站节点虚拟卡片 -->
-      <div
-        v-if="proxiesTabShow === PROXY_TAB_TYPE.PROXIES && ungroupedNodeNames.length > 0"
-        class="px-3 pt-3 md:pr-2"
-      >
-        <UngroupedProxiesCard />
-      </div>
-
       <template v-if="displayTwoColumns">
         <div class="grid grid-cols-2 gap-3 p-3 md:pr-2">
           <div
@@ -72,9 +64,7 @@ import ProxyProvider from '@/components/proxies/ProxyProvider.vue'
 import ProxyGroupChainModal from '@/components/proxies/ProxyGroupChainModal.vue'
 import ProxyContextMenu from '@/components/proxies/ProxyContextMenu.vue'
 import OutboundEditDialog from '@/components/outbounds/OutboundEditDialog.vue'
-import UngroupedProxiesCard from '@/components/proxies/UngroupedProxiesCard.vue'
 import AssignGroupModal from '@/components/proxies/AssignGroupModal.vue'
-import { useUngroupedProxies } from '@/composables/ungroupedProxies'
 import {
   isProxyEditModalOpen,
   isProxyEditModalIsEdit,
@@ -94,6 +84,7 @@ import { disableProxiesPageTextSelect, twoColumnProxyGroup } from '@/store/setti
 import { folderManagerOpen, isProxyFolderModeActive } from '@/store/proxyFolders'
 import { useSessionStorage } from '@vueuse/core'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useUngroupedProxies } from '@/composables/ungroupedProxies'
 
 const { padding } = usePaddingForViews({
   offsetTop: 0,

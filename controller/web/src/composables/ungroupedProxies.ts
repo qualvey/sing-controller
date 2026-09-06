@@ -39,6 +39,15 @@ export const closeAssignModal = () => {
 
 export const isBatchSpeedtesting = ref(false)
 
+// 独立节点下拉浮窗展开状态
+export const isUngroupedDropdownOpen = ref(false)
+export const toggleUngroupedDropdown = () => {
+  isUngroupedDropdownOpen.value = !isUngroupedDropdownOpen.value
+}
+export const closeUngroupedDropdown = () => {
+  isUngroupedDropdownOpen.value = false
+}
+
 export const useUngroupedProxies = () => {
   // 1. 收集当前所有策略组中包含的节点名
   const allGroupedMembers = computed(() => {
