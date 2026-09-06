@@ -14,28 +14,28 @@ type AnsiState = {
   opacity?: CSSProperties['opacity']
 }
 
-const ANSI_PATTERN = /\x1b\[([0-9;]*)m/g
+const ANSI_PATTERN = /(?:\x1b|\u001b|\^\[)\[([0-9;]*)m/g
 
 const NORMAL_COLORS = [
   '#000000',
-  '#cd3131',
-  '#0dbc79',
-  '#e5e510',
-  '#2472c8',
-  '#bc3fbc',
-  '#11a8cd',
-  '#e5e5e5',
+  '#ef4444', // 31: red (vivid error)
+  '#10b981', // 32: green
+  '#f59e0b', // 33: yellow / amber
+  '#3b82f6', // 34: blue
+  '#a855f7', // 35: magenta / purple
+  '#06b6d4', // 36: cyan
+  '#e5e7eb', // 37: light gray
 ]
 
 const BRIGHT_COLORS = [
-  '#666666',
-  '#f14c4c',
-  '#23d18b',
-  '#f5f543',
-  '#3b8eea',
-  '#d670d6',
-  '#29b8db',
-  '#ffffff',
+  '#6b7280', // 90: gray
+  '#f87171', // 91: bright red
+  '#34d399', // 92: bright green
+  '#fbbf24', // 93: bright yellow
+  '#60a5fa', // 94: bright blue
+  '#c084fc', // 95: bright purple
+  '#38bdf8', // 96: bright cyan
+  '#ffffff', // 97: bright white
 ]
 
 const colorFrom256 = (value: number) => {
@@ -124,13 +124,18 @@ const applyAnsiCodes = (state: AnsiState, codes: number[]) => {
   }
 }
 
-export const stripAnsi = (value: string) => value.replace(ANSI_PATTERN, '')
+export const stripAnsi = (value: string) => {
+  ANSI_PATTERN.lastIndex = 0
+  return value.replace(ANSI_PATTERN, '')
+}
 
 export const parseAnsiText = (value: string): AnsiTextSegment[] => {
   const segments: AnsiTextSegment[] = []
   const state: AnsiState = {}
   let cursor = 0
   let match: RegExpExecArray | null
+
+  ANSI_PATTERN.lastIndex = 0
 
   while ((match = ANSI_PATTERN.exec(value))) {
     if (match.index > cursor) {

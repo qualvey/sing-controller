@@ -148,25 +148,11 @@ proxy_set_header Connection "upgrade";</code></pre>
             >
               暂无日志记录
             </div>
-            <div
+            <CoreLogViewer
               v-else
-              class="bg-base-300 text-base-content/90 max-h-48 overflow-y-auto rounded p-2 text-[11px] font-mono leading-relaxed select-all"
-            >
-              <div
-                v-for="(line, idx) in coreLogs"
-                :key="idx"
-                class="break-all"
-                :class="{
-                  'text-error': line.source === 'stderr' || line.message.includes('panic') || line.message.includes('fatal') || line.message.includes('error'),
-                  'text-warning': line.source === 'system',
-                  'text-base-content/80': line.source === 'stdout',
-                }"
-              >
-                <span class="opacity-40">[{{ formatLogTime(line.timestamp) }}]</span>
-                <span class="opacity-60 ml-1">[{{ line.source }}]</span>
-                {{ line.message }}
-              </div>
-            </div>
+              :logs="coreLogs"
+              max-height="12rem"
+            />
           </div>
         </div>
 
@@ -315,6 +301,7 @@ import dayjs from 'dayjs'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ConfigRepairModal from './ConfigRepairModal.vue'
+import CoreLogViewer from './CoreLogViewer.vue'
 
 const statusStore = useStatusStore()
 const detail = ref('')

@@ -77,25 +77,11 @@
               >
                 {{ errorDetail }}
               </div>
-              <div
+              <CoreLogViewer
                 v-if="recentLogs && recentLogs.length > 0"
-                class="bg-base-300 text-base-content/90 max-h-32 overflow-y-auto rounded p-2 text-[11px] font-mono leading-relaxed select-all"
-              >
-                <div
-                  v-for="(line, idx) in recentLogs"
-                  :key="idx"
-                  class="break-all"
-                  :class="{
-                    'text-error': line.source === 'stderr' || line.message.includes('panic') || line.message.includes('fatal') || line.message.includes('error'),
-                    'text-warning': line.source === 'system',
-                    'text-base-content/80': line.source === 'stdout',
-                  }"
-                >
-                  <span class="opacity-40">[{{ formatLogTime(line.timestamp) }}]</span>
-                  <span class="opacity-60 ml-1">[{{ line.source }}]</span>
-                  {{ line.message }}
-                </div>
-              </div>
+                :logs="recentLogs"
+                max-height="10rem"
+              />
             </div>
           </div>
 
@@ -239,6 +225,7 @@ import {
 import { basicSetup } from 'codemirror'
 import dayjs from 'dayjs'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import CoreLogViewer from './CoreLogViewer.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -297,12 +284,27 @@ const updateStats = (view: EditorView) => {
 const loadConfig = async () => {
   loading.value = true
   try {
-    const text = await api.configRaw()
-    editor.value?.dispatch({
-      changes: { from: 0, to: editor.value.state.doc.length, insert: text },
-    })
-    if (editor.value) updateStats(editor.value)
-    dirty.value = false
+    let text = await api.configRaw()
+    if (typeof text !== 'string') {
+      text = JSON.stringify(text, null, 2)
+    }
+    if (!text || text.trim() === '' || text.trim() === '{}') {
+      try {
+        const parsed = await api.config()
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          text = JSON.stringify(parsed, null, 2)
+        }
+      } catch {
+        // ignore fallback error
+      }
+    }
+    if (editor.value && text) {
+      editor.value.dispatch({
+        changes: { from: 0, to: editor.value.state.doc.length, insert: text },
+      })
+      updateStats(editor.value)
+      dirty.value = false
+    }
   } catch (e) {
     showToast((e as Error).message || '加载配置失败', 'error')
   } finally {
@@ -500,5 +502,13 @@ onBeforeUnmount(() => {
 .repair-modal-enter-from,
 .repair-modal-leave-to {
   opacity: 0;
+}
+
+:deep(.cm-editor) {
+  height: 100%;
+}
+
+:deep(.cm-scroller) {
+  overflow: auto;
 }
 </style>

@@ -129,6 +129,8 @@ export interface CertConfigInfo {
 }
 
 import { getDesktopPort } from './desktop'
+import { activeBackend } from '@/store/setup'
+import { getUrlFromBackend } from '@/helper/utils'
 import type { User } from '@/types'
 
 const http = axios.create({
@@ -146,6 +148,11 @@ http.interceptors.request.use((config) => {
   ) {
     const port = getDesktopPort() || 8080
     config.baseURL = `http://127.0.0.1:${port}/api`
+  } else if (activeBackend.value) {
+    const url = getUrlFromBackend(activeBackend.value)
+    if (url && url !== '/') {
+      config.baseURL = url.replace(/\/+$/, '') + '/api'
+    }
   }
   return config
 })
@@ -183,7 +190,18 @@ export const api = {
   status: () => http.get<StatusInfo>('/status').then((r) => r.data),
   config: () => http.get<unknown>('/config').then((r) => r.data),
   saveConfig: (config: unknown) => http.put('/config', config).then((r) => r.data),
-  configRaw: () => http.get<string>('/config/raw', { responseType: 'text' }).then((r) => r.data),
+  configRaw: () =>
+    http
+      .get<string>('/config/raw', {
+        responseType: 'text',
+        transformResponse: [(data) => data],
+      })
+      .then((r) => {
+        const d = r.data
+        if (typeof d === 'string') return d
+        if (typeof d === 'object' && d !== null) return JSON.stringify(d, null, 2)
+        return String(d ?? '')
+      }),
   saveConfigRaw: (text: string) =>
     http.put('/config/raw', text, { headers: { 'Content-Type': 'text/plain' } }).then((r) => r.data),
   schema: () => http.get<Record<string, unknown>>('/schema').then((r) => r.data),
