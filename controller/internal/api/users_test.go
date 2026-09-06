@@ -70,10 +70,11 @@ func TestUserCreateBindsToInbounds(t *testing.T) {
 		t.Errorf("vless 不应包含 password: %s", body3)
 	}
 
-	// mixed-in 不应有 users
+	// mixed-in 应注入 {username,password}
 	rec4 := doRequest(t, h, http.MethodGet, "/api/inbounds/mixed-in", "")
-	if contains(rec4.Body.String(), `"users"`) {
-		t.Errorf("mixed-in 不应有 users: %s", rec4.Body.String())
+	body4 := rec4.Body.String()
+	if !contains(strings.ToLower(body4), `"username":"alice"`) || !contains(strings.ToLower(body4), `"password":"pwd1"`) {
+		t.Errorf("mixed-in 应包含 username 和 password: %s", body4)
 	}
 }
 

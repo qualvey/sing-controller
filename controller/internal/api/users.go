@@ -13,6 +13,10 @@ import (
 
 // 支持 users[] 的入站类型 → 用户字段映射
 var userSupportedInboundTypes = map[string][]string{
+	"mixed":       {"username", "password"},
+	"socks":       {"username", "password"},
+	"http":        {"username", "password"},
+	"naive":       {"username", "password"},
 	"vless":       {"name", "uuid", "flow"},
 	"vmess":       {"name", "uuid"},
 	"trojan":      {"name", "password"},
@@ -30,9 +34,13 @@ func buildUserForType(user store.UserMeta, inboundType string) map[string]any {
 	if !ok {
 		return nil
 	}
-	u := map[string]any{"name": user.Name}
+	u := make(map[string]any)
 	for _, f := range fields {
 		switch f {
+		case "name":
+			u["name"] = user.Name
+		case "username":
+			u["username"] = user.Name
 		case "uuid":
 			if user.UUID != "" {
 				u["uuid"] = user.UUID

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -38,12 +39,28 @@ func (h *Handler) handleListInbounds(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"inbounds": items})
 }
 
+func normalizeInboundListen(ctx context.Context, body []byte) []byte {
+	var rawMap map[string]any
+	if err := json.UnmarshalContext(ctx, body, &rawMap); err != nil {
+		return body
+	}
+	listenVal, ok := rawMap["listen"]
+	if !ok || listenVal == nil || listenVal == "" {
+		rawMap["listen"] = "::"
+		if patched, err := json.MarshalContext(ctx, rawMap); err == nil {
+			return patched
+		}
+	}
+	return body
+}
+
 func (h *Handler) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 	body, err := readRawBody(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	body = normalizeInboundListen(h.ctx(r), body)
 	var inbound option.Inbound
 	if err := json.UnmarshalContext(h.ctx(r), body, &inbound); err != nil {
 		logger.Warn("解析创建 inbound 请求体失败: %v", err)
@@ -101,6 +118,7 @@ func (h *Handler) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	body = normalizeInboundListen(h.ctx(r), body)
 	var inbound option.Inbound
 	if err := json.UnmarshalContext(h.ctx(r), body, &inbound); err != nil {
 		logger.Warn("解析更新 inbound [%s] 请求体失败: %v", tag, err)
