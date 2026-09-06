@@ -18,7 +18,6 @@
           @update:model-value="earthProjection = $event as '3d' | '2d'"
         />
         <SelectInput
-          v-if="!isFlatMap"
           v-model="earthVisualMode"
           class="select select-ghost select-sm h-8 min-h-8 w-auto border-0"
           :aria-label="t('earthVisualStyle')"
