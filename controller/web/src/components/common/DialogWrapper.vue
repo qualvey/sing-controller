@@ -10,6 +10,8 @@
         v-if="isOpen"
         ref="backdropRef"
         class="modal modal-open"
+        :class="wrapperClass"
+        :style="wrapperStyle"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="title ? 'dialog-title' : undefined"
@@ -89,6 +91,8 @@ const props = withDefaults(
     noPadding?: boolean
     boxClass?: string
     bodyClass?: string
+    wrapperClass?: string
+    wrapperStyle?: string | Record<string, any>
     title?: string
     closable?: boolean
     size?: 'small' | 'medium' | 'large'

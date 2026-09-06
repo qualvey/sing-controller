@@ -4,6 +4,8 @@
     :model-value="!!confirmDialogState"
     :title="confirmDialogState?.title"
     box-class="max-w-lg"
+    wrapper-class="!z-[99999]"
+    :wrapper-style="{ zIndex: 99999 }"
     @update:model-value="handleModelValue"
     @enter="handleConfirm"
   >
