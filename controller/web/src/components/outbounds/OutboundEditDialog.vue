@@ -8,12 +8,14 @@ import { ClipboardPasteIcon, KeyRoundIcon, LoaderIcon } from '@lucide/vue'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
+import GroupMemberPicker from '@/components/outbounds/GroupMemberPicker.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { SelectField } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '@/api'
 import ResourceSourceTab from '@/components/ResourceSourceTab.vue'
 import type { Outbound } from '@/api'
+import { proxyMap, fetchProxies } from '@/assembly/proxies'
 import { useStatusStore } from '@/store/status'
 
 const { t } = useI18n()
@@ -296,13 +298,27 @@ function fillForm(obj: Outbound) {
 
 const loadTypesAndCandidates = async () => {
   try {
-    const [tTypes, obs] = await Promise.all([api.types(), api.outbounds()])
+    const [tTypes, obs] = await Promise.all([
+      api.types(),
+      api.outbounds(),
+      Object.keys(proxyMap.value).length === 0 ? fetchProxies(true).catch(() => {}) : Promise.resolve(),
+    ])
     outboundTypes.value = tTypes.outbounds || []
     outbounds.value = obs
   } catch {
     // ignore
   }
 }
+
+watch(
+  () => form.outbounds,
+  (newOutbounds) => {
+    if (form.default_out && !newOutbounds.includes(form.default_out)) {
+      form.default_out = newOutbounds[0] || ''
+    }
+  },
+  { deep: true },
+)
 
 const openCreate = () => {
   sourceJson.value = '{}'
@@ -756,8 +772,12 @@ onMounted(() => {
             <div class="col-span-2 collapse-row" :class="{ 'is-open': isSelector || isUrlTest }">
               <div class="collapse-inner">
                 <div class="grid gap-x-4 gap-y-4" style="grid-template-columns: 170px minmax(0, 1fr)">
-                  <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.memberOutbounds') }} <span class="text-destructive">*</span></label>
-                  <ChipInput v-model="form.outbounds" :suggestions="groupCandidates" :placeholder="$t('outboundsDialog.memberOutboundsPlaceholder')" />
+                  <label class="pt-1 text-sm font-medium text-base-content/80 self-start">{{ $t('outboundsDialog.memberOutbounds') }} <span class="text-destructive">*</span></label>
+                  <GroupMemberPicker
+                    v-model="form.outbounds"
+                    :exclude-tag="form.tag || props.tag"
+                    :group-name="props.tag || form.tag"
+                  />
                   <template v-if="isSelector">
                     <label class="pt-2 text-sm text-base-content/70">{{ $t('outboundsDialog.defaultOutbound') }}</label>
                     <SelectField v-model="form.default_out" :options="form.outbounds" :placeholder="$t('outboundsDialog.defaultOutboundPlaceholder')" />
