@@ -8,15 +8,27 @@
         {{ t('earthGlobeTitle') }}
       </div>
       <div class="flex items-center gap-1">
-        <select
+          <SegmentedControl
+          :title="t('earthProjection')"
+          :model-value="earthProjection"
+          :options="[
+            { value: '3d', label: '3D' },
+            { value: '2d', label: '2D' },
+          ]"  
+          @update:model-value="earthProjection = $event as '3d' | '2d'"
+        />
+        <SelectInput
+          v-if="!isFlatMap"
           v-model="earthVisualMode"
           class="select select-ghost select-sm h-8 min-h-8 w-auto border-0"
           :aria-label="t('earthVisualStyle')"
           :title="t('earthVisualStyle')"
-        >
-          <option value="space">{{ t('earthVisualStyle_space') }}</option>
-          <option value="flat">{{ t('earthVisualStyle_flat') }}</option>
-        </select>
+          :options="[
+            { value: 'space', label: t('earthVisualStyle_space') },
+            { value: 'color', label: t('earthVisualStyle_color') },
+            { value: 'flat', label: t('earthVisualStyle_flat') },
+          ]"
+        />
         <button
           class="btn btn-ghost btn-sm btn-square"
           :aria-label="t(showCityLabels ? 'earthHideCityLabels' : 'earthShowCityLabels')"
@@ -30,6 +42,7 @@
           />
         </button>
         <button
+          v-if="!isFlatMap"
           class="btn btn-ghost btn-sm btn-square"
           :aria-label="t(rotationPaused ? 'earthResumeRotation' : 'earthPauseRotation')"
           :title="t(rotationPaused ? 'earthResumeRotation' : 'earthPauseRotation')"
@@ -68,7 +81,7 @@
       class="relative mt-2 w-full overflow-hidden rounded-xl"
       :class="[
         expanded ? 'min-h-0 flex-1' : 'h-96',
-        earthVisualMode === 'flat' ? 'bg-base-200/30' : 'bg-black',
+        flatLook ? 'bg-base-200/30' : 'bg-black',
       ]"
     >
       <div
@@ -123,11 +136,11 @@
 
       <div
         class="absolute bottom-2 left-2 flex flex-col items-start gap-0.5 text-[10px]"
-        :class="earthVisualMode === 'flat' ? 'text-base-content/55' : 'text-white/65'"
+        :class="flatLook ? 'text-base-content/55' : 'text-white/65'"
       >
         <a
           class="hover:underline"
-          :class="earthVisualMode === 'flat' ? 'hover:text-base-content' : 'hover:text-white'"
+          :class="flatLook ? 'hover:text-base-content' : 'hover:text-white'"
           href="https://db-ip.com/db/lite.php"
           target="_blank"
           rel="noopener noreferrer"
@@ -136,7 +149,7 @@
         </a>
         <a
           class="hover:underline"
-          :class="earthVisualMode === 'flat' ? 'hover:text-base-content' : 'hover:text-white'"
+          :class="flatLook ? 'hover:text-base-content' : 'hover:text-white'"
           href="https://www.solarsystemscope.com/textures/"
           target="_blank"
           rel="noopener noreferrer"
@@ -145,6 +158,50 @@
         </a>
       </div>
 
+       <div
+        class="pointer-events-none absolute right-2 bottom-2 left-2 flex items-end justify-between gap-2"
+      >
+        <div
+          class="pointer-events-auto flex flex-col items-start gap-0.5 text-[10px]"
+          :class="flatLook ? 'text-base-content/55' : 'text-white/65'"
+        >
+          <a
+            class="hover:underline"
+            :class="flatLook ? 'hover:text-base-content' : 'hover:text-white'"
+            href="https://db-ip.com/db/lite.php"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            DB-IP City Lite
+          </a>
+          <a
+            class="hover:underline"
+            :class="flatLook ? 'hover:text-base-content' : 'hover:text-white'"
+            href="https://www.solarsystemscope.com/textures/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Solar System Scope · CC BY 4.0
+          </a>
+        </div>
+
+        <ul
+          class="bg-base-100/75 flex flex-wrap justify-end gap-x-2.5 gap-y-1 rounded-lg px-2 py-1.5 text-[10px] shadow backdrop-blur-md"
+          :aria-label="t('earthLegend')"
+        >
+          <li
+            v-for="item in legendItems"
+            :key="item.label"
+            class="flex items-center gap-1"
+          >
+            <span
+              class="ring-base-content/20 h-2 w-2 shrink-0 rounded-full ring-1"
+              :style="{ backgroundColor: item.color }"
+            />
+            <span class="text-base-content/70 whitespace-nowrap">{{ item.label }}</span>
+          </li>
+        </ul>
+      </div>
       <div
         v-if="rendererError"
         class="pointer-events-none absolute inset-0 flex items-center justify-center p-4"
@@ -312,11 +369,16 @@
 </template>
 
 <script setup lang="ts">
-import { getIPFromIpipnetAPI, getIPFromIpsbAPI } from '@/api/geoip'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
+import SelectInput from '../common/SelectInput.vue'
+
+import { getIPFromIpipnetAPI, getIPFromIpsbAPI, type IPInfo } from '@/api/geoip'
 import { ipForChina, ipForGlobal } from '@/composables/overview'
 import { prettyBytesHelper } from '@/helper/utils'
 import { activeConnections } from '@/store/connections'
-import { earthOriginSource, earthVisualMode, language, theme } from '@/store/settings'
+import { ENDPOINT_PALETTE } from './earth/palette'
+import { buildEarthRoutes } from './earth/routes'
+import { earthIPInfoAPI, earthOriginSource, earthProjection, earthVisualMode, language, theme } from '@/store/settings'
 import {
   ArrowPathIcon,
   ArrowsPointingInIcon,
@@ -332,7 +394,6 @@ import * as ipaddr from 'ipaddr.js'
 import type { CSSProperties } from 'vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { buildEarthRoutes } from './earth/routes'
 import {
   DBIP_COMPRESSED_BYTES,
   earthLocationCache,
@@ -357,6 +418,7 @@ const recoveredCorruptCache = ref(false)
 const downloadedBytes = ref(0)
 const downloadTotalBytes = ref(DBIP_COMPRESSED_BYTES)
 const originIP = ref('')
+const originAPIInfo = ref<IPInfo | null>(null)
 const originStatus = ref<'loading' | 'ready' | 'error'>('loading')
 const showOriginIP = ref(false)
 const showCityLabels = ref(true)
@@ -404,6 +466,10 @@ const maskIP = (value: string) => {
   const parts = address.toNormalizedString().split(':')
   return `${parts[0]}:${parts[1]}:****:****`
 }
+const isFlatMap = computed(() => earthProjection.value === '2d')
+// The 2D map always uses the flat palette, so it shares the light chrome that
+// the flat globe style uses.
+const flatLook = computed(() => isFlatMap.value || earthVisualMode.value !== 'space')
 
 const displayedOriginIP = computed(() => {
   if (originStatus.value === 'loading') return t('getting')
@@ -411,6 +477,11 @@ const displayedOriginIP = computed(() => {
   return showOriginIP.value ? originIP.value : maskIP(originIP.value)
 })
 
+const legendItems = computed(() => [
+  { color: ENDPOINT_PALETTE.origin, label: t('earthRole_origin') },
+  { color: ENDPOINT_PALETTE.destination, label: t('earthLegendProxied') },
+  { color: ENDPOINT_PALETTE.direct, label: t('direct') },
+])
 const downloadProgress = computed(() =>
   Math.min(100, (downloadedBytes.value / Math.max(1, downloadTotalBytes.value)) * 100),
 )
@@ -561,6 +632,18 @@ const refreshRoutes = async () => {
 
     routesLoading.value = true
     const snapshot = activeConnections.value
+    // const routeOriginIP = originIP.value
+    // const routeOriginRequestID = originRequestID
+    // const preferredOrigin: EarthLocationHint | null =
+    // earthIPInfoAPI.value !== IP_INFO_API.IPIP && originAPIInfo.value
+    //     ? {
+    //         latitude: originAPIInfo.value.latitude,
+    //         longitude: originAPIInfo.value.longitude,
+    //         city: originAPIInfo.value.city,
+    //         country: originAPIInfo.value.country,
+    //       }
+    //     : null
+
 
     try {
       const result = await buildEarthRoutes(
@@ -723,6 +806,7 @@ watch(language, () => {
   locationCache.clear()
   scheduleRouteRefresh()
 })
+watch(earthProjection, (value) => renderer.value?.setProjection(value))
 watch(reducedMotion, (value) => renderer.value?.setReducedMotion(value))
 watch(earthVisualMode, (value) => renderer.value?.setVisualMode(value))
 watch(
@@ -750,6 +834,7 @@ const initialize = async () => {
     if (!canvasRef.value || disposed) return
     const createdRenderer = await createEarthRenderer(canvasRef.value, {
       reducedMotion: reducedMotion.value,
+      projection: earthProjection.value,
       visualMode: earthVisualMode.value,
       colorScheme: getEarthColorScheme(),
       initialViewState: earthViewState.value ?? undefined,

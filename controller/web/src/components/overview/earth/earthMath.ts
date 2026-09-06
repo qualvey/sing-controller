@@ -4,7 +4,7 @@ import type { EarthLocation } from './types'
 export const EARTH_RADIUS = 1
 export const ENDPOINT_RADIUS = 1.005
 
-const ARC_SEGMENTS = 36
+export const ARC_SEGMENTS = 36
 
 export const toEarthVector = ({
   latitude,
@@ -15,9 +15,9 @@ export const toEarthVector = ({
   const cosLatitude = Math.cos(latitudeRadians)
 
   return new THREE.Vector3(
-    cosLatitude * Math.cos(longitudeRadians),
+    cosLatitude * Math.sin(longitudeRadians),
     Math.sin(latitudeRadians),
-    -cosLatitude * Math.sin(longitudeRadians),
+    cosLatitude * Math.cos(longitudeRadians),
   )
 }
 
@@ -54,16 +54,19 @@ export const getRealtimeSunDirection = (date = new Date(), target = new THREE.Ve
 
   return target
     .set(
-      cosDeclination * Math.cos(longitude),
+      cosDeclination * Math.sin(longitude),
       Math.sin(declination),
-      -cosDeclination * Math.sin(longitude),
+      cosDeclination * Math.cos(longitude),
     )
     .normalize()
 }
 
 // Quaternion interpolation follows the shortest spherical path, including paths that
 // cross +/-180 degrees longitude. It also has a deterministic antipodal fallback.
-export const createGreatCircle = (from: EarthLocation, to: EarthLocation) => {
+export const createGreatCircle = (
+  from: Pick<EarthLocation, 'latitude' | 'longitude'>,
+  to: Pick<EarthLocation, 'latitude' | 'longitude'>,
+) => {
   const start = toEarthVector(from).normalize()
   const end = toEarthVector(to).normalize()
   const rotation = new THREE.Quaternion().setFromUnitVectors(start, end)

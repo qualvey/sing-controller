@@ -12,16 +12,19 @@ import {
   normalLocal,
   normalWorldGeometry,
   output,
+  positionLocal,
   positionWorld,
   step,
   texture,
   uniform,
   uv,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl'
 import * as THREE from 'three/webgpu'
 import { EARTH_RADIUS } from './earthMath'
+import { PLANE_EDGE_EXTENSION, PLANE_HALF_HEIGHT, PLANE_HALF_WIDTH } from './projection'
 import type { EarthColorScheme, EarthVisualMode } from './rendererTypes'
 
 const FLAT_GLOBE_PALETTES = {
@@ -45,6 +48,8 @@ interface GlobeLayerOptions {
 }
 
 export interface GlobeLayer {
+  setMorph: (morph: number) => void
+  setCenterLongitude: (longitude: number) => void
   setVisualMode: (mode: EarthVisualMode) => void
   setColorScheme: (scheme: EarthColorScheme) => void
   setSunDirection: (direction: THREE.Vector3) => void
@@ -93,6 +98,11 @@ export const createGlobeLayer = async (options: GlobeLayerOptions): Promise<Glob
   dayTexture.anisotropy = 8
   nightTexture.anisotropy = 8
   surfaceTexture.anisotropy = 8
+  // Recentring shifts the geographic frame, so texture lookups run past the edges
+  // of the equirectangular images and have to wrap around instead of clamping.
+  dayTexture.wrapS = THREE.RepeatWrapping
+  nightTexture.wrapS = THREE.RepeatWrapping
+  surfaceTexture.wrapS = THREE.RepeatWrapping
 
   const sun = new THREE.DirectionalLight('#ffffff', 2)
   sun.position.set(0, 0.25, 3)
@@ -111,40 +121,109 @@ export const createGlobeLayer = async (options: GlobeLayerOptions): Promise<Glob
     atmosphereDayColor,
     sunOrientation.smoothstep(-0.25, 0.75),
   )
-  const cloudsStrength = texture(surfaceTexture, uv()).b.smoothstep(0.2, 1)
+  // Undoes the view's recentring, so the same vertex that now sits at local
+  // longitude zero still samples the user's actual longitude in the imagery.
+  const centerOffset = uniform(0)
+  const geoUV = vec2(uv().x.add(centerOffset), uv().y)
+  const cloudsStrength = texture(surfaceTexture, geoUV).b.smoothstep(0.2, 1)
   const globeMaterial = new THREE.MeshStandardNodeMaterial()
 
-  globeMaterial.colorNode = mix(texture(dayTexture), vec3(1), cloudsStrength.mul(2))
-  globeMaterial.roughnessNode = max(texture(surfaceTexture).g, step(0.01, cloudsStrength)).remap(
-    0,
-    1,
-    roughnessLow,
-    roughnessHigh,
-  )
+  globeMaterial.colorNode = mix(texture(dayTexture, geoUV), vec3(1), cloudsStrength.mul(2))
+  globeMaterial.roughnessNode = max(
+    texture(surfaceTexture, geoUV).g,
+    step(0.01, cloudsStrength),
+  ).remap(0, 1, roughnessLow, roughnessHigh)
 
-  const night = texture(nightTexture)
+  const night = texture(nightTexture, geoUV)
   const dayStrength = sunOrientation.smoothstep(-0.25, 0.5)
   const atmosphereDayStrength = sunOrientation.smoothstep(-0.5, 1)
   const atmosphereMix = atmosphereDayStrength.mul(fresnel.pow(2)).clamp(0, 1)
   let finalOutput = mix(night.rgb, output.rgb, dayStrength)
   finalOutput = mix(finalOutput, atmosphereColor, atmosphereMix)
   globeMaterial.outputNode = vec4(finalOutput, output.a)
-  globeMaterial.normalNode = bumpMap(max(texture(surfaceTexture).r, cloudsStrength))
+  globeMaterial.normalNode = bumpMap(max(texture(surfaceTexture, geoUV).r, cloudsStrength))
 
   // The surface texture separates land (green channel) from water (blue channel),
   // which lets the flat renderer keep the same coastline without photo shading.
   const flatOceanColor = uniform(new THREE.Color())
   const flatLandColor = uniform(new THREE.Color())
-  const flatSurface = texture(surfaceTexture, uv())
+  const flatSurface = texture(surfaceTexture, geoUV)
   const flatLandMask = flatSurface.g.sub(flatSurface.b).smoothstep(0.02, 0.16)
-  const flatGlobeMaterial = new THREE.MeshBasicNodeMaterial()
+  const flatGlobeMaterial = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide })
 
   flatGlobeMaterial.colorNode = mix(flatOceanColor, flatLandColor, flatLandMask)
   flatGlobeMaterial.toneMapped = false
 
-  const sphereGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 64, 64)
+  // SphereGeometry's uv maps straight onto the equirectangular rectangle:
+  // latitude = (uv.y - 0.5) * 180 and longitude = (uv.x - 0.5) * 360, matching
+  // `projectEarthSample`. The duplicated seam vertices carry different uv.x, so
+  // the sphere splits cleanly into the map's left and right edges, and the polar
+  // fans spread out along the top and bottom edges.
+  const globeMorph = uniform(0)
+  const globePlanePosition = vec3(
+    uv()
+      .x.sub(0.5)
+      .mul(2 * PLANE_HALF_WIDTH),
+    uv()
+      .y.sub(0.5)
+      .mul(2 * PLANE_HALF_HEIGHT),
+    0,
+  )
+
+  flatGlobeMaterial.positionNode = mix(positionLocal, globePlanePosition, globeMorph)
+
+  const sphereGeometry = new THREE.SphereGeometry(
+    EARTH_RADIUS,
+    128,
+    128,
+    -Math.PI / 2,
+    Math.PI * 2,
+  )
   const globe = new THREE.Mesh<THREE.SphereGeometry, THREE.Material>(sphereGeometry, globeMaterial)
   earthGroup.add(globe)
+
+  // A sphere flattened by the morph still carries its polar triangle fans, whose
+  // apexes leave a saw-toothed north and south edge. Once the transition lands on
+  // the map, a real plane takes over: clean edges, and wide enough to carry the
+  // extra half-world on each side.
+  const mapHalfWidth = PLANE_HALF_WIDTH + PLANE_EDGE_EXTENSION
+  // How many whole worlds the plane spans, which is also how many times the
+  // equirectangular texture has to repeat across it.
+  const mapWorlds = mapHalfWidth / PLANE_HALF_WIDTH
+  const mapGeometry = new THREE.PlaneGeometry(mapHalfWidth * 2, PLANE_HALF_HEIGHT * 2)
+  const mapMaterial = new THREE.MeshBasicNodeMaterial()
+  // Same longitude-to-uv relation as the flattened sphere, just stretched over a
+  // wider plane, so the central world stays pixel-aligned with it across the swap.
+  const mapUV = vec2(
+    uv()
+      .x.mul(mapWorlds)
+      .add(0.5 - mapWorlds / 2)
+      .add(centerOffset),
+    uv().y,
+  )
+  const mapSurface = texture(surfaceTexture, mapUV)
+
+  mapMaterial.colorNode = mix(
+    flatOceanColor,
+    flatLandColor,
+    mapSurface.g.sub(mapSurface.b).smoothstep(0.02, 0.16),
+  )
+  mapMaterial.toneMapped = false
+
+  // Color globe material (Daytime satellite color texture, unlit, no sun shading, no night)
+  const colorGlobeMaterial = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide })
+  colorGlobeMaterial.colorNode = mix(texture(dayTexture, geoUV), vec3(1), cloudsStrength.mul(0.35))
+  colorGlobeMaterial.positionNode = mix(positionLocal, globePlanePosition, globeMorph)
+  colorGlobeMaterial.toneMapped = false
+
+  const map = new THREE.Mesh(mapGeometry, mapMaterial)
+  map.visible = false
+  earthGroup.add(map)
+
+  const colorMapMaterial = new THREE.MeshBasicNodeMaterial()
+  const mapCloudsStrength = texture(surfaceTexture, mapUV).b.smoothstep(0.2, 1)
+  colorMapMaterial.colorNode = mix(texture(dayTexture, mapUV), vec3(1), mapCloudsStrength.mul(0.35))
+  colorMapMaterial.toneMapped = false
 
   const atmosphereMaterial = new THREE.MeshBasicNodeMaterial({
     side: THREE.BackSide,
@@ -160,6 +239,7 @@ export const createGlobeLayer = async (options: GlobeLayerOptions): Promise<Glob
 
   let visualMode = options.visualMode
   let colorScheme = options.colorScheme
+  let morph = 0
   let disposed = false
 
   const applyColorScheme = () => {
@@ -169,15 +249,34 @@ export const createGlobeLayer = async (options: GlobeLayerOptions): Promise<Glob
     flatLandColor.value.set(palette.land)
   }
 
+  // Anything but a pristine sphere is rendered with the flat material: the
+  // photoreal shading is driven by surface normals, which stop meaning anything
+  // once the sphere starts unrolling.
   const applyVisualMode = () => {
-    const flat = visualMode === 'flat'
+    const isSpace = visualMode === 'space' && morph === 0
+    const isColor = visualMode === 'color'
+    const flattened = morph >= 1
 
-    scene.background = flat ? null : backgroundTexture
-    renderer.toneMapping = flat ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping
-    globe.material = flat ? flatGlobeMaterial : globeMaterial
-    sun.visible = !flat
-    atmosphere.visible = !flat
+    scene.background = isSpace ? backgroundTexture : null
+    renderer.toneMapping = isSpace ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping
+
+    if (isColor) {
+      globe.material = colorGlobeMaterial
+      map.material = colorMapMaterial
+    } else if (visualMode === 'flat' || morph > 0) {
+      globe.material = flatGlobeMaterial
+      map.material = mapMaterial
+    } else {
+      globe.material = globeMaterial
+      map.material = mapMaterial
+    }
+
+    globe.visible = !flattened
+    map.visible = flattened
+    sun.visible = isSpace
+    atmosphere.visible = isSpace
   }
+
 
   const syncSunLight = () => {
     if (disposed) return
@@ -189,6 +288,19 @@ export const createGlobeLayer = async (options: GlobeLayerOptions): Promise<Glob
   syncSunLight()
 
   return {
+    setMorph(value) {
+      if (disposed || morph === value) return
+
+      const wasFlat = morph > 0
+      const wasFlattened = morph >= 1
+      morph = value
+      globeMorph.value = value
+      if (wasFlat !== value > 0 || wasFlattened !== value >= 1) applyVisualMode()
+    },
+    setCenterLongitude(longitude) {
+      if (disposed) return
+      centerOffset.value = longitude / 360
+    },
     setVisualMode(mode) {
       if (disposed || visualMode === mode) return
       visualMode = mode
@@ -210,10 +322,14 @@ export const createGlobeLayer = async (options: GlobeLayerOptions): Promise<Glob
       disposed = true
       if (scene.background === backgroundTexture) scene.background = null
       scene.remove(sun)
-      earthGroup.remove(globe, atmosphere)
+      earthGroup.remove(globe, atmosphere, map)
       sphereGeometry.dispose()
+      mapGeometry.dispose()
       globeMaterial.dispose()
       flatGlobeMaterial.dispose()
+      colorGlobeMaterial.dispose()
+      mapMaterial.dispose()
+      colorMapMaterial.dispose()
       atmosphereMaterial.dispose()
       textures.forEach((texture) => texture.dispose())
     },

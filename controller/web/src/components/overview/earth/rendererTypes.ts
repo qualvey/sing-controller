@@ -1,8 +1,10 @@
 import type * as THREE from 'three/webgpu'
+import type { EarthProjection, EarthView } from './projection'
 import type { EarthEndpointInfo, EarthLocation, EarthRoute } from './types'
 
+export type { EarthProjection, EarthView }
 export type EarthColorScheme = 'dark' | 'light'
-export type EarthVisualMode = 'flat' | 'space'
+export type EarthVisualMode = 'flat' | 'space' | 'color'
 
 export interface EarthViewState {
   quaternion: [number, number, number, number]
@@ -11,6 +13,7 @@ export interface EarthViewState {
 
 export interface EarthRendererOptions {
   reducedMotion: boolean
+  projection: EarthProjection
   visualMode: EarthVisualMode
   colorScheme: EarthColorScheme
   initialViewState?: EarthViewState
@@ -24,6 +27,7 @@ export interface EarthRenderer {
   setReducedMotion: (reduced: boolean) => void
   setAutoRotation: (enabled: boolean) => void
   setCityLabelsVisible: (visible: boolean) => void
+  setProjection: (projection: EarthProjection) => void
   setVisualMode: (mode: EarthVisualMode) => void
   setColorScheme: (scheme: EarthColorScheme) => void
   getViewState: () => EarthViewState
@@ -34,6 +38,9 @@ export interface EarthRenderer {
 export interface EarthRenderEndpoint extends EarthEndpointInfo {
   key: string
   position: THREE.Vector3
+  latitude: number
+  longitude: number
+  direct?: boolean
 }
 
 export interface EarthRenderSnapshot {
@@ -41,3 +48,4 @@ export interface EarthRenderSnapshot {
   routes: readonly EarthRoute[]
   endpoints: readonly EarthRenderEndpoint[]
 }
+

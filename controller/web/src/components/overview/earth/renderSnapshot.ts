@@ -1,4 +1,4 @@
-import { ENDPOINT_RADIUS, toEarthVector } from './earthMath'
+import * as THREE from 'three/webgpu'
 import type { EarthRenderEndpoint, EarthRenderSnapshot } from './rendererTypes'
 import type { EarthHostTraffic, EarthRoute } from './types'
 
@@ -19,7 +19,7 @@ export const createEarthRenderSnapshot = (incomingRoutes: readonly EarthRoute[])
     .map(cloneRoute)
     .sort((left, right) => left.key.localeCompare(right.key))
   const signature = routes
-    .map(({ key }) => key)
+    .map(({ direct, key }) => `${key}:${direct ? 'direct' : 'proxy'}`)
     .sort()
     .join('|')
   const endpoints = new Map<string, EarthRenderEndpoint>()
@@ -30,17 +30,27 @@ export const createEarthRenderSnapshot = (incomingRoutes: readonly EarthRoute[])
       const existing = endpoints.get(key)
 
       if (existing) {
+        if (existing.direct !== undefined && route.direct !== undefined) {
+          existing.direct = existing.direct && route.direct
+        }
         existing.connections += route.connections
-        existing.topHosts = mergeTopHosts(existing.topHosts, route.topHosts)
+        if (point.role === 'destination') {
+          existing.topHosts = mergeTopHosts(existing.topHosts, route.topHosts)
+        }
       } else {
         endpoints.set(key, {
           key,
+          direct: route.direct,
           city: point.city,
           country: point.country,
           role: point.role,
           connections: route.connections,
-          topHosts: [...route.topHosts],
-          position: toEarthVector(point).multiplyScalar(ENDPOINT_RADIUS),
+          topHosts: point.role === 'destination' ? [...route.topHosts] : [],
+          latitude: point.latitude,
+          longitude: point.longitude,
+          // The snapshot stays projection-agnostic; endpointLayer fills this in
+          // for whichever projection is active.
+          position: new THREE.Vector3(),
         })
       }
     }
@@ -52,3 +62,4 @@ export const createEarthRenderSnapshot = (incomingRoutes: readonly EarthRoute[])
     endpoints: [...endpoints.values()],
   } satisfies EarthRenderSnapshot
 }
+
