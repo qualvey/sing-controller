@@ -26,3 +26,7 @@ http://localhost:5174/api/providers/13bc2eeb-5beb-4a34-8886-36139a1519ab
 
 
 [x] 重启核心，内核守护管理器未启用
+
+
+[x] 新建用户，绑定入站，永远是暂无支持user的入站
+[] 新建用户后，保存成功，dialog应该消失

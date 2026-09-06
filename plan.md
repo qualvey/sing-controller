@@ -254,5 +254,7 @@ sing-box 原生支持多配置文件合并（`-c file1.json -c file2.json` 或 `
 - [ ] **出站资产总表 (Outbounds Master Table)**：提供类似 Inbounds/Rules 的平铺出站管理表格，支持来源标识、批量测速与批量分配。
 - [ ] **策略组拓扑校验与环路防护 (Topology & Cyclic Guard)**：后端增加分组嵌套合法性与环路检测机制。
 
+前端 浏览器title
+
 
 

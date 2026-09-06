@@ -186,6 +186,12 @@ controller/
 - **语义化类名**：使用 Tailwind CSS + DaisyUI 语义化 token（如 `bg-base-100`, `bg-base-200`, `text-primary`, `border-base-300`）。
 - **禁止硬编码颜色**：不得写死 `#1f2937` 等 hex 颜色值，确保亮色 (Light) / 暗色 (Dark) 主题下自适应切换。
 
+### 4.6 模块 UI 拼装与列表/弹窗规范 (UI Specification)
+所有配置管理模块（Inbounds、DNS、Outbounds、Routes 等）必须严格按照 [UI规范与页面拼装指南.md](file:///c:/Users/Ryu/Documents/sing-box-webui/docs/UI规范与页面拼装指南.md) 的标准积木拼装：
+1. **列表表格**：统一采用响应式 Grid 卡片结构（`ProtocolTag` + `HighlightText` + `PortBadge` + 整行点击编辑 + 右侧 Tooltip 删除二次确认）。
+2. **编辑弹窗**：统一采用 `DialogWrapper` + 表单/源码双 Tab（自适应平滑高度联动）+ 顶部“从 JSON 填充（粘贴解析）”入口。
+3. **已彻底移除 `reka-ui` 与 `radix-vue`**：UI 组件一律使用原生 Vue 3 Composition API 构建。
+
 ---
 
 ## 5. 接口设计与协议兼容规范
