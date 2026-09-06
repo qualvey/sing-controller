@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { isBackendAvailable, isSingboxChannelAvailable } from '@/assembly/backend'
+import { isBackendAvailable  } from '@/assembly/backend'
 import DashboardSettings from '@/components/common/DashboardSettings.vue'
 import TextInput from '@/components/common/TextInput.vue'
 // import EditBackendModal from '@/components/settings/backend/EditBackendModal.vue'
@@ -173,7 +173,7 @@ import { syncSettingsFromCore } from '@/helper/autoImportSettings'
 import { showNotification } from '@/helper/notification'
 import { getBackendFromUrl, getLabelFromBackend } from '@/helper/utils'
 import router from '@/router'
-// import { activeUuid, addBackend, backendList, removeBackend } from '@/store/setup'
+import { activeUuid, addBackend, backendList, removeBackend } from '@/store/setup'
 import type { Backend, BackendType } from '@/types'
 import {
   ChevronUpDownIcon,
@@ -188,10 +188,8 @@ import Draggable from 'vuedraggable'
 const { t } = useI18n()
 
 const form = reactive({
-  type: 'clash' as BackendType,
+  type: 'singbox' as BackendType,
   protocol: 'http',
-  host: '127.0.0.1',
-  port: '9090',
   secondaryPath: '',
   password: '',
   label: '',
@@ -257,7 +255,7 @@ const handleSubmit = async (setupForm: SetupForm, quiet = false) => {
 
   try {
     if (setupForm.type === 'singbox') {
-      if (!(await isSingboxChannelAvailable(candidate, 10000))) {
+      if (!(await isBackendAvailable(candidate, 10000))) {
         if (!quiet) alert(t('singboxConnectionFailed'))
         return
       }

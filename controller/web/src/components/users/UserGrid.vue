@@ -1,177 +1,216 @@
 <template>
-  <CardGridContainer
-    :title="$t('users') || '用户池管理'"
-    :count="users.length"
-    :total-count="users.length"
-    :empty-text="$t('noMatchingUsers') || '暂无用户数据'"
-  >
-    <template #actions>
-      <button
-        class="btn btn-primary btn-sm gap-1.5"
-        @click="openCreateUserModal"
-      >
-        <PlusIcon class="h-4 w-4" />
-        {{ $t('createUser') || '新建用户' }}
-      </button>
-    </template>
-
-    <template #empty-actions>
-      <button
-        class="btn btn-primary btn-sm gap-1.5"
-        @click="openCreateUserModal"
-      >
-        <PlusIcon class="h-4 w-4" />
-        {{ $t('createUser') || '新建用户' }}
-      </button>
-    </template>
-
-    <!-- 卡片列表项 -->
-    <CardGridItem
-      v-for="u in users"
-      :key="u.name"
-      :clickable="true"
-      @click="openEditUserModal(u)"
+  <div class="w-full">
+    <!-- 空状态 -->
+    <div
+      v-if="!users.length"
+      class="py-16 text-center text-sm text-base-content/50"
     >
-      <template #icon>
-        <div class="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
-          <UserIcon class="h-4 w-4" />
-        </div>
-      </template>
+      {{ $t('noMatchingUsers') || '暂无匹配的用户' }}
+    </div>
 
-      <template #title>
-        <HighlightText
-          :text="u.name"
-          :filter="usersFilter"
-          class="font-semibold text-sm text-base-content/95"
-        />
-      </template>
+    <!-- 卡片网格列表 -->
+    <div
+      v-else
+      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+    >
+      <div
+        v-for="u in users"
+        :key="u.name"
+        class="group relative flex flex-col justify-between rounded-xl border border-base-content/10 bg-base-100 p-4 transition-all duration-150 hover:border-base-content/25 hover:shadow-md cursor-pointer select-none"
+        @click="openEditUserModal(u)"
+      >
+        <div>
+          <!-- 头部区域：用户头像 + 用户名 + 绑定数胶囊 -->
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+              <div class="size-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <UserIcon class="size-4.5" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-base font-semibold text-base-content tracking-tight truncate">
+                  <HighlightText
+                    :text="u.name"
+                    :filter="usersFilter"
+                  />
+                </div>
+              </div>
+            </div>
 
-      <template #subtitle>
-        <div class="flex flex-col gap-0.5 mt-0.5 text-xs">
-          <!-- UUID -->
-          <div
-            v-if="u.uuid"
-            class="flex items-center gap-1 font-mono text-[11px] text-base-content/60"
-          >
-            <span class="text-base-content/40">UUID:</span>
-            <span class="truncate max-w-[140px]">{{ u.uuid }}</span>
-            <button
-              type="button"
-              class="hover:text-base-content text-base-content/40 transition-colors p-0.5"
-              title="复制 UUID"
-              @click.stop="copyText(u.uuid, 'UUID')"
-            >
-              <ClipboardDocumentIcon class="h-3 w-3" />
-            </button>
-          </div>
-
-          <!-- Password -->
-          <div
-            v-if="u.password"
-            class="flex items-center gap-1 font-mono text-[11px] text-base-content/60"
-          >
-            <span class="text-base-content/40">PWD:</span>
-            <span>{{ showPasswords[u.name] ? u.password : '••••••' }}</span>
-            <button
-              type="button"
-              class="hover:text-base-content text-base-content/40 transition-colors p-0.5"
-              :title="showPasswords[u.name] ? '隐藏密码' : '显示密码'"
-              @click.stop="togglePassword(u.name)"
-            >
-              <EyeSlashIcon
-                v-if="showPasswords[u.name]"
-                class="h-3 w-3"
-              />
-              <EyeIcon
+            <!-- 右侧入站数量徽章 -->
+            <div class="shrink-0">
+              <span
+                v-if="(u.bound_inbounds || []).length"
+                class="inline-flex items-center text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 leading-tight"
+              >
+                {{ (u.bound_inbounds || []).length }} Inbounds
+              </span>
+              <span
                 v-else
-                class="h-3 w-3"
-              />
-            </button>
-            <button
-              type="button"
-              class="hover:text-base-content text-base-content/40 transition-colors p-0.5"
-              title="复制密码"
-              @click.stop="copyText(u.password, '密码')"
+                class="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full bg-base-200 text-base-content/50 leading-tight"
+              >
+                未绑定
+              </span>
+            </div>
+          </div>
+
+          <!-- 核心元数据（UUID / Password / Flow） -->
+          <div class="mt-3 flex flex-col gap-2 rounded-lg bg-base-200/50 p-2.5 text-xs">
+            <!-- UUID -->
+            <div
+              v-if="u.uuid"
+              class="flex items-center justify-between gap-2 font-mono text-[11px]"
             >
-              <ClipboardDocumentIcon class="h-3 w-3" />
-            </button>
+              <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                <span class="text-base-content/50 font-medium select-none shrink-0">UUID:</span>
+                <span
+                  class="truncate text-base-content/85 select-all"
+                  :title="u.uuid"
+                >
+                  <HighlightText
+                    :text="u.uuid"
+                    :filter="usersFilter"
+                  />
+                </span>
+              </div>
+              <button
+                type="button"
+                class="btn btn-ghost btn-circle btn-xs text-base-content/40 hover:text-base-content shrink-0"
+                title="复制 UUID"
+                @click.stop="copyText(u.uuid, 'UUID')"
+              >
+                <ClipboardDocumentIcon class="size-3.5" />
+              </button>
+            </div>
+
+            <!-- Password -->
+            <div
+              v-if="u.password"
+              class="flex items-center justify-between gap-2 font-mono text-[11px]"
+            >
+              <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                <span class="text-base-content/50 font-medium select-none shrink-0">PWD:</span>
+                <span class="text-base-content/85 select-all font-mono">
+                  {{ showPasswords[u.name] ? u.password : '••••••••' }}
+                </span>
+              </div>
+              <div
+                class="flex items-center gap-0.5 shrink-0"
+                @click.stop
+              >
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-circle btn-xs text-base-content/40 hover:text-base-content"
+                  :title="showPasswords[u.name] ? '隐藏密码' : '显示明文'"
+                  @click="togglePassword(u.name)"
+                >
+                  <EyeSlashIcon
+                    v-if="showPasswords[u.name]"
+                    class="size-3.5"
+                  />
+                  <EyeIcon
+                    v-else
+                    class="size-3.5"
+                  />
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-circle btn-xs text-base-content/40 hover:text-base-content"
+                  title="复制密码"
+                  @click="copyText(u.password, '密码')"
+                >
+                  <ClipboardDocumentIcon class="size-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <!-- Flow -->
+            <div
+              v-if="u.flow"
+              class="flex items-center justify-between gap-2 text-[11px]"
+            >
+              <span class="text-base-content/50 font-medium select-none">Flow:</span>
+              <span class="inline-flex items-center text-[10px] font-mono px-2 py-0.5 rounded-md bg-base-300/60 text-base-content/80 border border-base-content/10">
+                {{ u.flow }}
+              </span>
+            </div>
           </div>
 
-          <!-- Flow -->
-          <div
-            v-if="u.flow"
-            class="flex items-center gap-1 text-[11px] text-base-content/50"
-          >
-            <span class="text-base-content/40">Flow:</span>
-            <span class="badge badge-xs badge-neutral badge-outline font-mono text-[10px]">{{ u.flow }}</span>
+          <!-- 绑定入站列表区域 -->
+          <div class="mt-3 flex flex-col gap-1.5">
+            <div class="flex items-center justify-between text-[11px] text-base-content/50 font-medium select-none">
+              <span>绑定入站</span>
+              <span>{{ (u.bound_inbounds || []).length }} 个</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5 min-h-6">
+              <template v-if="(u.bound_inbounds || []).length">
+                <span
+                  v-for="t in u.bound_inbounds"
+                  :key="t"
+                  class="inline-flex items-center text-[11px] font-mono font-medium px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 leading-tight select-none"
+                >
+                  <HighlightText
+                    :text="t"
+                    :filter="usersFilter"
+                  />
+                </span>
+              </template>
+              <span
+                v-else
+                class="text-xs text-base-content/30 italic select-none"
+              >
+                未绑定到任何入站
+              </span>
+            </div>
           </div>
         </div>
-      </template>
 
-      <template #badge>
-        <span class="badge badge-sm badge-neutral font-mono font-medium text-[11px] px-2">
-          {{ (u.bound_inbounds || []).length }} Inbounds
-        </span>
-      </template>
-
-      <!-- 底部：绑定入站 Tags + 操作按钮 -->
-      <template #tags>
-        <div class="flex flex-wrap items-center gap-1 max-w-full">
-          <span
-            v-for="t in u.bound_inbounds || []"
-            :key="t"
-            class="badge badge-xs badge-primary badge-outline text-[10px] font-mono"
+        <!-- 底部独立操作栏 -->
+        <div
+          class="mt-4 flex items-center justify-end gap-1.5 border-t border-base-content/10 pt-3"
+          @click.stop
+        >
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs text-primary gap-1"
+            @click="openEditUserModal(u)"
           >
-            <HighlightText
-              :text="t"
-              :filter="usersFilter"
-            />
-          </span>
-          <span
-            v-if="!(u.bound_inbounds || []).length"
-            class="text-base-content/30 text-[11px]"
+            <PencilSquareIcon class="size-3.5" />
+            {{ $t('edit') || '编辑' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs text-error hover:bg-error/10 gap-1"
+            @click="handleRemove(u)"
           >
-            未绑定入站
-          </span>
+            <TrashIcon class="size-3.5" />
+            {{ $t('delete') || '删除' }}
+          </button>
         </div>
-      </template>
-
-      <template #actions>
-        <button
-          class="btn btn-ghost btn-xs text-primary h-7 px-2"
-          @click.stop="openEditUserModal(u)"
-        >
-          {{ $t('edit') || '编辑' }}
-        </button>
-        <button
-          class="btn btn-ghost btn-xs text-error h-7 px-2"
-          @click.stop="handleRemove(u)"
-        >
-          {{ $t('delete') || '删除' }}
-        </button>
-      </template>
-    </CardGridItem>
-  </CardGridContainer>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import type { UserMeta } from '@/api'
 import { deleteUser, usersFilter } from '@/assembly/users'
-import CardGridContainer from '@/components/common/card-grid/CardGridContainer.vue'
-import CardGridItem from '@/components/common/card-grid/CardGridItem.vue'
 import HighlightText from '@/components/common/HighlightText.vue'
-import { openCreateUserModal, openEditUserModal } from '@/composables/userManagement'
+import { openEditUserModal } from '@/composables/userManagement'
 import { showConfirmDialog } from '@/helper/confirmDialog'
 import { showToast } from '@/helper/toast'
 import {
   ClipboardDocumentIcon,
   EyeIcon,
   EyeSlashIcon,
-  PlusIcon,
+  PencilSquareIcon,
+  TrashIcon,
   UserIcon,
 } from '@heroicons/vue/24/outline'
 import { useClipboard } from '@vueuse/core'
 import { reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps<{
   users: UserMeta[]
@@ -191,8 +230,9 @@ const copyText = async (text: string, label: string) => {
 
 const handleRemove = async (u: UserMeta) => {
   const { confirmed } = await showConfirmDialog({
-    title: '删除用户',
-    message: `删除用户 ${u.name}？将从其绑定的所有入站移除`,
+    title: t('delete') || '删除用户',
+    message: `删除用户「${u.name}」？将同时从其绑定的所有入站中移除。`,
+    confirmText: t('delete') || '删除',
     confirmButtonClass: 'btn-error',
   })
   if (!confirmed) return

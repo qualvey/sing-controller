@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useResizeObserver } from '@vueuse/core'
 import { showToast } from '@/helper/toast'
+import { showConfirmDialog } from '@/helper/confirmDialog'
+import { ClipboardPasteIcon } from '@lucide/vue'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ChipInput from '@/components/common/ChipInput.vue'
 import { TabsRoot, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -11,6 +15,8 @@ import ResourceSourceTab from '@/components/ResourceSourceTab.vue'
 import type { RouteRule } from '@/api'
 import { useStatusStore } from '@/store/status'
 import { RULE_FIELDS, RULE_GROUPS } from '@/views/routeFields'
+
+const { t } = useI18n()
 
 const props = withDefaults(
   defineProps<{
@@ -38,6 +44,25 @@ const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
 const sourceJson = ref('{}')
 const saving = ref(false)
 const activeTab = ref('form')
+const validateMsg = ref('')
+const formContentRef = ref<HTMLElement>()
+const sharedTabHeight = ref<number>(460)
+
+const jsonDialog = ref(false)
+const jsonText = ref('')
+
+useResizeObserver(formContentRef, (entries) => {
+  const entry = entries[0]
+  if (entry && activeTab.value === 'form' && entry.contentRect.height > 60) {
+    sharedTabHeight.value = Math.max(300, Math.round(entry.contentRect.height))
+  }
+})
+
+const sourceEditorHeight = computed(() => {
+  if (typeof window === 'undefined') return 440
+  const maxAvailable = Math.max(300, Math.floor(window.innerHeight * 0.85 - 170))
+  return Math.min(sharedTabHeight.value, maxAvailable)
+})
 
 const actionOptions = [
   { value: 'route', label: '出站（route）' },
@@ -97,6 +122,7 @@ const loadTags = async () => {
 }
 
 const resetForm = () => {
+  validateMsg.value = ''
   ruleForm.ruleType = 'default'
   ruleForm.mode = 'and'
   ruleForm.rulesJson = ''
@@ -124,6 +150,30 @@ function fillAction(rowRec: Record<string, unknown>) {
   ruleForm.resolve_server = typeof rowRec.server === 'string' ? rowRec.server : ''
 }
 
+function fillRuleForm(rowRec: Record<string, unknown>) {
+  resetForm()
+  if (rowRec.type === 'logical') {
+    ruleForm.ruleType = 'logical'
+    ruleForm.mode = rowRec.mode === 'or' ? 'or' : 'and'
+    ruleForm.rulesJson = Array.isArray(rowRec.rules)
+      ? JSON.stringify(rowRec.rules, null, 2)
+      : ''
+    ruleForm.invert = rowRec.invert === true
+    fillAction(rowRec)
+    return
+  }
+  ruleForm.ruleType = 'default'
+  ruleForm.invert = rowRec.invert === true
+  for (const f of RULE_FIELDS) {
+    const v = rowRec[f.key]
+    if (f.type === 'bool') ruleForm[f.key] = v === true
+    else if (f.type === 'select' || f.type === 'string')
+      ruleForm[f.key] = v == null ? '' : String(v)
+    else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
+  }
+  fillAction(rowRec)
+}
+
 const loadRuleData = async (ruleId: string) => {
   if (!ruleId) {
     resetForm()
@@ -144,26 +194,7 @@ const loadRuleData = async (ruleId: string) => {
     }
     const { id: _omit, ...ruleBody } = rowRec
     sourceJson.value = JSON.stringify(ruleBody, null, 2)
-    if (rowRec.type === 'logical') {
-      ruleForm.ruleType = 'logical'
-      ruleForm.mode = rowRec.mode === 'or' ? 'or' : 'and'
-      ruleForm.rulesJson = Array.isArray(rowRec.rules)
-        ? JSON.stringify(rowRec.rules, null, 2)
-        : ''
-      ruleForm.invert = rowRec.invert === true
-      fillAction(rowRec)
-      return
-    }
-    ruleForm.ruleType = 'default'
-    ruleForm.invert = rowRec.invert === true
-    for (const f of RULE_FIELDS) {
-      const v = rowRec[f.key]
-      if (f.type === 'bool') ruleForm[f.key] = v === true
-      else if (f.type === 'select' || f.type === 'string')
-        ruleForm[f.key] = v == null ? '' : String(v)
-      else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
-    }
-    fillAction(rowRec)
+    fillRuleForm(rowRec)
   } catch (e) {
     showToast((e as Error).message || '获取规则详情失败', 'error')
   }
@@ -174,6 +205,7 @@ watch(
   ([visible, id, isEdit]) => {
     if (visible) {
       activeTab.value = 'form'
+      validateMsg.value = ''
       void loadTags()
       if (isEdit && id) {
         void loadRuleData(String(id))
@@ -185,6 +217,16 @@ watch(
   },
   { immediate: true }
 )
+
+watch(activeTab, (tab) => {
+  if (tab === 'source' && !srcTab.value?.isDirty()) {
+    try {
+      sourceJson.value = JSON.stringify(buildRule(), null, 2)
+    } catch {
+      // ignore
+    }
+  }
+})
 
 function buildRule(): RouteRule {
   const rule: RouteRule = {}
@@ -242,6 +284,31 @@ function buildAction(rule: RouteRule) {
   }
 }
 
+const fillFromJson = () => {
+  jsonText.value = ''
+  jsonDialog.value = true
+}
+
+const doFillFromJson = async () => {
+  try {
+    let parsed: Record<string, unknown>
+    try {
+      const res = await api.parseJson(jsonText.value)
+      parsed = (res?.data || res) as Record<string, unknown>
+    } catch {
+      parsed = JSON.parse(jsonText.value)
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('解析内容必须为 JSON 对象')
+    }
+    fillRuleForm(parsed)
+    jsonDialog.value = false
+    showToast('已从 JSON 填充，请检查表单', 'success')
+  } catch (e) {
+    showToast((e as Error).message || '解析失败', 'error')
+  }
+}
+
 const handleResult = (res: unknown) => {
   const r = (res ?? {}) as { reload_error?: string; message?: string }
   if (r.reload_error) {
@@ -252,7 +319,9 @@ const handleResult = (res: unknown) => {
 }
 
 const save = async () => {
+  validateMsg.value = ''
   if (isRouteAction.value && !String(ruleForm.outbound)) {
+    validateMsg.value = '出站（outbound）必选'
     showToast('出站（outbound）必选', 'warning')
     return
   }
@@ -269,7 +338,33 @@ const save = async () => {
     await statusStore.refresh()
   } catch (e) {
     statusStore.clearReloading()
+    validateMsg.value = (e as Error).message || '操作失败'
     showToast((e as Error).message || '操作失败', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+const handleDelete = async () => {
+  if (!props.id) return
+  const { confirmed } = await showConfirmDialog({
+    title: t('delete') || '删除规则',
+    message: '确定删除此路由规则？该操作不可恢复。',
+    confirmText: t('delete') || '删除',
+    confirmButtonClass: 'btn-error',
+  })
+  if (!confirmed) return
+  saving.value = true
+  statusStore.markReloading(4000)
+  try {
+    await api.deleteRoute(props.id)
+    showToast('删除成功', 'success')
+    emit('update:modelValue', false)
+    emit('saved', null)
+    await statusStore.refresh()
+  } catch (e) {
+    statusStore.clearReloading()
+    showToast((e as Error).message || '删除失败', 'error')
   } finally {
     saving.value = false
   }
@@ -285,146 +380,237 @@ onMounted(() => {
     :model-value="modelValue"
     :title="isEdit ? '编辑规则' : '新建规则'"
     box-class="max-w-[760px]"
+    :body-class="activeTab === 'source' ? 'overflow-hidden' : 'overflow-y-auto'"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <TabsRoot v-model="activeTab">
-      <TabsList>
+      <TabsList class="self-start shrink-0">
         <TabsTrigger value="form">表单</TabsTrigger>
         <TabsTrigger value="source">源码</TabsTrigger>
       </TabsList>
 
       <TabsContent value="form">
-        <div class="grid gap-x-4 gap-y-5 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
-          <label class="pt-2 text-base-content/70">类型</label>
-          <SelectField
-            v-model="ruleForm.ruleType"
-            :options="[
-              { value: 'default', label: '普通规则（匹配字段）' },
-              { value: 'logical', label: '逻辑组合（and/or 嵌套子规则）' },
-            ]"
-          />
+        <div ref="formContentRef">
+          <div class="mb-4">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              @click="fillFromJson"
+            >
+              <ClipboardPasteIcon class="h-3.5 w-3.5" />
+              从 JSON 填充（粘贴解析）
+            </button>
+            <span class="ml-2 text-xs text-base-content/50">
+              粘贴完整 Route Rule JSON，自动解析并填充下方字段
+            </span>
+          </div>
 
-          <!-- 逻辑组合区域 -->
-          <div class="col-span-2 collapse-row" :class="{ 'is-open': ruleForm.ruleType === 'logical' }">
-            <div class="collapse-inner">
-              <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
-                <label class="pt-2 text-base-content/70">mode <span class="text-destructive">*</span></label>
-                <SelectField v-model="ruleForm.mode" :options="['and', 'or']" />
-                <label class="pt-2 text-base-content/70">invert</label>
-                <Switch v-model="ruleForm.invert" class="self-center" />
-                <label class="pt-2 text-base-content/70">子规则 (JSON) <span class="text-destructive">*</span></label>
-                <div class="flex flex-col gap-1">
-                  <textarea
-                    v-model="ruleForm.rulesJson"
-                    rows="8"
-                    class="textarea textarea-bordered w-full font-mono text-xs"
-                    placeholder='[{"rule_set": "gfw"}, {"clash_mode": "direct"}]'
-                  />
-                  <p class="text-xs text-base-content/50">嵌套子规则为 Rule 数组（可再嵌套 logical）；每个子规则也可带 action</p>
+          <div class="grid gap-x-4 gap-y-5 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
+            <label class="pt-2 text-base-content/70">类型</label>
+            <SelectField
+              v-model="ruleForm.ruleType"
+              :options="[
+                { value: 'default', label: '普通规则（匹配字段）' },
+                { value: 'logical', label: '逻辑组合（and/or 嵌套子规则）' },
+              ]"
+            />
+
+            <!-- 逻辑组合区域 -->
+            <div class="col-span-2 collapse-row" :class="{ 'is-open': ruleForm.ruleType === 'logical' }">
+              <div class="collapse-inner">
+                <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
+                  <label class="pt-2 text-base-content/70">mode <span class="text-destructive">*</span></label>
+                  <SelectField v-model="ruleForm.mode" :options="['and', 'or']" />
+                  <label class="pt-2 text-base-content/70">invert</label>
+                  <Switch v-model="ruleForm.invert" class="self-center" />
+                  <label class="pt-2 text-base-content/70">子规则 (JSON) <span class="text-destructive">*</span></label>
+                  <div class="flex flex-col gap-1">
+                    <textarea
+                      v-model="ruleForm.rulesJson"
+                      rows="8"
+                      class="textarea textarea-bordered w-full font-mono text-xs"
+                      placeholder='[{"rule_set": "gfw"}, {"clash_mode": "direct"}]'
+                    />
+                    <p class="text-xs text-base-content/50">嵌套子规则为 Rule 数组（可再嵌套 logical）；每个子规则也可带 action</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- 普通规则匹配字段区域 -->
-          <div class="col-span-2 collapse-row" :class="{ 'is-open': ruleForm.ruleType === 'default' }">
-            <div class="collapse-inner">
-              <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
-                <div
-                  class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
-                  style="grid-column: 1 / -1"
-                >
-                  <span class="border-base-content/10 h-px flex-1 border-t" />匹配条件<span class="border-base-content/10 h-px flex-1 border-t" />
-                </div>
-                <template v-for="g in RULE_GROUPS" :key="g">
+            <!-- 普通规则匹配字段区域 -->
+            <div class="col-span-2 collapse-row" :class="{ 'is-open': ruleForm.ruleType === 'default' }">
+              <div class="collapse-inner">
+                <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
                   <div
-                    class="flex items-center gap-2 text-xs font-semibold text-base-content/50"
+                    class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
                     style="grid-column: 1 / -1"
                   >
-                    <span class="border-base-content/10 h-px flex-1 border-t" />{{ g }}<span class="border-base-content/10 h-px flex-1 border-t" />
+                    <span class="border-base-content/10 h-px flex-1 border-t" />匹配条件<span class="border-base-content/10 h-px flex-1 border-t" />
                   </div>
-                  <template v-for="f in RULE_FIELDS.filter((x) => x.group === g)" :key="f.key">
-                    <label class="pt-2 text-base-content/70">{{ f.label }}</label>
-                    <ChipInput
-                      v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
-                      v-model="ruleForm[f.key] as string[]"
-                      :placeholder="f.placeholder || '输入后回车添加，可多值'"
-                      :suggestions="fieldOptions(f)"
-                    />
-                    <SelectField
-                      v-else-if="f.type === 'select'"
-                      v-model="ruleForm[f.key]"
-                      :options="fieldOptions(f)"
-                      :placeholder="f.placeholder || '请选择'"
-                    />
-                    <Switch
-                      v-else-if="f.type === 'bool'"
-                      v-model="ruleForm[f.key]"
-                      class="self-center"
-                    />
-                    <input
-                      v-else
-                      v-model="ruleForm[f.key]"
-                      type="text"
-                      class="input input-bordered input-sm w-full"
-                      :placeholder="f.placeholder || '请输入'"
-                    />
+                  <template v-for="g in RULE_GROUPS" :key="g">
+                    <div
+                      class="flex items-center gap-2 text-xs font-semibold text-base-content/50"
+                      style="grid-column: 1 / -1"
+                    >
+                      <span class="border-base-content/10 h-px flex-1 border-t" />{{ g }}<span class="border-base-content/10 h-px flex-1 border-t" />
+                    </div>
+                    <template v-for="f in RULE_FIELDS.filter((x) => x.group === g)" :key="f.key">
+                      <label class="pt-2 text-base-content/70">{{ f.label }}</label>
+                      <ChipInput
+                        v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
+                        v-model="ruleForm[f.key] as string[]"
+                        :placeholder="f.placeholder || '输入后回车添加，可多值'"
+                        :suggestions="fieldOptions(f)"
+                      />
+                      <SelectField
+                        v-else-if="f.type === 'select'"
+                        v-model="ruleForm[f.key]"
+                        :options="fieldOptions(f)"
+                        :placeholder="f.placeholder || '请选择'"
+                      />
+                      <Switch
+                        v-else-if="f.type === 'bool'"
+                        v-model="ruleForm[f.key]"
+                        class="self-center"
+                      />
+                      <input
+                        v-else
+                        v-model="ruleForm[f.key]"
+                        type="text"
+                        class="input input-bordered input-sm w-full"
+                        :placeholder="f.placeholder || '请输入'"
+                      />
+                    </template>
                   </template>
-                </template>
+                </div>
               </div>
+            </div>
+
+            <!-- 动作配置区域 -->
+            <div
+              class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
+              style="grid-column: 1 / -1"
+            >
+              <span class="border-base-content/10 h-px flex-1 border-t" />动作<span class="border-base-content/10 h-px flex-1 border-t" />
+            </div>
+            <label class="pt-2 text-base-content/70">action</label>
+            <SelectField v-model="ruleForm.action" :options="actionOptions" />
+
+            <template v-if="isRouteAction">
+              <label class="pt-2 text-base-content/70">outbound <span class="text-destructive">*</span></label>
+              <SelectField v-model="ruleForm.outbound" :options="outboundTags" placeholder="选择出站" />
+            </template>
+            <template v-else-if="ruleForm.action === 'sniff'">
+              <label class="pt-2 text-base-content/70">sniffer</label>
+              <ChipInput
+                v-model="ruleForm.sniffers as string[]"
+                placeholder="嗅探协议（可多选）"
+                :suggestions="snifferOptions"
+              />
+            </template>
+            <template v-else-if="ruleForm.action === 'resolve'">
+              <label class="pt-2 text-base-content/70">DNS server</label>
+              <input
+                v-model="ruleForm.resolve_server"
+                type="text"
+                class="input input-bordered input-sm w-full"
+                placeholder="DNS 服务器 tag（可选，留空用默认）"
+              />
+            </template>
+
+            <div
+              class="alert alert-info py-2 text-xs leading-relaxed"
+              style="grid-column: 1 / -1"
+            >
+              route=默认出站（选 outbound）；direct=直连；bypass=绕过；reject=拒绝；hijack-dns=DNS 劫持；sniff=协议嗅探；resolve=DNS 解析；route-options=路由选项（参数写在附加字段）
             </div>
           </div>
 
-          <!-- 动作配置区域 -->
-          <div
-            class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
-            style="grid-column: 1 / -1"
+          <p
+            v-if="validateMsg"
+            class="mt-3 text-[0.8rem] font-medium text-destructive"
           >
-            <span class="border-base-content/10 h-px flex-1 border-t" />动作<span class="border-base-content/10 h-px flex-1 border-t" />
-          </div>
-          <label class="pt-2 text-base-content/70">action</label>
-          <SelectField v-model="ruleForm.action" :options="actionOptions" />
-
-          <template v-if="isRouteAction">
-            <label class="pt-2 text-base-content/70">outbound <span class="text-destructive">*</span></label>
-            <SelectField v-model="ruleForm.outbound" :options="outboundTags" placeholder="选择出站" />
-          </template>
-          <template v-else-if="ruleForm.action === 'sniff'">
-            <label class="pt-2 text-base-content/70">sniffer</label>
-            <ChipInput
-              v-model="ruleForm.sniffers as string[]"
-              placeholder="嗅探协议（可多选）"
-              :suggestions="snifferOptions"
-            />
-          </template>
-          <template v-else-if="ruleForm.action === 'resolve'">
-            <label class="pt-2 text-base-content/70">DNS server</label>
-            <input
-              v-model="ruleForm.resolve_server"
-              type="text"
-              class="input input-bordered input-sm w-full"
-              placeholder="DNS 服务器 tag（可选，留空用默认）"
-            />
-          </template>
-
-          <div
-            class="alert alert-info py-2 text-xs leading-relaxed"
-            style="grid-column: 1 / -1"
-          >
-            route=默认出站（选 outbound）；direct=直连；bypass=绕过；reject=拒绝；hijack-dns=DNS 劫持；sniff=协议嗅探；resolve=DNS 解析；route-options=路由选项（参数写在附加字段）
-          </div>
+            {{ validateMsg }}
+          </p>
         </div>
       </TabsContent>
 
       <TabsContent value="source">
-        <ResourceSourceTab ref="srcTab" :initial="sourceJson" />
+        <ResourceSourceTab
+          ref="srcTab"
+          :initial="sourceJson"
+          :height="sourceEditorHeight"
+        />
       </TabsContent>
     </TabsRoot>
 
-    <div class="mt-5 flex justify-end gap-2">
-      <button class="btn btn-ghost btn-sm" @click="emit('update:modelValue', false)">取消</button>
-      <button class="btn btn-primary btn-sm" :disabled="saving" @click="save">保存</button>
-    </div>
+    <template #footer>
+      <div class="flex items-center justify-between w-full">
+        <div>
+          <button
+            v-if="isEdit && id"
+            type="button"
+            class="btn btn-ghost btn-sm text-error hover:bg-error/10"
+            :disabled="saving"
+            @click="handleDelete"
+          >
+            {{ $t('delete') || '删除' }}
+          </button>
+        </div>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            @click="emit('update:modelValue', false)"
+          >
+            {{ $t('cancel') || '取消' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="saving"
+            @click="save"
+          >
+            {{ $t('save') || '保存' }}
+          </button>
+        </div>
+      </div>
+    </template>
+  </DialogWrapper>
+
+  <!-- 从 JSON 填充弹窗 -->
+  <DialogWrapper
+    v-model="jsonDialog"
+    title="从 JSON 填充"
+    box-class="max-w-[560px]"
+  >
+    <textarea
+      v-model="jsonText"
+      rows="10"
+      class="textarea textarea-bordered w-full font-mono text-xs"
+      placeholder='{"action":"route","outbound":"proxy","rule_set":["geoip-cn"]}'
+    />
+    <p class="mt-1 text-xs text-base-content/50">
+      解析成功后填充表单字段（请检查解析结果）
+    </p>
+    <template #footer>
+      <div class="flex justify-end gap-2 w-full">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          @click="jsonDialog = false"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          @click="doFillFromJson"
+        >
+          解析并填充
+        </button>
+      </div>
+    </template>
   </DialogWrapper>
 </template>
 

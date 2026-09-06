@@ -1,16 +1,24 @@
-import { api, type Inbound, type UserMeta } from '@/api'
-import { fetchInbounds as refreshInboundsList, fetchPoolUsers as refreshPoolUsersList } from '@/assembly/inbounds'
+import { api, type UserMeta } from '@/api'
+import {
+  inbounds as globalInbounds,
+  fetchInbounds as refreshInboundsList,
+  fetchPoolUsers as refreshPoolUsersList,
+} from '@/assembly/inbounds'
 import { toSearchRegex } from '@/helper/search'
 import { showToast } from '@/helper/toast'
 import { computed, ref } from 'vue'
 
 export const loading = ref(false)
 export const users = ref<UserMeta[]>([])
-export const inbounds = ref<Inbound[]>([])
+export const inbounds = globalInbounds
 export const usersFilter = ref('')
 
 // 支持 users 的入站类型（与后端一致）
 export const USER_TYPES = [
+  'mixed',
+  'socks',
+  'http',
+  'naive',
   'vless',
   'vmess',
   'trojan',

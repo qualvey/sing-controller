@@ -11,6 +11,22 @@
         />
         <div class="flex-1"></div>
         <button
+          v-if="inboundsTabShow === 'form'"
+          class="btn btn-circle btn-sm btn-primary"
+          :title="$t('createInbound') || '新建入站'"
+          @click="openCreateInboundModal"
+        >
+          <PlusIcon class="h-4 w-4" />
+        </button>
+        <button
+          v-else-if="inboundsTabShow === 'users'"
+          class="btn btn-circle btn-sm btn-primary"
+          :title="$t('createUser') || '新建用户'"
+          @click="openCreateUserModal"
+        >
+          <PlusIcon class="h-4 w-4" />
+        </button>
+        <button
           class="btn btn-circle btn-sm"
           :disabled="loading || usersLoading"
           :title="$t('refresh')"
@@ -62,7 +78,7 @@
 
     <div
       v-else
-      class="flex flex-wrap items-center gap-2 p-2"
+      class="flex flex-wrap items-center gap-2 p-2 pr-4"
     >
       <SegmentedControl
         v-model="inboundsTabShow"
@@ -71,27 +87,43 @@
       <TextInput
         v-if="inboundsTabShow === 'form'"
         v-model="inboundsFilter"
-        class="w-80"
+        class="w-72"
         :placeholder="$t('searchInbounds')"
         :clearable="true"
       />
       <TextInput
         v-else-if="inboundsTabShow === 'users'"
         v-model="usersFilter"
-        class="w-80"
+        class="w-72"
         :placeholder="$t('searchUsers') || '搜索用户名 / UUID / 绑定入站 | Regex'"
         :clearable="true"
       />
       <button
-        class="btn btn-ghost btn-sm gap-1.5"
+        v-if="inboundsTabShow === 'form'"
+        class="btn btn-circle btn-sm btn-primary"
+        :title="$t('createInbound') || '新建入站'"
+        @click="openCreateInboundModal"
+      >
+        <PlusIcon class="h-4 w-4" />
+      </button>
+      <button
+        v-else-if="inboundsTabShow === 'users'"
+        class="btn btn-circle btn-sm btn-primary"
+        :title="$t('createUser') || '新建用户'"
+        @click="openCreateUserModal"
+      >
+        <PlusIcon class="h-4 w-4" />
+      </button>
+      <button
+        class="btn btn-circle btn-sm"
         :disabled="loading || usersLoading"
+        :title="$t('refresh') || '刷新'"
         @click="handleRefresh"
       >
         <ArrowPathIcon
           class="h-4 w-4"
           :class="{ 'animate-spin': loading || usersLoading }"
         />
-        {{ $t('refresh') }}
       </button>
       <div class="flex-1"></div>
       <div
@@ -125,7 +157,9 @@ import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import SegmentedControl, { type SegmentOption } from '@/components/common/SegmentedControl.vue'
 import TextInput from '@/components/common/TextInput.vue'
 import { useCtrlsBar } from '@/composables/useCtrlsBar'
-import { ArrowPathIcon } from '@heroicons/vue/24/outline'
+import { openCreateInboundModal } from '@/composables/inboundManagement'
+import { openCreateUserModal } from '@/composables/userManagement'
+import { ArrowPathIcon, PlusIcon } from '@heroicons/vue/24/outline'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 

@@ -39,7 +39,30 @@ const migrateBackendList = (list: LegacyBackend[]): Backend[] => {
 
   return migrated
 }
+// 切换后端的唯一写入口。切换本身只是改一个 uuid,但后续的一切(会话重启、探测、
+// 提示)都挂在 activeBackend 的 watch 上,散着写 activeUuid 就没有地方能收口。
+export const setActiveBackend = (uuid: string) => {
+  activeUuid.value = uuid
+}
+export const addBackend = (backend: Omit<Backend, 'uuid'>) => {
+  const currentEnd = backendList.value.find((end) => {
+    return isEqual(omit(end, 'uuid'), backend)
+  })
 
+  if (currentEnd) {
+    setActiveBackend(currentEnd.uuid)
+    return currentEnd.uuid
+  }
+
+  const id = uuid()
+
+  backendList.value.push({
+    ...backend,
+    uuid: id,
+  })
+  setActiveBackend(id)
+  return id
+}
 
 export const backendList = ref<Backend[]>([
   { type: 'singbox', protocol: 'sing-box', uuid: '123', label: 'sing-box' }

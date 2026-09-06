@@ -1,6 +1,6 @@
 <template>
   <span
-    class="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-[5px] bg-[#e53535] text-white shrink-0 tracking-[0.01em] font-mono leading-tight select-none"
+    class="inline-flex items-center text-xs font-mono font-medium px-2.5 py-0.5 rounded-md bg-base-200/90 text-base-content/90 border border-base-content/15 shrink-0 tracking-tight leading-none select-none shadow-2xs"
   >
     {{ port }}
   </span>
@@ -11,3 +11,4 @@ defineProps<{
   port: number | string
 }>()
 </script>
+

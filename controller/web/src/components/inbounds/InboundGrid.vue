@@ -142,17 +142,18 @@ defineProps<{
   inbounds: Inbound[]
 }>()
 
-const isUserSupportedType = (type: string) => USER_TYPES.includes(type) || type === 'mixed'
+const isUserSupportedType = (type: string) => USER_TYPES.includes(type)
 
 const getBoundUsers = (row: Inbound): UserMeta[] => {
   const bound = poolUsers.value.filter((u) => u.bound_inbounds?.includes(row.tag))
   if (bound.length > 0) return bound
 
-  if (row.type === 'mixed' && Array.isArray(row.users)) {
+  if (Array.isArray(row.users)) {
     return row.users
       .map((u) => {
-        const item = (u ?? {}) as { username?: string }
-        return item.username ? { name: item.username, bound_inbounds: [row.tag] } : null
+        const item = (u ?? {}) as { username?: string; Username?: string; name?: string }
+        const name = item.username || item.Username || item.name
+        return name ? { name, bound_inbounds: [row.tag] } : null
       })
       .filter((u): u is UserMeta => !!u)
   }

@@ -6,6 +6,7 @@
     @update:model-value="(val) => (!val ? closeUserModal() : null)"
   >
     <form
+      id="userEditForm"
       class="grid gap-x-4 gap-y-5"
       style="grid-template-columns: 120px minmax(0, 1fr)"
       @submit.prevent="onSubmit"
@@ -120,7 +121,7 @@
               class="hover:bg-base-200/50 flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm transition-colors"
             >
               <Checkbox
-                :checked="(boundInbounds || []).includes(i.tag)"
+                :checked="isBound(i.tag)"
                 @update:checked="toggleInbound(i.tag)"
               />
               <span class="font-medium">{{ i.tag }}</span>
@@ -138,27 +139,40 @@
           </div>
         </FormControl>
       </FormItem>
-
-      <div
-        class="mt-2 flex justify-end gap-2"
-        style="grid-column: 2"
-      >
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          @click="closeUserModal"
-        >
-          取消
-        </button>
-        <button
-          type="submit"
-          class="btn btn-primary btn-sm"
-          :disabled="saving"
-        >
-          保存
-        </button>
-      </div>
     </form>
+
+    <template #footer>
+      <div class="flex items-center justify-between w-full">
+        <div>
+          <button
+            v-if="isEditMode && editingUser?.name"
+            type="button"
+            class="btn btn-ghost btn-sm text-error hover:bg-error/10"
+            :disabled="saving"
+            @click="handleDelete"
+          >
+            删除
+          </button>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            @click="closeUserModal"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            form="userEditForm"
+            class="btn btn-primary btn-sm"
+            :disabled="saving"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </template>
   </DialogWrapper>
 </template>
 
@@ -166,11 +180,13 @@
 import type { UserMeta } from '@/api'
 import {
   bindableInbounds,
+  deleteUser,
   generatePassword,
   generateUuid,
   saveUser,
 } from '@/assembly/users'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
+import { showConfirmDialog } from '@/helper/confirmDialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   FormControl,
@@ -253,7 +269,7 @@ watch(isUserModalOpen, async (isOpen) => {
       uuid: u.uuid || '',
       password: u.password || '',
       flow: u.flow || 'none',
-      bound_inbounds: u.bound_inbounds || [],
+      bound_inbounds: [...(u.bound_inbounds || [])],
     })
   } else {
     resetForm()
@@ -274,6 +290,10 @@ const handleGenPassword = async (notify = false) => {
   } finally {
     generating.value = false
   }
+}
+
+const isBound = (tag: string) => {
+  return (boundInbounds.value || []).includes(tag)
 }
 
 const toggleInbound = (tag: string) => {
@@ -302,5 +322,25 @@ const onSubmit = handleSubmit(async (values) => {
     saving.value = false
   }
 })
+
+const handleDelete = async () => {
+  if (!editingUser.value?.name) return
+  const { confirmed } = await showConfirmDialog({
+    title: '删除用户',
+    message: `确定删除用户 "${editingUser.value.name}"？该操作将同时从所有入站配置中移除该用户。`,
+    confirmText: '删除',
+    confirmButtonClass: 'btn-error',
+  })
+  if (!confirmed) return
+  saving.value = true
+  try {
+    const success = await deleteUser(editingUser.value.name)
+    if (success) {
+      closeUserModal()
+    }
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 

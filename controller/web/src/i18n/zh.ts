@@ -19,7 +19,7 @@ const zh: LANG_MESSAGE = {
   createUser: '新建用户',
   searchUsers: '搜索用户名 / UUID / 绑定入站 | Regex',
   noMatchingUsers: '暂无匹配的用户',
-  createInbound: '新建 Inbound',
+  createInbound: '新建入站',
   searchInbounds: '搜索 Inbound / tag / 端口 | Regex',
   noInboundsTip: '暂无入站配置。',
 
@@ -35,9 +35,11 @@ const zh: LANG_MESSAGE = {
   servers: '服务器',
   options: '选项',
   source: '源码',
+  cert: '证书',
   createServer: '新建 Server',
   searchDnsServers: '搜索 DNS Server / tag / 地址 | Regex',
   searchDnsRules: '搜索 DNS 规则 / 域名 / tag | Regex',
+  noDnsServersTip: '暂无匹配的 DNS 服务器',
 
   // 后端类型
   default: '默认',
@@ -206,12 +208,17 @@ const zh: LANG_MESSAGE = {
   ovpnVerifying: '验证中',
 
   // Shared labels and actions
+  name: '名称',
   protocol: '协议',
   host: '主机',
   port: '端口',
+  boundUsers: '绑定用户',
+  unbound: '未绑定',
   password: '密码',
   submit: '提交',
   cancel: '取消',
+  edit: '编辑',
+  actions: '操作',
   delete: '删除',
   download: '下载',
   upload: '上传',
@@ -560,6 +567,7 @@ const zh: LANG_MESSAGE = {
   earthVisualStyle: '地球样式',
   earthVisualStyle_space: '星空',
   earthVisualStyle_flat: '扁平',
+  earthVisualStyle_color: '彩色',
   earthOriginAPI: '公网 IP 服务',
   earthLocalIP: '本机 IP',
   earthToggleIP: '显示或隐藏本机 IP',

@@ -11,7 +11,7 @@
         class="text-base-content/50 py-16 text-center text-sm"
       >
         <span class="loading loading-spinner loading-md text-primary mb-2 block mx-auto"></span>
-        加载 DNS 配置中…
+        {{ $t('loading') || '加载中…' }}
       </div>
 
       <template v-else>

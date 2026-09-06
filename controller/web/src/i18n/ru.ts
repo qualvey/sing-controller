@@ -32,9 +32,11 @@ const ru: LANG_MESSAGE = {
   servers: 'Серверы',
   options: 'Опции',
   source: 'Исходник',
+  cert: 'Сертификаты',
   createServer: 'Создать сервер',
   searchDnsServers: 'Поиск DNS Server / tag / адрес | Regex',
   searchDnsRules: 'Поиск DNS правил / домен / tag | Regex',
+  noDnsServersTip: 'DNS-серверы не найдены',
 
   // Backend type
   default: 'По умолчанию',
@@ -204,12 +206,17 @@ const ru: LANG_MESSAGE = {
   ovpnVerifying: 'Проверка',
 
   // Shared labels and actions
+  name: 'Имя',
   protocol: 'Протокол',
   host: 'Хост',
   port: 'Порт',
+  boundUsers: 'Пользователи',
+  unbound: 'Не привязан',
   password: 'Пароль',
   submit: 'Отправить',
   cancel: 'Отмена',
+  edit: 'Редактировать',
+  actions: 'Действия',
   delete: 'Удалить',
   download: 'Загружено',
   upload: 'Отправлено',
@@ -569,6 +576,7 @@ const ru: LANG_MESSAGE = {
   earthVisualStyle: 'Стиль глобуса',
   earthVisualStyle_space: 'Космос',
   earthVisualStyle_flat: 'Плоский',
+  earthVisualStyle_color: 'Цветной',
   earthOriginAPI: 'Сервис публичного IP',
   earthLocalIP: 'Локальный IP',
   earthToggleIP: 'Показать или скрыть локальный IP',

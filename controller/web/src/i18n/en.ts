@@ -33,9 +33,11 @@ const en = {
   servers: 'Servers',
   options: 'Options',
   source: 'Source',
+  cert: 'Certificates',
   createServer: 'Create Server',
   searchDnsServers: 'Search DNS Server / Tag / Address | Regex',
   searchDnsRules: 'Search DNS Rule / Domain / Tag | Regex',
+  noDnsServersTip: 'No matching DNS servers found',
 
   // Backend type
   default: 'Default',
@@ -205,12 +207,17 @@ const en = {
   ovpnVerifying: 'Verifying',
 
   // Shared labels and actions
+  name: 'Name',
   protocol: 'Protocol',
   host: 'Host',
   port: 'Port',
+  boundUsers: 'Bound Users',
+  unbound: 'Unbound',
   password: 'Password',
   submit: 'Submit',
   cancel: 'Cancel',
+  edit: 'Edit',
+  actions: 'Actions',
   delete: 'Delete',
   download: 'Download',
   upload: 'Upload',
@@ -569,6 +576,7 @@ const en = {
   earthVisualStyle: 'Globe style',
   earthVisualStyle_space: 'Space',
   earthVisualStyle_flat: 'Flat',
+  earthVisualStyle_color: 'Color',
   earthOriginAPI: 'Public IP service',
   earthLocalIP: 'Local IP',
   earthToggleIP: 'Show or hide local IP',

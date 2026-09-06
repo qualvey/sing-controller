@@ -15,7 +15,7 @@ const zhTW: LANG_MESSAGE = {
   routes: '路由',
   dns: 'DNS',
   users: '使用者',
-  createInbound: '新建 Inbound',
+  createInbound: '新建入站',
   searchInbounds: '搜尋 Inbound / tag / 埠 | Regex',
   noInboundsTip: '暫無入站配置。',
 
@@ -32,9 +32,11 @@ const zhTW: LANG_MESSAGE = {
   servers: '伺服器',
   options: '選項',
   source: '原始碼',
+  cert: '證書',
   createServer: '新增 Server',
   searchDnsServers: '搜尋 DNS Server / tag / 位址 | Regex',
   searchDnsRules: '搜尋 DNS 規則 / 網域名稱 / tag | Regex',
+  noDnsServersTip: '暫無相符的 DNS 伺服器',
 
   // 後端類型
   default: '預設',
@@ -203,12 +205,17 @@ const zhTW: LANG_MESSAGE = {
   ovpnVerifying: '驗證中',
 
   // Shared labels and actions
+  name: '名稱',
   protocol: '協議',
   host: '主機',
   port: '端口',
+  boundUsers: '綁定使用者',
+  unbound: '未綁定',
   password: '密碼',
   submit: '提交',
   cancel: '取消',
+  edit: '編輯',
+  actions: '操作',
   delete: '刪除',
   download: '下載',
   upload: '上傳',
@@ -557,6 +564,7 @@ const zhTW: LANG_MESSAGE = {
   earthVisualStyle: '地球樣式',
   earthVisualStyle_space: '星空',
   earthVisualStyle_flat: '扁平',
+  earthVisualStyle_color: '彩色',
   earthOriginAPI: '公網 IP 服務',
   earthLocalIP: '本機 IP',
   earthToggleIP: '顯示或隱藏本機 IP',

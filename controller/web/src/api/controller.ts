@@ -72,6 +72,7 @@ export interface Inbound {
   tag: string
   listen?: string
   listen_port?: number
+  users?: UserMeta[]
   [key: string]: unknown
 }
 
@@ -128,6 +129,7 @@ export interface CertConfigInfo {
 }
 
 import { getDesktopPort } from './desktop'
+import type { User } from '@/types'
 
 const http = axios.create({
   // 与 vite base 对齐：根路径部署 -> '/api'；子路径部署（VITE_BASE_URL=/webui/）-> '/webui/api'

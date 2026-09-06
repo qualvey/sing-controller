@@ -2,7 +2,7 @@
   <DialogWrapper
     v-model="isOpen"
     :title="isEdit ? t('profiles.editProvider', '编辑订阅源') : t('profiles.addProvider', '添加订阅源')"
-    size="medium"
+    box-class="max-w-[600px]"
   >
     <div class="flex flex-col gap-3 py-2 text-xs">
       <div class="flex flex-col gap-1">
@@ -75,26 +75,44 @@
           </span>
         </label>
       </div>
-      <div class="modal-action mt-2">
-        <button
-          class="btn btn-sm btn-ghost"
-          @click="isOpen = false"
-        >
-          {{ t('common.cancel', '取消') }}
-        </button>
-        <button
-          class="btn btn-sm btn-primary"
-          :disabled="!form.tag || !form.url || isSaving"
-          @click="handleSave"
-        >
-          <span
-            v-if="isSaving"
-            class="loading loading-spinner loading-xs"
-          />
-          {{ t('profiles.saveAndPull', '保存并拉取') }}
-        </button>
-      </div>
     </div>
+
+    <template #footer>
+      <div class="flex items-center justify-between w-full">
+        <div>
+          <button
+            v-if="isEdit && form.id"
+            type="button"
+            class="btn btn-ghost btn-sm text-error hover:bg-error/10"
+            :disabled="isSaving"
+            @click="handleDelete"
+          >
+            {{ t('common.delete', '删除') }}
+          </button>
+        </div>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            @click="isOpen = false"
+          >
+            {{ t('common.cancel', '取消') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="!form.tag || !form.url || isSaving"
+            @click="handleSave"
+          >
+            <span
+              v-if="isSaving"
+              class="loading loading-spinner loading-xs"
+            />
+            {{ t('profiles.saveAndPull', '保存并拉取') }}
+          </button>
+        </div>
+      </div>
+    </template>
   </DialogWrapper>
 </template>
 
@@ -109,6 +127,8 @@ import {
   type NodeProvider,
 } from '@/api/controller'
 import { showNotification } from '@/helper/notification'
+import { showConfirmDialog } from '@/helper/confirmDialog'
+import { deleteProvider } from '@/composables/profiles'
 
 const props = defineProps<{
   provider?: NodeProvider | null
@@ -187,6 +207,25 @@ const handleSave = async () => {
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '保存订阅源失败'
     showNotification({ content: msg, type: 'alert-error' })
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const handleDelete = async () => {
+  if (!form.id) return
+  const { confirmed } = await showConfirmDialog({
+    title: t('common.delete', '删除订阅源'),
+    message: t('profiles.deleteProviderConfirm', `确定删除订阅源 "${form.name || form.tag}" 吗？此操作不可逆。`),
+    confirmText: t('common.delete', '删除'),
+    confirmButtonClass: 'btn-error',
+  })
+  if (!confirmed) return
+  isSaving.value = true
+  try {
+    await deleteProvider(form.id)
+    isOpen.value = false
+    emit('saved')
   } finally {
     isSaving.value = false
   }

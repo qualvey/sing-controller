@@ -120,11 +120,12 @@ const boundUsers = computed<UserMeta[]>(() => {
   const bound = poolUsers.value.filter((u) => u.bound_inbounds?.includes(props.inbound.tag))
   if (bound.length > 0) return bound
 
-  if (props.inbound.type === 'mixed' && Array.isArray(props.inbound.users)) {
+  if (Array.isArray(props.inbound.users)) {
     return props.inbound.users
       .map((u) => {
-        const item = (u ?? {}) as { username?: string }
-        return item.username ? { name: item.username, bound_inbounds: [props.inbound.tag] } : null
+        const item = (u ?? {}) as { username?: string; Username?: string; name?: string }
+        const name = item.username || item.Username || item.name
+        return name ? { name, bound_inbounds: [props.inbound.tag] } : null
       })
       .filter((u): u is UserMeta => !!u)
   }

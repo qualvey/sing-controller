@@ -8,8 +8,8 @@ export type Backend = {
   // 旧记录缺省按 'clash' 迁移。
   type: BackendType
   protocol: string
-  // host: string
-  // port: string
+  host?: string
+  port?: string
   // secondaryPath: string // 仅 clash
   // password: string // 通用:Clash secret / sing-box gRPC Bearer token
   uuid: string

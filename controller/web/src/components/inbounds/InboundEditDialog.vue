@@ -59,15 +59,38 @@
 
           <!-- mixed -->
           <template v-if="isMixed">
-            <label class="text-base-content/70 pt-2 text-sm">
-              listen <span class="text-destructive">*</span>
-            </label>
-            <input
-              v-model="form.listen"
-              type="text"
-              class="input input-bordered input-sm w-full"
-              placeholder="监听地址，如 127.0.0.1"
-            />
+            <label class="text-base-content/70 pt-2 text-sm">listen</label>
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="form.listen"
+                  type="text"
+                  class="input input-bordered input-sm flex-1 font-mono text-xs"
+                  placeholder=":: (默认全部接口)"
+                />
+                <div class="join shrink-0">
+                  <button
+                    type="button"
+                    class="btn btn-xs join-item"
+                    :class="form.listen === '::' || !form.listen ? 'btn-primary' : 'btn-ghost border-base-content/20'"
+                    @click="form.listen = '::'"
+                  >
+                    全部 (::)
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs join-item"
+                    :class="form.listen === '127.0.0.1' ? 'btn-primary' : 'btn-ghost border-base-content/20'"
+                    @click="form.listen = '127.0.0.1'"
+                  >
+                    localhost
+                  </button>
+                </div>
+              </div>
+              <span class="text-base-content/50 text-[11px]">
+                留空或 :: 监听所有网卡；localhost (127.0.0.1) 仅本机可访问
+              </span>
+            </div>
 
             <label class="text-base-content/70 pt-2 text-sm">
               listen_port <span class="text-destructive">*</span>
@@ -162,15 +185,38 @@
 
           <!-- shadowsocks -->
           <template v-else-if="isShadowsocks">
-            <label class="text-base-content/70 pt-2 text-sm">
-              listen <span class="text-destructive">*</span>
-            </label>
-            <input
-              v-model="form.listen"
-              type="text"
-              class="input input-bordered input-sm w-full"
-              placeholder="监听地址，默认 ::"
-            />
+            <label class="text-base-content/70 pt-2 text-sm">listen</label>
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="form.listen"
+                  type="text"
+                  class="input input-bordered input-sm flex-1 font-mono text-xs"
+                  placeholder=":: (默认全部接口)"
+                />
+                <div class="join shrink-0">
+                  <button
+                    type="button"
+                    class="btn btn-xs join-item"
+                    :class="form.listen === '::' || !form.listen ? 'btn-primary' : 'btn-ghost border-base-content/20'"
+                    @click="form.listen = '::'"
+                  >
+                    全部 (::)
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs join-item"
+                    :class="form.listen === '127.0.0.1' ? 'btn-primary' : 'btn-ghost border-base-content/20'"
+                    @click="form.listen = '127.0.0.1'"
+                  >
+                    localhost
+                  </button>
+                </div>
+              </div>
+              <span class="text-base-content/50 text-[11px]">
+                留空或 :: 监听所有网卡；localhost (127.0.0.1) 仅本机可访问
+              </span>
+            </div>
 
             <label class="text-base-content/70 pt-2 text-sm">
               listen_port <span class="text-destructive">*</span>
@@ -308,15 +354,38 @@
 
           <!-- tuic -->
           <template v-else-if="isTuic">
-            <label class="text-base-content/70 pt-2 text-sm">
-              listen <span class="text-destructive">*</span>
-            </label>
-            <input
-              v-model="form.listen"
-              type="text"
-              class="input input-bordered input-sm w-full"
-              placeholder="监听地址，如 0.0.0.0"
-            />
+            <label class="text-base-content/70 pt-2 text-sm">listen</label>
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="form.listen"
+                  type="text"
+                  class="input input-bordered input-sm flex-1 font-mono text-xs"
+                  placeholder=":: (默认全部接口)"
+                />
+                <div class="join shrink-0">
+                  <button
+                    type="button"
+                    class="btn btn-xs join-item"
+                    :class="form.listen === '::' || !form.listen ? 'btn-primary' : 'btn-ghost border-base-content/20'"
+                    @click="form.listen = '::'"
+                  >
+                    全部 (::)
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs join-item"
+                    :class="form.listen === '127.0.0.1' ? 'btn-primary' : 'btn-ghost border-base-content/20'"
+                    @click="form.listen = '127.0.0.1'"
+                  >
+                    localhost
+                  </button>
+                </div>
+              </div>
+              <span class="text-base-content/50 text-[11px]">
+                留空或 :: 监听所有网卡；localhost (127.0.0.1) 仅本机可访问
+              </span>
+            </div>
 
             <label class="text-base-content/70 pt-2 text-sm">
               listen_port <span class="text-destructive">*</span>
@@ -525,12 +594,37 @@
           <!-- 其他类型 -->
           <template v-else>
             <label class="text-base-content/70 pt-2 text-sm">listen</label>
-            <input
-              v-model="form.listen"
-              type="text"
-              class="input input-bordered input-sm w-full"
-              placeholder="监听地址（可选）"
-            />
+            <div class="flex flex-col gap-1.5">
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="form.listen"
+                  type="text"
+                  class="input input-bordered input-sm flex-1 font-mono text-xs"
+                  placeholder=":: (默认全部接口)"
+                />
+                <div class="join shrink-0">
+                  <button
+                    type="button"
+                    class="btn btn-xs join-item"
+                    :class="form.listen === '::' || !form.listen ? 'btn-primary' : 'btn-ghost border-base-content/20'"
+                    @click="form.listen = '::'"
+                  >
+                    全部 (::)
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-xs join-item"
+                    :class="form.listen === '127.0.0.1' ? 'btn-primary' : 'btn-ghost border-base-content/20'"
+                    @click="form.listen = '127.0.0.1'"
+                  >
+                    localhost
+                  </button>
+                </div>
+              </div>
+              <span class="text-base-content/50 text-[11px]">
+                留空或 :: 监听所有网卡；localhost (127.0.0.1) 仅本机可访问
+              </span>
+            </div>
 
             <label class="text-base-content/70 pt-2 text-sm">listen_port</label>
             <div class="flex gap-2">
@@ -574,23 +668,38 @@
       </TabsContent>
     </TabsRoot>
 
-    <div class="mt-5 flex justify-end gap-2">
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        @click="closeInboundModal"
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        :disabled="saving"
-        @click="handleSave"
-      >
-        保存
-      </button>
-    </div>
+    <template #footer>
+      <div class="flex items-center justify-between w-full">
+        <div>
+          <button
+            v-if="isEditMode && editingInboundTag"
+            type="button"
+            class="btn btn-ghost btn-sm text-error hover:bg-error/10"
+            :disabled="saving"
+            @click="handleDelete"
+          >
+            删除
+          </button>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            @click="closeInboundModal"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="saving"
+            @click="handleSave"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </template>
   </DialogWrapper>
 
   <!-- 从 JSON 填充弹窗 -->
@@ -608,22 +717,24 @@
     <p class="text-base-content/50 mt-1 text-xs">
       解析成功后填充表单字段（type 变化会重置表单，请最后检查）
     </p>
-    <div class="mt-4 flex justify-end gap-2">
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        @click="jsonDialog = false"
-      >
-        取消
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        @click="doFillFromJson"
-      >
-        解析并填充
-      </button>
-    </div>
+    <template #footer>
+      <div class="flex justify-end gap-2 w-full">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          @click="jsonDialog = false"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          @click="doFillFromJson"
+        >
+          解析并填充
+        </button>
+      </div>
+    </template>
   </DialogWrapper>
 </template>
 
@@ -633,6 +744,7 @@ import {
   allocateAvailablePort,
   certProviders,
   createInbound,
+  deleteInbound,
   fetchCertProviders,
   fetchDefaults,
   fetchPoolUsers,
@@ -660,6 +772,7 @@ import {
   isInboundModalOpen,
 } from '@/composables/inboundManagement'
 import { openCreateUserModal } from '@/composables/userManagement'
+import { showConfirmDialog } from '@/helper/confirmDialog'
 import { showToast } from '@/helper/toast'
 import { useStatusStore } from '@/store/status'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
@@ -790,7 +903,7 @@ function num(v: unknown): number | undefined {
 function resetForm(type: string) {
   form.type = type
   form.tag = ''
-  form.listen = ''
+  form.listen = '::'
   form.listen_port = 443
   form.users = [{ username: '', password: '' }]
   form.ssMethod = SS_DEFAULT_METHOD
@@ -854,12 +967,12 @@ watch(
     if (!suppressTypeWatch.value && isInboundModalOpen.value && !isEditMode.value) {
       resetForm(t)
       if (t === 'shadowsocks') {
-        form.listen = SS_DEFAULT_LISTEN
+        form.listen = SS_DEFAULT_LISTEN || '::'
         form.listen_port = SS_DEFAULT_PORT
         form.ssPassword = await generateSsPassword(false)
       } else {
         const defListen = await fetchDefaults()
-        if (defListen) form.listen = defListen
+        form.listen = defListen || '::'
       }
     }
   },
@@ -899,10 +1012,10 @@ watch(isInboundModalOpen, async (isOpen) => {
         : inboundTypes.value[0] || 'mixed',
     )
     const defListen = await fetchDefaults()
-    if (defListen) form.listen = defListen
+    form.listen = defListen || '::'
 
     if (form.type === 'shadowsocks') {
-      form.listen = SS_DEFAULT_LISTEN
+      form.listen = defListen || SS_DEFAULT_LISTEN || '::'
       form.listen_port = SS_DEFAULT_PORT
       form.ssPassword = await generateSsPassword(false)
     } else {
@@ -954,7 +1067,6 @@ const doFillFromJson = async () => {
 function validateForm(): string {
   if (!form.tag.trim()) return 'tag 必填'
   if (isMixed.value || isShadowsocks.value || isTuic.value) {
-    if (!form.listen.trim()) return 'listen 必填'
     if (
       typeof form.listen_port !== 'number' ||
       form.listen_port < 1 ||
@@ -975,8 +1087,11 @@ function validateForm(): string {
 }
 
 function buildBody(): Inbound {
-  const body: Inbound = { type: form.type, tag: form.tag.trim() }
-  if (form.listen.trim()) body.listen = form.listen.trim()
+  const body: Inbound = {
+    type: form.type,
+    tag: form.tag.trim(),
+    listen: form.listen.trim() || '::',
+  }
   if (typeof form.listen_port === 'number') body.listen_port = form.listen_port
 
   if (form.type === 'mixed') {
@@ -1045,6 +1160,26 @@ const handleSave = async () => {
     }
   } catch (e) {
     showToast((e as Error).message || '操作失败', 'error')
+  } finally {
+    saving.value = false
+  }
+}
+
+const handleDelete = async () => {
+  if (!editingInboundTag.value) return
+  const { confirmed } = await showConfirmDialog({
+    title: '删除确认',
+    message: `确定删除 inbound「${editingInboundTag.value}」？该操作不可恢复。`,
+    confirmText: '删除',
+    confirmButtonClass: 'btn-error',
+  })
+  if (!confirmed) return
+  saving.value = true
+  try {
+    const success = await deleteInbound(editingInboundTag.value)
+    if (success) {
+      closeInboundModal()
+    }
   } finally {
     saving.value = false
   }
