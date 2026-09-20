@@ -214,6 +214,7 @@ import { lintGutter } from '@codemirror/lint'
 import { openSearchPanel } from '@codemirror/search'
 import { Compartment, EditorState, Prec } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
+import { EditorView, keymap } from '@codemirror/view'
 import { editorUiTheme } from '@/composables/useCmTheme'
 import {
   ArrowPathIcon,
@@ -288,6 +289,8 @@ const loadConfig = async () => {
     if (typeof text !== 'string') {
       text = JSON.stringify(text, null, 2)
     }
+    // 空文件或只包含空白字符时，Raw API 可能返回看起来“有内容”的换行符。
+    // 这种情况下必须继续走格式化配置回退，否则编辑器会显示为空白。
     if (!text || text.trim() === '' || text.trim() === '{}') {
       try {
         const parsed = await api.config()
@@ -298,7 +301,12 @@ const loadConfig = async () => {
         // ignore fallback error
       }
     }
-    if (editor.value && text) {
+    // Controller 尚未加载出配置时也给编辑器一个明确的 JSON 文本，
+    // 避免出现空白页面；保存前仍会由后端执行 sing-box 完整校验。
+    if (!text || text.trim() === '') {
+      text = '{}\n'
+    }
+    if (editor.value) {
       editor.value.dispatch({
         changes: { from: 0, to: editor.value.state.doc.length, insert: text },
       })
@@ -464,8 +472,15 @@ watch(
   () => props.modelValue,
   (val) => {
     if (val) {
+      // 弹窗通过 Teleport + Transition 渲染，单次 nextTick 时
+      // editorHost 可能尚未挂载；此前会直接 return，导致不会发出
+      // /api/config/raw 请求，最终看到一个空白编辑器。
       nextTick(() => {
-        initEditor()
+        if (editorHost.value) {
+          initEditor()
+        } else {
+          requestAnimationFrame(() => initEditor())
+        }
       })
       window.addEventListener('keydown', handleGlobalKeyDown, { capture: true })
     } else {

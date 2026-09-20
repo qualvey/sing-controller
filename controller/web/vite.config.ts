@@ -156,8 +156,8 @@ export default defineConfig({
     sourcemapIgnoreList: false,
     proxy: {
       '/api': {
-        //target: 'http://localhost:8880',
-        target: 'http://10.0.0.1:80',
+        // 本地开发默认连接本机 Controller；联调时可通过环境变量覆盖。
+        target: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080',
         changeOrigin: true,
         ws: true,
         configure: (proxy) => {
