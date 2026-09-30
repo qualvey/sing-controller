@@ -1,0 +1,14 @@
+{
+  "name": "sing-controller-docs",
+  "version": "1.0.0",
+  "description": "Documentation for sing-box-webui and sing-controller",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.3"
+  }
+}

@@ -69,6 +69,9 @@
       <button class="btn btn-primary btn-sm" :disabled="loading || saving" @click="save">
         {{ saving ? $t('nodeHealthSaving') : $t('save') }}
       </button>
+      <button class="btn btn-outline btn-sm" :disabled="loading || saving || nodeHealthScanning" @click="scanNow">
+        {{ nodeHealthScanning ? $t('nodeHealthScanning') : $t('nodeHealthScanNow') }}
+      </button>
       <span v-if="loadError" class="text-xs text-error">{{ loadError }}</span>
     </div>
   </section>
@@ -77,7 +80,8 @@
 <script setup lang="ts">
 import { api, type NodeHealthConfig } from '@/api/controller'
 import { showToast } from '@/helper/toast'
-import { onMounted, reactive, ref } from 'vue'
+import { nodeHealthScanning, refreshNodeHealth } from '@/store/nodeHealth'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -88,6 +92,7 @@ const tokenConfigured = ref(false)
 const signSecretConfigured = ref(false)
 const clearToken = ref(false)
 const clearSignSecret = ref(false)
+let scanStateTimer: number | undefined
 const form = reactive<NodeHealthConfig>({
   enabled: false,
   interval: '5m',
@@ -101,6 +106,7 @@ const form = reactive<NodeHealthConfig>({
 })
 
 onMounted(async () => {
+  void refreshNodeHealth()
   try {
     const result = await api.nodeHealthConfig()
     Object.assign(form, result.config, {
@@ -115,6 +121,30 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+onUnmounted(() => {
+  if (scanStateTimer !== undefined) window.clearInterval(scanStateTimer)
+})
+
+const scanNow = async () => {
+  try {
+    await api.triggerNodeHealthScan()
+    nodeHealthScanning.value = true
+    showToast(t('nodeHealthScanStarted'), 'info')
+    void refreshNodeHealth()
+    if (scanStateTimer !== undefined) window.clearInterval(scanStateTimer)
+    scanStateTimer = window.setInterval(() => {
+      void refreshNodeHealth().then(() => {
+        if (!nodeHealthScanning.value && scanStateTimer !== undefined) {
+          window.clearInterval(scanStateTimer)
+          scanStateTimer = undefined
+        }
+      })
+    }, 1500)
+  } catch (error) {
+    showToast((error as Error).message || t('nodeHealthScanFailed'), 'error')
+  }
+}
 
 const save = async () => {
   saving.value = true

@@ -12,6 +12,9 @@ export interface StatusInfo {
   config_path: string
   config_exists?: boolean
   controller_config: string
+  controller_version?: string
+  go_os?: string
+  go_arch?: string
   listen: string
   log_level: string
   min_port: number
@@ -153,7 +156,7 @@ export interface CertConfigInfo {
 import { getDesktopPort } from './desktop'
 import { activeBackend } from '@/store/setup'
 import { getUrlFromBackend } from '@/helper/utils'
-import type { User } from '@/types'
+import type { DNSQuery, User } from '@/types'
 
 const http = axios.create({
   // 与 vite base 对齐：根路径部署 -> '/api'；子路径部署（VITE_BASE_URL=/webui/）-> '/webui/api'
@@ -233,7 +236,17 @@ export const api = {
   settings: () => http.get<ControllerSettings>('/settings').then((r) => r.data),
   updateSettings: (s: ControllerSettings) => http.put('/settings', s).then((r) => r.data),
   nodeHealth: () =>
-    http.get<{ enabled: boolean; statuses: Record<string, NodeHealthStatus> }>('/node-health').then((r) => r.data),
+    http
+      .get<{
+        enabled: boolean
+        scanning: boolean
+        scan_queued: boolean
+        last_scan_started?: string
+        last_scan_completed?: string
+        statuses: Record<string, NodeHealthStatus>
+      }>('/node-health')
+      .then((r) => r.data),
+  triggerNodeHealthScan: () => http.post<{ accepted: boolean }>('/node-health/scan').then((r) => r.data),
   nodeHealthConfig: () =>
     http
       .get<{
@@ -307,6 +320,8 @@ export const api = {
     http.put(`/routes/${encodeURIComponent(id)}`, rule).then((r) => r.data),
   deleteRoute: (id: string) =>
     http.delete(`/routes/${encodeURIComponent(id)}`).then((r) => r.data),
+  reorderRoutes: (ids: string[]) =>
+    http.put<{ saved: boolean }>('/routes/order', { ids }).then((r) => r.data),
   toggleRouteDisabled: (id: string, disabled?: boolean) =>
     http.put(`/routes/${encodeURIComponent(id)}/toggle`, { disabled }).then((r) => r.data),
 
@@ -328,6 +343,8 @@ export const api = {
     http
       .post<{ results: Record<string, string> }>('/dns/lookup', { domains })
       .then((r) => r.data.results),
+  queryDNS: (params: { name: string; type?: string }) =>
+    http.get<DNSQuery>('/dns/query', { params }).then((r) => r.data),
 
   // 配置诊断
   diagnostics: () =>

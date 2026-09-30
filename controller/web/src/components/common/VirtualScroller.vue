@@ -1,7 +1,7 @@
 <template>
   <div
     ref="parentRef"
-    class="flex h-full w-full flex-col overflow-y-auto"
+    class="scrollbar-gutter-stable flex h-full w-full flex-col overflow-y-scroll"
   >
     <slot name="before" />
     <div

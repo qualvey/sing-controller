@@ -103,10 +103,12 @@ func normalizeAddr(addr string) string {
 
 func (h *Handler) clashTarget() (*url.URL, string, string) {
 	// 1. controller settings 显式配置优先
-	if v := h.settings.Values(); v.API.Clash != nil && v.API.Clash.Address != "" {
-		addr := normalizeAddr(v.API.Clash.Address)
-		if u, err := url.Parse(addr); err == nil {
-			return u, v.API.Clash.Secret, "settings:" + addr
+	if h.settings != nil {
+		if v := h.settings.Values(); v.API.Clash != nil && v.API.Clash.Address != "" {
+			addr := normalizeAddr(v.API.Clash.Address)
+			if u, err := url.Parse(addr); err == nil {
+				return u, v.API.Clash.Secret, "settings:" + addr
+			}
 		}
 	}
 	// 2. 从 sing-box 配置 experimental.clash_api 推断
@@ -120,6 +122,9 @@ func (h *Handler) clashTarget() (*url.URL, string, string) {
 }
 
 func (h *Handler) clashAPIConfig() *option.ClashAPIOptions {
+	if h.store == nil {
+		return nil
+	}
 	h.store.RLock()
 	defer h.store.RUnlock()
 

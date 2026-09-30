@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/qualvey/sing-controller/internal/logger"
@@ -105,6 +106,9 @@ func (h *Handler) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+		if options.Route == nil {
+			options.Route = &option.RouteOptions{}
+		}
 		newID := store.NewUUID()
 		options.Route.Rules = append(options.Route.Rules, rule)
 		meta.RuleIDs = append(meta.RuleIDs, newID)
@@ -180,6 +184,77 @@ func (h *Handler) handleToggleRoute(w http.ResponseWriter, r *http.Request) {
 			meta.ToggleRuleDisabled(id)
 		}
 		logger.Info("切换 route 规则状态 [id=%s, disabled=%v]", id, meta.IsRuleDisabled(id))
+		return nil
+	})
+}
+
+// handleReorderRoutes 批量调整路由规则执行顺序。
+// @Summary 调整路由规则顺序
+// @Description 按传入的 ID 数组全量调整路由规则的执行顺序
+// @Tags 路由规则
+// @Accept json
+// @Produce json
+// @Param body body object true "有序规则 ID 列表: { \"ids\": [\"uuid1\", \"uuid2\"] }"
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Router /api/routes/order [put]
+func (h *Handler) handleReorderRoutes(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	body, err := readRawBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		logger.Warn("解析重排 route 规则请求体失败: %v", err)
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+		if options.Route == nil || len(options.Route.Rules) == 0 {
+			if len(req.IDs) == 0 {
+				return nil
+			}
+			return errors.New("route 规则列表为空")
+		}
+
+		currentCount := len(options.Route.Rules)
+		if len(req.IDs) != currentCount {
+			return fmt.Errorf("规则数量不匹配: 期望 %d, 收到 %d", currentCount, len(req.IDs))
+		}
+
+		// 确保所有规则在当前 meta 中具备稳定 ID
+		for i := range options.Route.Rules {
+			_ = newRuleID(meta, i)
+		}
+
+		// 构建已有 ID -> Rule 映射并检查传入 ID 的合法性与唯一性
+		ruleMap := make(map[string]option.Rule, currentCount)
+		for i, id := range meta.RuleIDs {
+			ruleMap[id] = options.Route.Rules[i]
+		}
+
+		seen := make(map[string]struct{}, currentCount)
+		newRules := make([]option.Rule, currentCount)
+		for i, id := range req.IDs {
+			if _, exists := seen[id]; exists {
+				return fmt.Errorf("重复的规则 ID: %s", id)
+			}
+			seen[id] = struct{}{}
+
+			rule, ok := ruleMap[id]
+			if !ok {
+				return fmt.Errorf("未知的规则 ID: %s", id)
+			}
+			newRules[i] = rule
+		}
+
+		options.Route.Rules = newRules
+		meta.RuleIDs = req.IDs
+		logger.Info("成功重排 route 规则顺序 (count=%d)", currentCount)
 		return nil
 	})
 }

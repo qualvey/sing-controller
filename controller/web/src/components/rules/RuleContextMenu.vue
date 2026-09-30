@@ -8,7 +8,8 @@ import {
   closeRuleContextMenu,
   openEditRouteModal
 } from '@/composables/ruleContextMenu'
-import { fetchRules, toggleRuleDisabled } from '@/assembly/rules'
+import { fetchRules, reorderRules, rules, toggleRuleDisabled } from '@/assembly/rules'
+import { Channel, channel } from '@/assembly/backend'
 import { api } from '@/api'
 import { showToast } from '@/helper/toast'
 import { showConfirmDialog } from '@/helper/confirmDialog'
@@ -17,7 +18,11 @@ import {
   TrashIcon,
   DocumentDuplicateIcon,
   NoSymbolIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  BarsArrowUpIcon,
+  BarsArrowDownIcon,
 } from '@heroicons/vue/24/outline'
 
 const { t } = useI18n()
@@ -34,6 +39,84 @@ const isDisabled = computed(() => {
   const r = target.value.rule
   return r.extra ? r.extra.disabled : r.disabled
 })
+
+const canReorderInContext = computed(() => {
+  return channel.value === Channel.Singbox && rules.value.length > 1
+})
+
+const isFirst = computed(() => {
+  if (!target.value) return false
+  return target.value.index <= 1
+})
+
+const isLast = computed(() => {
+  if (!target.value) return false
+  return target.value.index >= rules.value.length
+})
+
+const handleMoveUp = async () => {
+  if (!target.value || isFirst.value) return
+  const curIdx = target.value.index - 1
+  closeRuleContextMenu()
+  const newList = [...rules.value]
+  const [item] = newList.splice(curIdx, 1)
+  newList.splice(curIdx - 1, 0, item)
+  try {
+    await reorderRules(newList)
+    showToast(t('reorderRulesSuccess') || '规则顺序已更新', 'success')
+  } catch (e: any) {
+    showToast(e.message || '移动失败', 'error')
+    await fetchRules()
+  }
+}
+
+const handleMoveDown = async () => {
+  if (!target.value || isLast.value) return
+  const curIdx = target.value.index - 1
+  closeRuleContextMenu()
+  const newList = [...rules.value]
+  const [item] = newList.splice(curIdx, 1)
+  newList.splice(curIdx + 1, 0, item)
+  try {
+    await reorderRules(newList)
+    showToast(t('reorderRulesSuccess') || '规则顺序已更新', 'success')
+  } catch (e: any) {
+    showToast(e.message || '移动失败', 'error')
+    await fetchRules()
+  }
+}
+
+const handleMoveToTop = async () => {
+  if (!target.value || isFirst.value) return
+  const curIdx = target.value.index - 1
+  closeRuleContextMenu()
+  const newList = [...rules.value]
+  const [item] = newList.splice(curIdx, 1)
+  newList.unshift(item)
+  try {
+    await reorderRules(newList)
+    showToast(t('reorderRulesSuccess') || '规则顺序已更新', 'success')
+  } catch (e: any) {
+    showToast(e.message || '置顶失败', 'error')
+    await fetchRules()
+  }
+}
+
+const handleMoveToBottom = async () => {
+  if (!target.value || isLast.value) return
+  const curIdx = target.value.index - 1
+  closeRuleContextMenu()
+  const newList = [...rules.value]
+  const [item] = newList.splice(curIdx, 1)
+  newList.push(item)
+  try {
+    await reorderRules(newList)
+    showToast(t('reorderRulesSuccess') || '规则顺序已更新', 'success')
+  } catch (e: any) {
+    showToast(e.message || '置底失败', 'error')
+    await fetchRules()
+  }
+}
 
 const handleEditRule = () => {
   if (!target.value) return
@@ -184,6 +267,45 @@ onBeforeUnmount(() => {
               <span>{{ t('copyRule') || '复制规则内容' }}</span>
             </button>
           </li>
+          <template v-if="canReorderInContext">
+            <div class="h-px bg-base-200 dark:bg-base-300 my-0.5" />
+            <li v-if="!isFirst">
+              <button
+                class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
+                @click="handleMoveToTop"
+              >
+                <BarsArrowUpIcon class="h-4 w-4 shrink-0 opacity-70" />
+                <span>{{ t('moveRuleToTop') || '置顶规则' }}</span>
+              </button>
+            </li>
+            <li v-if="!isFirst">
+              <button
+                class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
+                @click="handleMoveUp"
+              >
+                <ArrowUpIcon class="h-4 w-4 shrink-0 opacity-70" />
+                <span>{{ t('moveRuleUp') || '上移规则' }}</span>
+              </button>
+            </li>
+            <li v-if="!isLast">
+              <button
+                class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
+                @click="handleMoveDown"
+              >
+                <ArrowDownIcon class="h-4 w-4 shrink-0 opacity-70" />
+                <span>{{ t('moveRuleDown') || '下移规则' }}</span>
+              </button>
+            </li>
+            <li v-if="!isLast">
+              <button
+                class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
+                @click="handleMoveToBottom"
+              >
+                <BarsArrowDownIcon class="h-4 w-4 shrink-0 opacity-70" />
+                <span>{{ t('moveRuleToBottom') || '置底规则' }}</span>
+              </button>
+            </li>
+          </template>
           <div class="h-px bg-base-200 dark:bg-base-300 my-0.5" />
           <li>
             <button

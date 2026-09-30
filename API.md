@@ -93,6 +93,7 @@
 | **Controller 设置** | `GET` | `/api/settings` | 读取 controller 自身运行设置 |
 | | `PUT` | `/api/settings` | 更新 controller 运行设置 |
 | **节点健康探测** | `GET` | `/api/node-health` | 获取节点可用状态与最近探测结果 |
+| | `POST` | `/api/node-health/scan` | 手动触发一次探测扫描；扫描完成后重置自动探测间隔 |
 | | `GET` | `/api/node-health/config` | 读取探测与 webhook 配置（Webhook 凭据不回传） |
 | | `PUT` | `/api/node-health/config` | 更新探测与 webhook 配置 |
 | | `GET` | `/api/ports/available` | 探测并分配下一个可用 TCP 端口 |
@@ -112,6 +113,7 @@
 | | `DELETE` | `/api/outbounds/{tag}` | 删除出站（支持 `?force=true`） |
 | **路由规则 (Routes)** | `GET` | `/api/routes` | 获取路由规则列表及 final 出站 |
 | | `POST` | `/api/routes` | 新建路由规则 |
+| | `PUT` | `/api/routes/order` | 批量调整路由规则顺序 (拖拽重排) |
 | | `GET` | `/api/routes/{id}` | 获取指定路由规则详情 |
 | | `PUT` | `/api/routes/{id}` | 替换指定路由规则 |
 | | `DELETE` | `/api/routes/{id}` | 删除路由规则 |
@@ -124,6 +126,8 @@
 | | `PUT` | `/api/dns/rules/{id}` | 替换 DNS 规则 |
 | | `DELETE` | `/api/dns/rules/{id}` | 删除 DNS 规则 |
 | | `PUT` | `/api/dns/options` | 更新全局 DNS 基础选项 |
+| | `GET` | `/api/dns/query` | 实时 DNS 解析查询 (A/AAAA/HTTPS/PTR/CNAME 等) |
+| | `POST` | `/api/dns/lookup` | 批量域名并发解析为 IP (工具/地球仪专用) |
 | **规则集 (Rule-Sets)**| `GET` | `/api/rule-sets` | 获取规则集列表 |
 | | `POST` | `/api/rule-sets` | 新建规则集 (inline / local / remote) |
 | | `PUT` | `/api/rule-sets/{id}` | 替换规则集配置 |
@@ -582,6 +586,20 @@ Clash API 透明反向代理，无缝转发到 sing-box 的 `experimental.clash_
   ```
 - **Response `200 OK`**: `{"saved": true}`
 
+#### PUT `/api/routes/order`
+批量调整路由规则的执行顺序（支持拖拽排序）。
+- **Request Body**:
+  ```json
+  {
+    "ids": [
+      "c3d4e5f6-789a-bcde-f012-3456789abcde",
+      "9fbf4c91-a7ab-4494-9e77-d4fb7d410a2f"
+    ]
+  }
+  ```
+- **Response `200 OK`**: `{"saved": true}`
+- **Response `400 Bad Request`**: `{"error": "规则数量不匹配: 期望 3, 收到 2"}`
+
 ---
 
 ### 3.8 DNS 管理
@@ -687,6 +705,54 @@ Clash API 透明反向代理，无缝转发到 sing-box 的 `experimental.clash_
   }
   ```
 - **Response `200 OK`**: `{"saved": true}`
+
+#### GET `/api/dns/query`
+实时执行单条域名 DNS 解析查询（用于设置页-后端诊断工具及 PTR 反向解析）。
+- **Query Parameters**:
+  - `name` *(string, 必填)*: 待查询域名或 IP 反向解析名称（如 `www.google.com` 或 `1.0.0.127.in-addr.arpa`）。
+  - `type` *(string, 可选, 默认 `A`)*: DNS 记录类型（支持 `A`, `AAAA`, `HTTPS`, `CNAME`, `PTR`, `TXT`, `MX` 等）。
+- **Response `200 OK`**:
+  ```json
+  {
+    "Status": 0,
+    "status": 0,
+    "TC": false,
+    "RD": true,
+    "RA": true,
+    "AD": false,
+    "CD": false,
+    "Question": [
+      { "name": "www.google.com.", "type": 1, "class": 1 }
+    ],
+    "Answer": [
+      {
+        "name": "www.google.com.",
+        "type": 1,
+        "TTL": 300,
+        "data": "142.250.190.46"
+      }
+    ],
+    "Server": "223.5.5.5:53"
+  }
+  ```
+
+#### POST `/api/dns/lookup`
+批量并发域名 IP 解析（3D 地球仪/出站连通性可视化专用）。
+- **Request Body**:
+  ```json
+  {
+    "domains": ["google.com", "github.com"]
+  }
+  ```
+- **Response `200 OK`**:
+  ```json
+  {
+    "results": {
+      "google.com": "142.250.190.46",
+      "github.com": "20.205.243.166"
+    }
+  }
+  ```
 
 ---
 

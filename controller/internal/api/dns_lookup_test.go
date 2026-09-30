@@ -83,3 +83,70 @@ func TestDNSLookup(t *testing.T) {
 		}
 	})
 }
+
+func TestDNSQuery(t *testing.T) {
+	h := &Handler{}
+
+	t.Run("missing name parameter", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/dns/query", nil)
+		w := httptest.NewRecorder()
+
+		h.handleDNSQuery(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected status 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("invalid query type", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/dns/query?name=google.com&type=INVALID_TYPE", nil)
+		w := httptest.NewRecorder()
+
+		h.handleDNSQuery(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected status 400, got %d", w.Code)
+		}
+	})
+
+	t.Run("valid query structure", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/dns/query?name=localhost&type=A", nil)
+		w := httptest.NewRecorder()
+
+		h.handleDNSQuery(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d (body=%s)", w.Code, w.Body.String())
+		}
+
+		var res struct {
+			Status   int `json:"Status"`
+			Question []struct {
+				Name string `json:"name"`
+				Type int    `json:"type"`
+			} `json:"Question"`
+			Answer []struct {
+				Name string `json:"name"`
+				Type int    `json:"type"`
+				TTL  int    `json:"TTL"`
+				Data string `json:"data"`
+			} `json:"Answer"`
+			Server string `json:"Server"`
+		}
+
+		if err := json.NewDecoder(w.Body).Decode(&res); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if len(res.Question) == 0 {
+			t.Fatalf("expected non-empty question section")
+		}
+		if res.Question[0].Name != "localhost." {
+			t.Errorf("expected localhost., got %s", res.Question[0].Name)
+		}
+		if res.Server == "" {
+			t.Errorf("expected server to be populated")
+		}
+	})
+}
+

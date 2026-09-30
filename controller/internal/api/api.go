@@ -1,6 +1,19 @@
 // Package api 提供 RESTful 配置管理 API。
 // 设计原则：所有写操作走 store.Update 校验管线（解码 → box.New 干跑 → 原子写盘），
 // 校验失败一律不落盘、内存回滚。
+//
+// @title sing-controller API
+// @version 1.0
+// @description sing-box 现代化配置管理服务与内核生命周期控制 API
+// @description 本项目以 sing-box gRPC API 为第一公民，优先保证 sing-box gRPC 接口可用，Clash API 作为可选项。
+// @contact.name sing-controller Support
+// @contact.url https://github.com/qualvey/sing-controller
+// @license.name Apache-2.0
+// @host localhost:8080
+// @BasePath /
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name X-Secret
 package api
 
 import (
@@ -95,6 +108,8 @@ func NewHandler(opts HandlerOptions) *Handler {
 		mux.HandleFunc("/", h.handleRoot)
 	}
 	mux.HandleFunc("GET /healthz", h.handleHealthz)
+	mux.HandleFunc("GET /api/docs", h.handleAPIDocs)
+	mux.HandleFunc("GET /api/swagger.json", h.handleSwaggerJSON)
 
 	// 状态 / 配置 / 设置
 	mux.HandleFunc("GET /api/status", h.handleStatus)
@@ -107,6 +122,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 	mux.HandleFunc("GET /api/settings", h.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", h.handlePutSettings)
 	mux.HandleFunc("GET /api/node-health", h.handleNodeHealth)
+	mux.HandleFunc("POST /api/node-health/scan", h.handleTriggerNodeHealthScan)
 	mux.HandleFunc("GET /api/node-health/config", h.handleGetNodeHealthConfig)
 	mux.HandleFunc("PUT /api/node-health/config", h.handlePutNodeHealthConfig)
 	mux.HandleFunc("GET /api/ports/available", h.handlePortAvailable)
@@ -174,6 +190,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 	// route rule CRUD（简单规则，id 存于 meta 旁车）
 	mux.HandleFunc("GET /api/routes", h.handleListRoutes)
 	mux.HandleFunc("POST /api/routes", h.handleCreateRoute)
+	mux.HandleFunc("PUT /api/routes/order", h.handleReorderRoutes)
 	mux.HandleFunc("GET /api/routes/{id}", h.handleGetRoute)
 	mux.HandleFunc("PUT /api/routes/{id}", h.handleUpdateRoute)
 	mux.HandleFunc("DELETE /api/routes/{id}", h.handleDeleteRoute)
@@ -190,6 +207,8 @@ func NewHandler(opts HandlerOptions) *Handler {
 	mux.HandleFunc("DELETE /api/dns/rules/{id}", h.handleDeleteDNSRule)
 	mux.HandleFunc("PUT /api/dns/options", h.handlePutDNSOptions)
 	mux.HandleFunc("POST /api/dns/lookup", h.handleDNSLookup)
+	mux.HandleFunc("GET /api/dns/query", h.handleDNSQuery)
+	mux.HandleFunc("GET /dns/query", h.handleDNSQuery)
 
 	// 诊断
 	mux.HandleFunc("GET /api/diagnostics", h.handleDiagnostics)
@@ -303,8 +322,9 @@ func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 			}
 		}()
 
-		// 鉴权
-		if h.secret != "" {
+		// 鉴权 (对 /healthz, /api/docs, /api/swagger.json 免除鉴权)
+		isPublic := r.URL.Path == "/healthz" || r.URL.Path == "/api/docs" || r.URL.Path == "/api/swagger.json"
+		if h.secret != "" && !isPublic {
 			if r.Header.Get("X-Secret") != h.secret && r.URL.Query().Get("token") != h.secret {
 				logger.Warn("鉴权失败: IP=%s Path=%s", clientIP(r), r.URL.Path)
 				writeError(wrapped, http.StatusUnauthorized, errors.New("invalid secret"))
@@ -339,6 +359,12 @@ func (h *Handler) handleRoot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// @Summary 健康检查探针
+// @Description 基础 liveness 探针，无需鉴权
+// @Tags System
+// @Produce json
+// @Success 200 {object} map[string]any
+// @Router /healthz [get]
 func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
@@ -418,8 +444,14 @@ func readRawBody(r *http.Request) ([]byte, error) {
 	return content, nil
 }
 
-// ---------- status ----------
-
+// @Summary 获取系统综合状态
+// @Description 返回控制器与 sing-box 内核运行状态、入站/出站/规则计数、版本与配置路径
+// @Tags System
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]any
+// @Failure 401 {object} map[string]any
+// @Router /api/status [get]
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	ruleCount := 0
 	inboundsCount := 0
@@ -447,10 +479,18 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 		logLevel = values.Log.Level
 	}
 
+	ctrlVersion := h.version
+	if ctrlVersion == "" {
+		ctrlVersion = "dev"
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"config_path":        configPath,
 		"config_exists":      configExists,
 		"controller_config":  h.settings.Path(),
+		"controller_version": ctrlVersion,
+		"go_os":              runtime.GOOS,
+		"go_arch":            runtime.GOARCH,
 		"listen":             values.Server.Addr(),
 		"log_level":          logLevel,
 		"inbounds":           inboundsCount,
@@ -517,6 +557,12 @@ func (h *Handler) handleSystemDisableTun(w http.ResponseWriter, r *http.Request)
 
 // ---------- types / schema ----------
 
+// @Summary 获取内核支持的类型枚举
+// @Description 获取 sing-box 注册的所有入站、出站、端点与服务类型
+// @Tags Meta
+// @Produce json
+// @Success 200 {object} map[string]any
+// @Router /api/types [get]
 func (h *Handler) handleTypes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"inbounds":  include.InboundRegistry().OptionTypes(),
@@ -526,6 +572,12 @@ func (h *Handler) handleTypes(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// @Summary 获取 sing-box JSON Schema
+// @Description 动态反射生成 sing-box 官方 Options JSON Schema 规范
+// @Tags Meta
+// @Produce json
+// @Success 200 {object} map[string]any
+// @Router /api/schema [get]
 func (h *Handler) handleSchema(w http.ResponseWriter, r *http.Request) {
 	content, err := h.schema()
 	if err != nil {
@@ -539,6 +591,13 @@ func (h *Handler) handleSchema(w http.ResponseWriter, r *http.Request) {
 
 // ---------- settings ----------
 
+// @Summary 获取 Controller 设置
+// @Description 读取 controller.json 自身的服务配置（监听地址、日志级别、内核生命周期配置）
+// @Tags Settings
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} settings.Settings
+// @Router /api/settings [get]
 func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	values := h.settings.Values()
 	values.NodeHealth.WebhookToken = ""
@@ -546,6 +605,16 @@ func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, values)
 }
 
+// @Summary 更新 Controller 设置
+// @Description 更新 controller.json 配置并即时应用
+// @Tags Settings
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param settings body settings.Settings true "Controller 新配置"
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Router /api/settings [put]
 func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	body, err := readRawBody(r)
 	if err != nil {
@@ -631,6 +700,14 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 
 // ---------- config ----------
 
+// @Summary 获取主配置
+// @Description 获取内存中已解析并格式化的 sing-box 配置 JSON 对象
+// @Tags Config
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]any
+// @Failure 401 {object} map[string]any
+// @Router /api/config [get]
 func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	content, err := h.store.Content(h.ctx(r))
 	if err != nil {
@@ -644,7 +721,14 @@ func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(content)
 }
 
-// handleGetConfigRaw 返回主配置文件原始内容（保留注释/格式/字段顺序）。
+// @Summary 获取原始配置文本
+// @Description 读取 sing-box 主配置文件原始文本（保留注释、空行与字段格式）
+// @Tags Config
+// @Produce plain
+// @Security ApiKeyAuth
+// @Success 200 {string} string
+// @Failure 401 {object} map[string]any
+// @Router /api/config/raw [get]
 func (h *Handler) handleGetConfigRaw(w http.ResponseWriter, r *http.Request) {
 	content := h.store.RawContent()
 	if len(content) == 0 {
@@ -656,7 +740,16 @@ func (h *Handler) handleGetConfigRaw(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(content)
 }
 
-// handlePutConfigRaw 原样保存配置文本（注释/格式保留）：sing-box 解析 + 干跑校验通过后写盘。
+// @Summary 原样保存配置文本
+// @Description 提交原始配置文本，执行 sing-box 解析与干跑校验，通过后原子落盘并可选触发重载
+// @Tags Config
+// @Accept plain
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Failure 401 {object} map[string]any
+// @Router /api/config/raw [put]
 func (h *Handler) handlePutConfigRaw(w http.ResponseWriter, r *http.Request) {
 	body, err := readRawBody(r)
 	if err != nil {
@@ -687,6 +780,16 @@ func (h *Handler) handlePutConfigRaw(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+// @Summary 全量更新主配置
+// @Description 提交主配置 JSON 对象，执行 Validate 干跑校验，原子写盘
+// @Tags Config
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} map[string]any
+// @Failure 400 {object} map[string]any
+// @Failure 401 {object} map[string]any
+// @Router /api/config [put]
 func (h *Handler) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	body, err := readRawBody(r)
 	if err != nil {

@@ -74,7 +74,7 @@ type Config struct {
 	Secret        string
 	ManagedMode   *bool
 	Version       string
-	StaticHandler  http.Handler
+	StaticHandler http.Handler
 	BinaryPath    string
 	ProvidersDir  string
 	StartServer   bool // 是否在 Start() 时监听并启动内置 HTTP 服务器

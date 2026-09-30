@@ -5,9 +5,10 @@
 - [x] proxiesPage-> GroupTab ->右键也有删除和编辑（拉取所有节点作为候选）
 - [x] proxiesGroup内的节点，右键菜单添加"设为默认", 结果->config.json中将该项目至于数组的第一个
 - [x] BackendConnectionError 组件，要有编辑配置入口（不然只能去ssh vim改配置了）（已落地）
-- [] 在线更新功能：
-  - 发版，检查到新版本号，提醒更新
-  - 
+- [/] 在线更新功能：
+  - [x] Phase 1: 基础清洗与契约对接（清理 zashboard 遗留，官方 Releases API，SemVer 比对，暴露控制器版本与平台架构）
+  - [ ] Phase 2: 全局更新弹窗与 Changelog Markdown 渲染（带下载加速源选择、Toast Action 唤起）
+  - [ ] Phase 3: 后端一键更新引擎（二进制原子自替换、SHA256 校验、systemd/自重启与自动回滚）
 > 💡 **已评审并落地为规划方案**：完整架构与实施方案请查阅 [plan.md](file:///C:/Users/Ryu/Documents/sing-box-webui/plan.md)。
 
 ## 和内核一起打包。

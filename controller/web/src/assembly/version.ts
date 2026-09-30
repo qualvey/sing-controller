@@ -23,7 +23,8 @@ import { can, channel, Channel, clashAvailable, core, Core, resetCore } from './
 
 export const version = ref()
 export const isCoreUpdateAvailable = ref(false)
-export const zashboardVersion = ref(__APP_VERSION__)
+export const controllerVersion = ref(__APP_VERSION__)
+export const zashboardVersion = controllerVersion
 
 // 切后端时本来就要打一次 /version,顺手把它的结果暴露成连通性状态,
 // 给切换提示用 —— 不额外发探测请求,量的也正是实际在用的那条 API。
@@ -218,6 +219,63 @@ export const probeActiveBackend = () => {
   return probe
 }
 
+export interface GitHubReleaseAsset {
+  name: string
+  size: number
+  browser_download_url: string
+}
+
+export interface GitHubRelease {
+  tag_name: string
+  name: string
+  body: string
+  published_at: string
+  html_url: string
+  prerelease: boolean
+  draft: boolean
+  assets: GitHubReleaseAsset[]
+}
+
+export const REPO_OWNER = 'qualvey'
+export const REPO_NAME = 'sing-controller'
+export const GITHUB_RELEASE_LATEST_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`
+
+/**
+ * 语义化版本比对工具
+ * @returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+ */
+export const compareVersions = (v1: string, v2: string): number => {
+  const clean1 = (v1 || '').replace(/^v/i, '').trim()
+  const clean2 = (v2 || '').replace(/^v/i, '').trim()
+
+  if (clean1 === clean2) return 0
+  if (clean1 === 'dev') return -1
+  if (clean2 === 'dev') return 1
+
+  const parseParts = (v: string) => {
+    const [main, pre] = v.split('-')
+    const parts = (main || '').split('.').map((n) => parseInt(n, 10) || 0)
+    while (parts.length < 3) parts.push(0)
+    return { parts, pre }
+  }
+
+  const p1 = parseParts(clean1)
+  const p2 = parseParts(clean2)
+
+  for (let i = 0; i < 3; i++) {
+    if (p1.parts[i] > p2.parts[i]) return 1
+    if (p1.parts[i] < p2.parts[i]) return -1
+  }
+
+  if (!p1.pre && p2.pre) return 1
+  if (p1.pre && !p2.pre) return -1
+  if (p1.pre && p2.pre) {
+    return p1.pre.localeCompare(p2.pre)
+  }
+
+  return 0
+}
+
 const CACHE_DURATION = 1000 * 60 * 60
 
 interface CacheEntry<T> {
@@ -226,11 +284,11 @@ interface CacheEntry<T> {
   data: T
 }
 
-async function fetchWithLocalCache<T>(url: string, version: string): Promise<T> {
+async function fetchWithLocalCache<T>(url: string, version: string, force = false): Promise<T> {
   const cacheKey = 'cache/' + url
   const cacheRaw = localStorage.getItem(cacheKey)
 
-  if (cacheRaw) {
+  if (cacheRaw && !force) {
     try {
       const cache: CacheEntry<T> = JSON.parse(cacheRaw)
       const now = Date.now()
@@ -245,7 +303,11 @@ async function fetchWithLocalCache<T>(url: string, version: string): Promise<T> 
     }
   }
 
-  const response = await fetch(url)
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/vnd.github.v3+json',
+    },
+  })
   if (!response.ok) {
     throw new Error(`Fetch failed: ${response.status} ${response.statusText}`)
   }
@@ -261,13 +323,22 @@ async function fetchWithLocalCache<T>(url: string, version: string): Promise<T> 
   return data
 }
 
-export const fetchIsUIUpdateAvailable = async () => {
-  const { tag_name } = await fetchWithLocalCache<{ tag_name: string }>(
-    'https://api.github.com/repos/Zephyruso/zashboard/releases/latest',
-    zashboardVersion.value,
-  )
+export const fetchLatestControllerRelease = async (
+  currentVersion = controllerVersion.value,
+  force = false,
+): Promise<GitHubRelease | null> => {
+  try {
+    return await fetchWithLocalCache<GitHubRelease>(GITHUB_RELEASE_LATEST_URL, currentVersion, force)
+  } catch (err) {
+    console.warn('Failed to fetch latest sing-controller release:', err)
+    return null
+  }
+}
 
-  return Boolean(tag_name && tag_name !== `v${zashboardVersion.value}`)
+export const fetchIsUIUpdateAvailable = async (force = false) => {
+  const release = await fetchLatestControllerRelease(controllerVersion.value, force)
+  if (!release || !release.tag_name) return false
+  return compareVersions(controllerVersion.value, release.tag_name) < 0
 }
 
 const check = async (url: string, versionNumber: string) => {
@@ -284,11 +355,11 @@ export const fetchBackendUpdateAvailableAPI = async () => {
   )
 }
 
-// 仪表盘(UI)更新检查,迁自 composables/settings.ts 的 useSettings。
+// 控制器/面板更新状态
 export const isUIUpdateAvailable = ref(false)
 
-export const checkUIUpdate = async () => {
-  isUIUpdateAvailable.value = await fetchIsUIUpdateAvailable()
+export const checkUIUpdate = async (force = false) => {
+  isUIUpdateAvailable.value = await fetchIsUIUpdateAvailable(force)
   if (isUIUpdateAvailable.value && autoUpgradeDashboard.value) {
     // 自动升级不是用户点的,失败静默
     upgradeUIAPI().catch(() => { })

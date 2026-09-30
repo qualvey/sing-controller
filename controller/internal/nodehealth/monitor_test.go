@@ -73,6 +73,36 @@ func TestProxyTargetsExcludesGroupsAndSystemOutbounds(t *testing.T) {
 	}
 }
 
+func TestTriggerScanQueuesSingleRunAndRecordsCompletion(t *testing.T) {
+	runner := newTestRunner(t)
+	runner.store = store.New(filepath.Join(t.TempDir(), "sing-box.json"))
+	if !runner.TriggerScan() {
+		t.Fatal("first manual scan should be queued")
+	}
+	if !runner.Snapshot().ScanQueued {
+		t.Fatal("snapshot should report queued scan")
+	}
+	if runner.TriggerScan() {
+		t.Fatal("duplicate manual scan should be rejected")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go runner.Run(ctx)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		snapshot := runner.Snapshot()
+		if !snapshot.Scanning && !snapshot.ScanQueued && !snapshot.LastScanEnd.IsZero() {
+			if snapshot.LastScanStart.IsZero() {
+				t.Fatal("scan start timestamp was not recorded")
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("manual scan did not complete")
+}
+
 func TestFeishuWebhookPayloadIsSignedWhenSecretIsConfigured(t *testing.T) {
 	options := settings.DefaultNodeHealthOptions()
 	options.WebhookURL = "https://open.feishu.cn/open-apis/bot/v2/hook/test"

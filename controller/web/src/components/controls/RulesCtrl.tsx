@@ -123,6 +123,20 @@ export default defineComponent({
       }
     }
 
+    const isRefreshingRules = ref(false)
+    const handleRefreshRules = async () => {
+      if (isRefreshingRules.value) return
+      isRefreshingRules.value = true
+      try {
+        await Promise.all([fetchRules(), loadRouteMeta(), statusStore.refresh()])
+        showToast(t('refreshSuccess') || '规则已刷新', 'success')
+      } catch (e) {
+        showToast((e as Error).message || '刷新失败', 'error')
+      } finally {
+        isRefreshingRules.value = false
+      }
+    }
+
     const tabsWithNumbers = computed(() => {
       return Object.values(RULE_TAB_TYPE).map((type) => {
         return {
@@ -144,20 +158,22 @@ export default defineComponent({
           }))}
         />
       )
-      const upgradeAllIcon = rulesTabShow.value === RULE_TAB_TYPE.PROVIDER && (
+
+      const isProviderTab = rulesTabShow.value === RULE_TAB_TYPE.PROVIDER
+      const isRefreshing = isProviderTab ? isUpgrading.value : isRefreshingRules.value
+      const refreshButton = (
         <button
           class="btn btn-circle btn-sm"
-          title="全部更新"
-          onClick={handlerClickUpgradeAllProviders}
+          title={isProviderTab ? '全部更新' : (t('refresh') || '刷新规则')}
+          onClick={isProviderTab ? handlerClickUpgradeAllProviders : handleRefreshRules}
         >
-          <ArrowPathIcon class={['h-4 w-4', isUpgrading.value && 'animate-spin']} />
+          <ArrowPathIcon class={['h-4 w-4', isRefreshing && 'animate-spin']} />
         </button>
       )
 
-      const isProviderTab = rulesTabShow.value === RULE_TAB_TYPE.PROVIDER
       const createButton = (
         <button
-          class="btn btn-circle btn-sm"
+          class="btn btn-circle btn-sm btn-primary"
           title={isProviderTab ? '新建规则集' : (t('createRule') || '新建规则')}
           onClick={isProviderTab ? openCreateRuleSetModal : openCreateRouteModal}
         >
@@ -237,12 +253,12 @@ export default defineComponent({
           {hasProviders.value && (
             <div class="flex items-center gap-2">
               {tabs}
-              {upgradeAllIcon}
             </div>
           )}
           <div class="flex w-full items-center gap-2">
             {searchInput}
             {createButton}
+            {refreshButton}
             {settingsModal}
           </div>
         </div>
@@ -252,7 +268,7 @@ export default defineComponent({
           {searchInput}
           <div class="flex-1"></div>
           {createButton}
-          {upgradeAllIcon}
+          {refreshButton}
           {settingsModal}
         </div>
       )

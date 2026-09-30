@@ -336,7 +336,7 @@ export const flushDNSCacheAPI = () => {
 }
 
 export const queryDNSAPI = (params: { name: string; type: string }) => {
-  return axios.get<DNSQuery>('/dns/query', {
+  return http.get<DNSQuery>('/dns/query', {
     params,
   })
 }

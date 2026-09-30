@@ -1,5 +1,4 @@
 import { i18n } from '@/i18n'
-import router from '@/router'
 import { type Ref } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
 const { t, te } = i18n.global
@@ -198,13 +197,14 @@ const setAlert = (
       </svg>
     `
 
-    actionBtn.addEventListener('click', (e) => {
+    actionBtn.addEventListener('click', async (e) => {
       e.stopPropagation()
       try {
         if (action.onClick) {
           action.onClick()
         }
         if (action.to) {
+          const { default: router } = await import('@/router')
           router.push(action.to)
         }
       } catch (err) {

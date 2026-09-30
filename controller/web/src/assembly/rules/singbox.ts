@@ -160,3 +160,16 @@ export const fetchRules = async () => {
     ruleProviderList.value = []
   }
 }
+
+export const reorderRoutes = async (newRules: Rule[]) => {
+  const ids = newRules.map((r) => r.uuid).filter(Boolean) as string[]
+  if (ids.length !== newRules.length) {
+    throw new Error('部分规则缺少有效 UUID，无法完成排序')
+  }
+  const res = await api.reorderRoutes(ids)
+  rules.value = newRules.map((r, idx) => ({
+    ...r,
+    index: idx + 1,
+  }))
+  return res
+}

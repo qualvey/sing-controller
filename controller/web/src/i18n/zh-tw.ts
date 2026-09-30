@@ -293,6 +293,10 @@ const zhTW: LANG_MESSAGE = {
   nodeHealthSaved: '節點探測設定已儲存',
   nodeHealthLoadFailed: '載入節點探測設定失敗',
   nodeHealthSaveFailed: '儲存節點探測設定失敗',
+  nodeHealthScanNow: '立即掃描',
+  nodeHealthScanning: '掃描中…',
+  nodeHealthScanStarted: '節點可用性掃描已啟動',
+  nodeHealthScanFailed: '啟動節點可用性掃描失敗',
   speedtestTimeout: '測速超時',
   speedtestMode: '測速方式',
   speedtestModeDashboard: '面板控制',
@@ -705,6 +709,12 @@ const zhTW: LANG_MESSAGE = {
   copyRule: '複製規則內容',
   enableRule: '啟用規則',
   disableRule: '禁用規則',
+  moveRuleUp: '上移規則',
+  moveRuleDown: '下移規則',
+  moveRuleToTop: '置頂規則',
+  moveRuleToBottom: '置底規則',
+  reorderRulesSuccess: '規則順序已更新',
+  dragToReorder: '拖曳調整順序',
   confirmDeleteRule: '確定刪除第 {index} 條路由規則？該操作不可恢復。',
 
   // Certificate Provider Dialog

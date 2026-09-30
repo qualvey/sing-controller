@@ -1,11 +1,7 @@
 <template>
-  <DialogWrapper
-    :model-value="modelValue"
-    :title="isEdit ? '编辑规则集' : '新建规则集'"
-    box-class="max-w-[680px]"
+  <DialogWrapper :model-value="modelValue" :title="isEdit ? '编辑规则集' : '新建规则集'" box-class="max-w-[680px]"
     :body-class="activeTab === 'source' ? 'overflow-hidden' : 'overflow-y-auto'"
-    @update:model-value="emit('update:modelValue', $event)"
-  >
+    @update:model-value="emit('update:modelValue', $event)">
     <TabsRoot v-model="activeTab">
       <TabsList class="self-start shrink-0">
         <TabsTrigger value="form">表单</TabsTrigger>
@@ -15,11 +11,7 @@
       <TabsContent value="form">
         <div ref="formContentRef">
           <div class="mb-4">
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs"
-              @click="fillFromJson"
-            >
+            <button type="button" class="btn btn-ghost btn-xs" @click="fillFromJson">
               <ClipboardPasteIcon class="h-3.5 w-3.5" />
               从 JSON 填充（粘贴解析）
             </button>
@@ -28,54 +20,31 @@
             </span>
           </div>
 
-          <div
-            class="grid gap-x-4 gap-y-4 pt-2 text-sm"
-            style="grid-template-columns: 140px minmax(0, 1fr)"
-          >
+          <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 140px minmax(0, 1fr)">
             <label class="text-base-content/70 pt-2">type <span class="text-destructive">*</span></label>
-            <SelectField
-              v-model="form.type"
-              :options="RULE_SET_TYPES"
-              placeholder="选择类型"
-            />
+            <SelectField v-model="form.type" :options="RULE_SET_TYPES" placeholder="选择类型" />
 
             <label class="text-base-content/70 pt-2">tag <span class="text-destructive">*</span></label>
             <div class="flex flex-col gap-1.5">
               <div class="flex flex-wrap gap-1.5">
-                <span
-                  v-for="t in form.tag"
-                  :key="t"
-                  class="badge badge-primary badge-outline gap-1"
-                >
+                <span v-for="t in form.tag" :key="t" class="badge badge-primary badge-outline gap-1">
                   {{ t }}
-                  <button
-                    type="button"
-                    class="cursor-pointer text-xs opacity-70 hover:opacity-100"
-                    @click="removeTag(t)"
-                  >
+                  <button type="button" class="cursor-pointer text-xs opacity-70 hover:opacity-100"
+                    @click="removeTag(t)">
                     ×
                   </button>
                 </span>
               </div>
-              <input
-                v-model="tagInput"
-                type="text"
-                class="input input-bordered input-sm w-full"
+              <input v-model="tagInput" type="text" class="input input-bordered input-sm w-full"
                 :placeholder="form.type === 'inline' ? '单个 tag（回车添加）' : 'tag（回车/逗号添加，多个）'"
-                @keydown.enter.prevent="addTag"
-                @blur="addTag"
-              />
+                @keydown.enter.prevent="addTag" @blur="addTag" />
             </div>
 
             <template v-if="form.type === 'inline'">
               <label class="text-base-content/70 pt-2">rules (JSON)</label>
               <div class="flex flex-col gap-1">
-                <textarea
-                  v-model="form.rulesJson"
-                  rows="8"
-                  class="textarea textarea-bordered font-mono text-xs w-full"
-                  placeholder='[{"domain_suffix": ".cn"}, {"ip_cidr": ["10.0.0.0/8"]}]'
-                />
+                <textarea v-model="form.rulesJson" rows="8" class="textarea textarea-bordered font-mono text-xs w-full"
+                  placeholder='[{"domain_suffix": ".cn"}, {"ip_cidr": ["10.0.0.0/8"]}]' />
                 <p class="text-base-content/50 text-xs">
                   HeadlessRule 数组（无 action 的匹配规则）；多个 tag 时 path/url 需含 {tag} 占位符
                 </p>
@@ -84,94 +53,51 @@
 
             <template v-else-if="form.type === 'local'">
               <label class="text-base-content/70 pt-2">format</label>
-              <SelectField
-                v-model="form.format"
-                :options="FORMAT_OPTIONS"
-              />
+              <SelectField v-model="form.format" :options="FORMAT_OPTIONS" />
               <label class="text-base-content/70 pt-2">path <span class="text-destructive">*</span></label>
-              <input
-                v-model="form.path"
-                type="text"
-                class="input input-bordered input-sm w-full font-mono"
-                placeholder="规则集文件路径（.json→source，.srs→binary，多 tag 时含 {tag}）"
-              />
+              <input v-model="form.path" type="text" class="input input-bordered input-sm w-full font-mono"
+                placeholder="规则集文件路径（.json→source，.srs→binary，多 tag 时含 {tag}）" />
             </template>
 
             <template v-else>
               <label class="text-base-content/70 pt-2">format</label>
-              <SelectField
-                v-model="form.format"
-                :options="FORMAT_OPTIONS"
-              />
+              <SelectField v-model="form.format" :options="FORMAT_OPTIONS" />
               <label class="text-base-content/70 pt-2">url <span class="text-destructive">*</span></label>
-              <input
-                v-model="form.url"
-                type="text"
-                class="input input-bordered input-sm w-full font-mono"
-                placeholder="https://example.com/rule-set.json（多 tag 时含 {tag}）"
-              />
+              <input v-model="form.url" type="text" class="input input-bordered input-sm w-full font-mono"
+                placeholder="https://example.com/rule-set.json（多 tag 时含 {tag}）" />
               <label class="text-base-content/70 pt-2">initial_path</label>
-              <input
-                v-model="form.initial_path"
-                type="text"
-                class="input input-bordered input-sm w-full font-mono"
-                placeholder="可选预置缓存文件路径"
-              />
+              <input v-model="form.initial_path" type="text" class="input input-bordered input-sm w-full font-mono"
+                placeholder="可选预置缓存文件路径" />
               <label class="text-base-content/70 pt-2">update_interval</label>
-              <input
-                v-model="form.update_interval"
-                type="text"
-                class="input input-bordered input-sm w-full"
-                placeholder="如 24h、1d"
-              />
+              <input v-model="form.update_interval" type="text" class="input input-bordered input-sm w-full"
+                placeholder="如 24h、1d" />
             </template>
           </div>
 
-          <p
-            v-if="validateMsg"
-            class="mt-3 text-[0.8rem] font-medium text-destructive"
-          >
+          <p v-if="validateMsg" class="mt-3 text-[0.8rem] font-medium text-destructive">
             {{ validateMsg }}
           </p>
         </div>
       </TabsContent>
 
       <TabsContent value="source">
-        <ResourceSourceTab
-          ref="srcTab"
-          :initial="sourceJson"
-          :height="sourceEditorHeight"
-        />
+        <ResourceSourceTab ref="srcTab" :initial="sourceJson" :height="sourceEditorHeight" />
       </TabsContent>
     </TabsRoot>
 
     <template #footer>
       <div class="flex items-center justify-between w-full">
         <div>
-          <button
-            v-if="isEdit && ruleSetData?.id"
-            type="button"
-            class="btn btn-ghost btn-sm text-error hover:bg-error/10"
-            :disabled="saving"
-            @click="handleDelete"
-          >
+          <button v-if="isEdit && ruleSetData?.id" type="button"
+            class="btn btn-ghost btn-sm text-error hover:bg-error/10" :disabled="saving" @click="handleDelete">
             {{ $t('delete') || '删除' }}
           </button>
         </div>
         <div class="flex gap-2">
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            @click="emit('update:modelValue', false)"
-          >
+          <button type="button" class="btn btn-ghost btn-sm" @click="emit('update:modelValue', false)">
             {{ $t('cancel') || '取消' }}
           </button>
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            :disabled="saving"
-            @click="save"
-          >
+          <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="save">
             {{ $t('save') || '保存' }}
           </button>
         </div>
@@ -180,34 +106,18 @@
   </DialogWrapper>
 
   <!-- 从 JSON 填充弹窗 -->
-  <DialogWrapper
-    v-model="jsonDialog"
-    title="从 JSON 填充"
-    box-class="max-w-[560px]"
-  >
-    <textarea
-      v-model="jsonText"
-      rows="10"
-      class="textarea textarea-bordered w-full font-mono text-xs"
-      placeholder='{"type":"remote","tag":"geosite-cn","format":"binary","url":"https://example.com/geosite-cn.srs"}'
-    />
+  <DialogWrapper v-model="jsonDialog" title="从 JSON 填充" box-class="max-w-[560px]">
+    <textarea v-model="jsonText" rows="10" class="textarea textarea-bordered w-full font-mono text-xs"
+      placeholder='{"type":"remote","tag":"geosite-cn","format":"binary","url":"https://example.com/geosite-cn.srs"}' />
     <p class="mt-1 text-xs text-base-content/50">
       解析成功后填充表单字段（请检查解析结果）
     </p>
     <template #footer>
       <div class="flex justify-end gap-2 w-full">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          @click="jsonDialog = false"
-        >
+        <button type="button" class="btn btn-ghost btn-sm" @click="jsonDialog = false">
           取消
         </button>
-        <button
-          type="button"
-          class="btn btn-primary btn-sm"
-          @click="doFillFromJson"
-        >
+        <button type="button" class="btn btn-primary btn-sm" @click="doFillFromJson">
           解析并填充
         </button>
       </div>
@@ -269,18 +179,19 @@ const sourceEditorHeight = computed(() => {
 })
 
 const RULE_SET_TYPES = ['inline', 'local', 'remote']
-const FORMAT_OPTIONS = ['source', 'binary']
-
-const form = reactive({
+const FORMAT_OPTIONS = ['binary', 'source']
+// 1. 单一数据源：统一由函数返回默认结构
+const getDefaultForm = () => ({
   type: 'remote',
   tag: [] as string[],
-  format: 'source',
+  format: 'binary',
   path: '',
   url: '',
   initial_path: '',
   update_interval: '',
   rulesJson: '',
 })
+const form = reactive(getDefaultForm())
 
 const tagInput = ref('')
 
@@ -299,16 +210,10 @@ const removeTag = (t: string) => {
   form.tag = form.tag.filter((x) => x !== t)
 }
 
+// 3. 重置时直接 Object.assign，无需重复赋值
 const resetForm = () => {
   validateMsg.value = ''
-  form.type = 'remote'
-  form.tag = []
-  form.format = 'source'
-  form.path = ''
-  form.url = ''
-  form.initial_path = ''
-  form.update_interval = ''
-  form.rulesJson = ''
+  Object.assign(form, getDefaultForm())
   tagInput.value = ''
 }
 
@@ -386,7 +291,7 @@ const doFillFromJson = async () => {
 }
 
 watch(
-  () => [props.modelValue, props.isEdit, props.ruleSetData],
+  [() => props.modelValue, () => props.isEdit, () => props.ruleSetData],
   ([visible, isEdit, data]) => {
     if (!visible) return
     activeTab.value = 'form'

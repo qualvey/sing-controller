@@ -94,7 +94,7 @@ const hard = computed(() => {
 
   return {
     rules: clash,
-    dnsQuery: clash,
+    dnsQuery: !!activeBackend.value,
     dnsFlush: clash,
     fakeIPFlush: clash,
     coreActions: clash,

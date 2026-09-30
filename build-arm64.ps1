@@ -17,6 +17,7 @@ if (-not $SkipFrontend) {
     Write-Host '[*] 构建前端 (pnpm run build) ...' -ForegroundColor Green
     Push-Location "$root/controller/web"
     try {
+        if (-not $env:FONT) { $env:FONT = 'misans' }
         pnpm run build
         if ($LASTEXITCODE -ne 0) { throw '前端构建失败' }
     } finally {

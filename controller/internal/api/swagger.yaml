@@ -1,0 +1,318 @@
+basePath: /
+definitions:
+  settings.APIOptions:
+    properties:
+      clash:
+        $ref: '#/definitions/settings.EndpointAPI'
+      service:
+        $ref: '#/definitions/settings.EndpointAPI'
+      v2ray:
+        $ref: '#/definitions/settings.EndpointAPI'
+    type: object
+  settings.CoreOptions:
+    properties:
+      binary_path:
+        type: string
+      config_path:
+        type: string
+      managed:
+        type: boolean
+      reload:
+        $ref: '#/definitions/settings.ReloadOptions'
+      working_dir:
+        type: string
+    type: object
+  settings.EndpointAPI:
+    properties:
+      address:
+        type: string
+      secret:
+        type: string
+    type: object
+  settings.LogOptions:
+    properties:
+      level:
+        type: string
+      outfile:
+        description: 日志落盘路径
+        type: string
+      output:
+        description: stderr | stdout | file
+        type: string
+    type: object
+  settings.RealTimeStats:
+    properties:
+      enabled:
+        type: boolean
+      interval_ms:
+        type: integer
+      online_threshold_sec:
+        type: integer
+    type: object
+  settings.ReloadOptions:
+    properties:
+      after_save:
+        type: boolean
+      hook:
+        type: string
+      mode:
+        type: string
+      pid_file:
+        type: string
+      service:
+        type: string
+    type: object
+  settings.ServerOptions:
+    properties:
+      listen:
+        type: string
+      listen_port:
+        type: integer
+      secret:
+        type: string
+    type: object
+  settings.Settings:
+    properties:
+      api:
+        $ref: '#/definitions/settings.APIOptions'
+      core:
+        $ref: '#/definitions/settings.CoreOptions'
+      log:
+        $ref: '#/definitions/settings.LogOptions'
+      server:
+        $ref: '#/definitions/settings.ServerOptions'
+      stats:
+        $ref: '#/definitions/settings.StatsOptions'
+    type: object
+  settings.StatsOptions:
+    properties:
+      pattern:
+        type: string
+      poll_interval:
+        type: string
+      real_time:
+        $ref: '#/definitions/settings.RealTimeStats'
+      reset_on_query:
+        type: boolean
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: sing-controller Support
+    url: https://github.com/qualvey/sing-controller
+  description: |-
+    sing-box 现代化配置管理服务与内核生命周期控制 API
+    本项目以 sing-box gRPC API 为第一公民，优先保证 sing-box gRPC 接口可用，Clash API 作为可选项。
+  license:
+    name: Apache-2.0
+  title: sing-controller API
+  version: "1.0"
+paths:
+  /api/config:
+    get:
+      description: 获取内存中已解析并格式化的 sing-box 配置 JSON 对象
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取主配置
+      tags:
+      - Config
+    put:
+      consumes:
+      - application/json
+      description: 提交主配置 JSON 对象，执行 Validate 干跑校验，原子写盘
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 全量更新主配置
+      tags:
+      - Config
+  /api/config/raw:
+    get:
+      description: 读取 sing-box 主配置文件原始文本（保留注释、空行与字段格式）
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取原始配置文本
+      tags:
+      - Config
+    put:
+      consumes:
+      - text/plain
+      description: 提交原始配置文本，执行 sing-box 解析与干跑校验，通过后原子落盘并可选触发重载
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 原样保存配置文本
+      tags:
+      - Config
+  /api/schema:
+    get:
+      description: 动态反射生成 sing-box 官方 Options JSON Schema 规范
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取 sing-box JSON Schema
+      tags:
+      - Meta
+  /api/settings:
+    get:
+      description: 读取 controller.json 自身的服务配置（监听地址、日志级别、内核生命周期配置）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/settings.Settings'
+      security:
+      - ApiKeyAuth: []
+      summary: 获取 Controller 设置
+      tags:
+      - Settings
+    put:
+      consumes:
+      - application/json
+      description: 更新 controller.json 配置并即时应用
+      parameters:
+      - description: Controller 新配置
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/settings.Settings'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 更新 Controller 设置
+      tags:
+      - Settings
+  /api/status:
+    get:
+      description: 返回控制器与 sing-box 内核运行状态、入站/出站/规则计数、版本与配置路径
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: 获取系统综合状态
+      tags:
+      - System
+  /api/types:
+    get:
+      description: 获取 sing-box 注册的所有入站、出站、端点与服务类型
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取内核支持的类型枚举
+      tags:
+      - Meta
+  /healthz:
+    get:
+      description: 基础 liveness 探针，无需鉴权
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 健康检查探针
+      tags:
+      - System
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: X-Secret
+    type: apiKey
+swagger: "2.0"

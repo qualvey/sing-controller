@@ -14,3 +14,13 @@ div {
 .search-highlight {
   @apply rounded-xs bg-yellow-300 text-black;
 }
+
+.scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+

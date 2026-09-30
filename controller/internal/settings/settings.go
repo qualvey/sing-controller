@@ -221,10 +221,10 @@ func (o NodeHealthOptions) Validate() error {
 
 // Settings 是 controller 的主配置根结构
 type Settings struct {
-	Server ServerOptions `json:"server"`
-	Log    *LogOptions   `json:"log,omitempty"`
-	Core   CoreOptions   `json:"core"`
-	API    APIOptions    `json:"api"`
+	Server     ServerOptions     `json:"server"`
+	Log        *LogOptions       `json:"log,omitempty"`
+	Core       CoreOptions       `json:"core"`
+	API        APIOptions        `json:"api"`
 	Stats      StatsOptions      `json:"stats"`
 	NodeHealth NodeHealthOptions `json:"node_health"`
 }
@@ -337,17 +337,17 @@ func defaultSettings() Settings {
 
 // rawOldSettings 仅用于平滑迁移旧版扁平化配置
 type rawOldSettings struct {
-	Config       string          `json:"config"`
-	Listen       string          `json:"listen"`
-	MinPort      uint16          `json:"min_port"`
-	V2RayAPI     string          `json:"v2ray_api"`
-	PollInterval string          `json:"poll_interval"`
-	Pattern      string          `json:"pattern"`
-	ResetOnQuery bool            `json:"reset_on_query"`
-	ClashAPI     *EndpointAPI    `json:"clash_api"`
-	ServiceAPI   *EndpointAPI    `json:"service_api"`
-	Reload       *ReloadOptions  `json:"reload"`
-	RealTime     *RealTimeStats  `json:"real_time"`
+	Config       string         `json:"config"`
+	Listen       string         `json:"listen"`
+	MinPort      uint16         `json:"min_port"`
+	V2RayAPI     string         `json:"v2ray_api"`
+	PollInterval string         `json:"poll_interval"`
+	Pattern      string         `json:"pattern"`
+	ResetOnQuery bool           `json:"reset_on_query"`
+	ClashAPI     *EndpointAPI   `json:"clash_api"`
+	ServiceAPI   *EndpointAPI   `json:"service_api"`
+	Reload       *ReloadOptions `json:"reload"`
+	RealTime     *RealTimeStats `json:"real_time"`
 }
 
 // Load 读取 controller 配置，自动兼容旧版配置并完成缺省值补全。

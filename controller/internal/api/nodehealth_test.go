@@ -92,3 +92,24 @@ func TestNodeHealthConfigRejectsInvalidInterval(t *testing.T) {
 		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestManualNodeHealthScanAPIQueuesOnce(t *testing.T) {
+	h, _ := newNodeHealthHandler(t)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/node-health/scan", nil))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("first scan status = %d, want 202: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/node-health/scan", nil))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate scan status = %d, want 409: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/node-health", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"scan_queued":true`) {
+		t.Fatalf("health status should show queued scan: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}

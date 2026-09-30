@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/store"
 	"github.com/sagernet/sing-box/option"
@@ -545,5 +548,253 @@ func (h *Handler) handleDNSLookup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"results": results,
 	})
+}
+
+// handleDNSQuery 执行实时 DNS 解析查询（用于设置-后端-DNS 查询组件及客户端 PTR 反向解析）
+// GET /api/dns/query?name=www.google.com&type=A
+func (h *Handler) handleDNSQuery(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, errors.New("缺少 domain name 参数"))
+		return
+	}
+
+	qTypeStr := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("type")))
+	if qTypeStr == "" {
+		qTypeStr = "A"
+	}
+
+	qType, ok := dns.StringToType[qTypeStr]
+	if !ok {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("不支持的 DNS 查询类型: %s", qTypeStr))
+		return
+	}
+
+	// 1. 如果配置了 Clash API 上游且可用，优先向上游透传请求
+	if target, secret, _ := h.clashTarget(); target != nil {
+		reqURL := strings.TrimRight(target.String(), "/") + "/dns/query?" + r.URL.RawQuery
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, reqURL, nil)
+		if err == nil {
+			if secret != "" {
+				req.Header.Set("Authorization", "Bearer "+secret)
+			}
+			client := &http.Client{Timeout: 3 * time.Second}
+			resp, err := client.Do(req)
+			if err == nil && resp.StatusCode == http.StatusOK {
+				defer resp.Body.Close()
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				_, _ = io.Copy(w, resp.Body)
+				return
+			}
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+		}
+	}
+
+	// 2. 本地执行 DNS 查询
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	result, err := h.resolveDNSQuery(ctx, name, qType)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) resolveDNSQuery(ctx context.Context, name string, qType uint16) (map[string]any, error) {
+	fqdn := dns.Fqdn(name)
+	msg := new(dns.Msg)
+	msg.SetQuestion(fqdn, qType)
+	msg.RecursionDesired = true
+
+	// 收集候选 DNS 服务器地址
+	var candidateServers []string
+
+	if h.store != nil {
+		h.store.RLock()
+		if h.store.Options.DNS != nil {
+			for _, s := range h.store.Options.DNS.Servers {
+			content, err := json.Marshal(&s)
+			if err != nil {
+				continue
+			}
+			var raw map[string]any
+			if err := json.Unmarshal(content, &raw); err != nil {
+				continue
+			}
+			addrVal, ok := raw["address"].(string)
+			if !ok {
+				continue
+			}
+			addr := strings.TrimSpace(addrVal)
+			if addr == "" || addr == "local" {
+				continue
+			}
+			addr = strings.TrimPrefix(addr, "udp://")
+			addr = strings.TrimPrefix(addr, "tcp://")
+			if strings.HasPrefix(addr, "https://") || strings.HasPrefix(addr, "tls://") || strings.HasPrefix(addr, "quic://") || strings.HasPrefix(addr, "h3://") {
+				continue
+			}
+			if !strings.Contains(addr, ":") {
+				addr += ":53"
+			}
+			candidateServers = append(candidateServers, addr)
+			}
+		}
+		h.store.RUnlock()
+	}
+
+	// 内置公共兜底 DNS 服务器
+	candidateServers = append(candidateServers, "223.5.5.5:53", "119.29.29.29:53", "8.8.8.8:53", "1.1.1.1:53")
+
+	var respMsg *dns.Msg
+	var usedServer string
+
+	dnsClient := &dns.Client{
+		Net:     "udp",
+		Timeout: 2 * time.Second,
+	}
+
+	for _, server := range candidateServers {
+		r, _, err := dnsClient.ExchangeContext(ctx, msg, server)
+		if err == nil && r != nil {
+			if r.Truncated {
+				tcpClient := &dns.Client{Net: "tcp", Timeout: 2 * time.Second}
+				if rTCP, _, errTCP := tcpClient.ExchangeContext(ctx, msg, server); errTCP == nil && rTCP != nil {
+					r = rTCP
+				}
+			}
+			respMsg = r
+			usedServer = server
+			break
+		}
+	}
+
+	// 如果 UDP/TCP 查询均无响应（如本地被防火墙丢包），降级尝试原生解析器
+	if respMsg == nil {
+		answers := make([]map[string]any, 0)
+		switch qType {
+		case dns.TypeA, dns.TypeAAAA:
+			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, name)
+			if err == nil {
+				for _, addr := range addrs {
+					isIPv4 := addr.IP.To4() != nil
+					if (qType == dns.TypeA && isIPv4) || (qType == dns.TypeAAAA && !isIPv4) {
+						t := uint16(dns.TypeA)
+						if !isIPv4 {
+							t = dns.TypeAAAA
+						}
+						answers = append(answers, map[string]any{
+							"name": fqdn,
+							"type": t,
+							"TTL":  300,
+							"data": addr.IP.String(),
+						})
+					}
+				}
+			}
+		case dns.TypeCNAME:
+			cname, err := net.DefaultResolver.LookupCNAME(ctx, name)
+			if err == nil {
+				answers = append(answers, map[string]any{
+					"name": fqdn,
+					"type": dns.TypeCNAME,
+					"TTL":  300,
+					"data": dns.Fqdn(cname),
+				})
+			}
+		case dns.TypePTR:
+			ipLookup := name
+			if strings.HasSuffix(name, ".in-addr.arpa") {
+				parts := strings.Split(strings.TrimSuffix(name, ".in-addr.arpa"), ".")
+				for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+					parts[i], parts[j] = parts[j], parts[i]
+				}
+				ipLookup = strings.Join(parts, ".")
+			}
+			ptrNames, err := net.DefaultResolver.LookupAddr(ctx, ipLookup)
+			if err == nil {
+				for _, ptrName := range ptrNames {
+					answers = append(answers, map[string]any{
+						"name": fqdn,
+						"type": dns.TypePTR,
+						"TTL":  300,
+						"data": dns.Fqdn(ptrName),
+					})
+				}
+			}
+		case dns.TypeTXT:
+			txts, err := net.DefaultResolver.LookupTXT(ctx, name)
+			if err == nil {
+				for _, txt := range txts {
+					answers = append(answers, map[string]any{
+						"name": fqdn,
+						"type": dns.TypeTXT,
+						"TTL":  300,
+						"data": txt,
+					})
+				}
+			}
+		}
+
+		return map[string]any{
+			"Status":   0,
+			"status":   0,
+			"TC":       false,
+			"RD":       true,
+			"RA":       true,
+			"AD":       false,
+			"CD":       false,
+			"Question": []map[string]any{{"name": fqdn, "type": qType, "class": 1}},
+			"Answer":   answers,
+			"Server":   "system",
+		}, nil
+	}
+
+	questions := make([]map[string]any, 0, len(respMsg.Question))
+	for _, q := range respMsg.Question {
+		questions = append(questions, map[string]any{
+			"name":  q.Name,
+			"type":  q.Qtype,
+			"class": q.Qclass,
+		})
+	}
+
+	answers := make([]map[string]any, 0, len(respMsg.Answer))
+	for _, rr := range respMsg.Answer {
+		header := rr.Header()
+		str := rr.String()
+		hdrStr := header.String()
+		data := ""
+		if len(str) >= len(hdrStr) {
+			data = strings.TrimSpace(str[len(hdrStr):])
+		} else {
+			data = str
+		}
+		answers = append(answers, map[string]any{
+			"name": header.Name,
+			"type": header.Rrtype,
+			"TTL":  header.Ttl,
+			"data": data,
+		})
+	}
+
+	return map[string]any{
+		"Status":   respMsg.Rcode,
+		"status":   respMsg.Rcode,
+		"TC":       respMsg.Truncated,
+		"RD":       respMsg.RecursionDesired,
+		"RA":       respMsg.RecursionAvailable,
+		"AD":       respMsg.AuthenticatedData,
+		"CD":       respMsg.CheckingDisabled,
+		"Question": questions,
+		"Answer":   answers,
+		"Server":   usedServer,
+	}, nil
 }
 

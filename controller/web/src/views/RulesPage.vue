@@ -1,6 +1,9 @@
 <template>
   <div class="relative size-full overflow-x-hidden">
-    <template v-if="!isVirtualScroller">
+    <div
+      v-if="!isVirtualScroller"
+      class="scrollbar-gutter-stable flex h-full w-full flex-col overflow-y-scroll"
+    >
       <RulesCtrl />
       <div
         class="p-3"
@@ -17,12 +20,41 @@
           </div>
         </template>
         <template v-else>
-          <div class="base-container">
+          <Draggable
+            v-if="canDrag"
+            v-model="rules"
+            item-key="uuid"
+            :animation="150"
+            ghost-class="opacity-30"
+            drag-class="cursor-grabbing"
+            filter="input, button, a, .collapse-content, .proxy-chain-node"
+            :prevent-on-filter="false"
+            class="base-container"
+            @end="handleDragEnd"
+          >
+            <template #item="{ element: rule, index }">
+              <RuleCard
+                :key="rule.uuid || rule.payload + '-' + index"
+                :rule="rule"
+                :index="index + 1"
+                :can-drag="true"
+                :id="'rule-card-' + (index + 1)"
+                :class="{
+                  'rule-highlight-pulse': highlightedRuleIndex === index + 1,
+                }"
+              />
+            </template>
+          </Draggable>
+          <div
+            v-else
+            class="base-container"
+          >
             <RuleCard
               v-for="rule in renderRules"
-              :key="rule.payload"
+              :key="rule.uuid || rule.payload + '-' + rules.indexOf(rule)"
               :rule="rule"
               :index="rules.indexOf(rule) + 1"
+              :can-drag="false"
               :id="'rule-card-' + (rules.indexOf(rule) + 1)"
               :class="{
                 'rule-highlight-pulse': highlightedRuleIndex === rules.indexOf(rule) + 1,
@@ -31,7 +63,7 @@
           </div>
         </template>
       </div>
-    </template>
+    </div>
     <VirtualScroller
       v-else
       :data="renderRules"
@@ -42,9 +74,10 @@
       </template>
       <template v-slot="{ item: rule }: { item: Rule }">
         <RuleCard
-          :key="rule.payload"
+          :key="rule.uuid || rule.payload + '-' + rules.indexOf(rule)"
           :rule="rule"
           :index="rules.indexOf(rule) + 1"
+          :can-drag="false"
           :id="'rule-card-' + (rules.indexOf(rule) + 1)"
           :class="{
             'rule-highlight-pulse': highlightedRuleIndex === rules.indexOf(rule) + 1,
@@ -74,6 +107,7 @@
 </template>
 
 <script setup lang="ts">
+import Draggable from 'vuedraggable'
 import VirtualScroller from '@/components/common/VirtualScroller.vue'
 import RulesCtrl from '@/components/controls/RulesCtrl'
 import RuleCard from '@/components/rules/RuleCard.vue'
@@ -97,15 +131,47 @@ import {
 } from '@/composables/ruleSetManagement'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { RULE_TAB_TYPE } from '@/constant'
-import { fetchRules, renderRules, renderRulesProvider, rules, rulesTabShow } from '@/assembly/rules'
+import { Channel, channel } from '@/assembly/backend'
+import {
+  fetchRules,
+  renderRules,
+  renderRulesProvider,
+  reorderRules,
+  rules,
+  rulesFilter,
+  rulesTabShow,
+} from '@/assembly/rules'
+import { showToast } from '@/helper/toast'
 import type { Rule } from '@/types'
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+
+const { t } = useI18n()
 
 fetchRules()
 
 const route = useRoute()
 const highlightedRuleIndex = ref<number | null>(null)
+
+const canDrag = computed(() => {
+  return channel.value === Channel.Singbox && !rulesFilter.value.trim() && rules.value.length > 1
+})
+
+const isReordering = ref(false)
+const handleDragEnd = async () => {
+  if (isReordering.value) return
+  isReordering.value = true
+  try {
+    await reorderRules(rules.value)
+    showToast(t('reorderRulesSuccess') || '规则顺序已更新', 'success')
+  } catch (err: any) {
+    showToast(err.message || '更新规则顺序失败', 'error')
+    await fetchRules()
+  } finally {
+    isReordering.value = false
+  }
+}
 
 const expandedRule = ref<string | null>(null)
 provide('expandedRule', expandedRule)
@@ -115,7 +181,7 @@ const { padding } = usePaddingForViews({
   offsetBottom: 8,
 })
 const isVirtualScroller = computed(() => {
-  return rulesTabShow.value === RULE_TAB_TYPE.RULES && renderRules.value.length > 200
+  return rulesTabShow.value === RULE_TAB_TYPE.RULES && renderRules.value.length > 80
 })
 
 const handleRuleJump = async () => {

@@ -92,7 +92,7 @@ function resolveBase(): string {
   const withLeading = raw.startsWith('/') ? raw : `/${raw}`
   return withLeading.endsWith('/') ? withLeading : `${withLeading}/`
 }
-const font = process.env.FONT || 'all'
+const font = process.env.FONT || 'misans'
 
 const getGitCommitId = (): string => {
   try {
@@ -123,6 +123,7 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('node_modules')) {
             if (id.includes('three')) return 'vendor-three'
+            if (id.includes('echarts') || id.includes('zrender')) return 'vendor-echarts'
             if (id.includes('@codemirror')) return 'vendor-codemirror'
             if (id.includes('vue') || id.includes('vue-router') || id.includes('pinia')) return 'vendor-vue'
           }

@@ -56,3 +56,11 @@ export const toggleRuleDisabled = (rule: Rule, disabled: boolean) => {
 
 // 规则集更新动作(Clash 专属),经 rules 域门面暴露给 view。
 export { updateRuleProviderAPI } from '@/api/clash'
+
+export const reorderRules = async (newRules: Rule[]) => {
+  if (channel.value === Channel.Singbox) {
+    const { reorderRoutes } = await import('./singbox')
+    return reorderRoutes(newRules)
+  }
+  throw new Error('当前后端不支持修改规则顺序')
+}

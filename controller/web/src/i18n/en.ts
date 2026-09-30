@@ -295,6 +295,10 @@ const en = {
   nodeHealthSaved: 'Node health settings saved',
   nodeHealthLoadFailed: 'Failed to load node health settings',
   nodeHealthSaveFailed: 'Failed to save node health settings',
+  nodeHealthScanNow: 'Scan now',
+  nodeHealthScanning: 'Scanning…',
+  nodeHealthScanStarted: 'Node availability scan started',
+  nodeHealthScanFailed: 'Failed to start node availability scan',
   speedtestTimeout: 'Speedtest timeout',
   speedtestMode: 'Speedtest mode',
   speedtestModeDashboard: 'Dashboard controlled',
@@ -724,6 +728,12 @@ const en = {
   copyRule: 'Copy Rule Content',
   enableRule: 'Enable Rule',
   disableRule: 'Disable Rule',
+  moveRuleUp: 'Move Up',
+  moveRuleDown: 'Move Down',
+  moveRuleToTop: 'Move to Top',
+  moveRuleToBottom: 'Move to Bottom',
+  reorderRulesSuccess: 'Rule order updated',
+  dragToReorder: 'Drag to reorder',
   confirmDeleteRule: 'Are you sure you want to delete rule #{index}? This cannot be undone.',
 
   // Certificate Provider Dialog

@@ -699,6 +699,12 @@ const ru: LANG_MESSAGE = {
   copyRule: 'Копировать правило',
   enableRule: 'Включить правило',
   disableRule: 'Отключить правило',
+  moveRuleUp: 'Переместить вверх',
+  moveRuleDown: 'Переместить вниз',
+  moveRuleToTop: 'В самое начало',
+  moveRuleToBottom: 'В самый конец',
+  reorderRulesSuccess: 'Порядок правил обновлен',
+  dragToReorder: 'Перетащите для изменения порядка',
   confirmDeleteRule: 'Удалить правило #{index}? Это действие нельзя отменить.',
 
   // Certificate Provider Dialog

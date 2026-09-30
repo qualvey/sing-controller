@@ -217,7 +217,7 @@
       <main class="bg-base-200 min-w-0 rounded-2xl p-4">
         <header
           v-if="activeCategory"
-          class="mb-5"
+          class="mb-5 flex flex-wrap items-center justify-between gap-3"
         >
           <div class="flex items-center gap-3">
             <span
@@ -236,6 +236,25 @@
                 {{ $t(activeCategory.description) }}
               </p>
             </div>
+          </div>
+
+          <div
+            v-if="activeCategory.key === SETTINGS_MENU_KEY.config"
+            class="flex items-center gap-2"
+          >
+            <button
+              type="button"
+              class="btn btn-outline btn-primary btn-sm gap-1.5 shadow-2xs"
+              :disabled="reloadingConfig"
+              :title="$t('reloadConfigTip') || '平滑重载配置到内核（不中断已有网络连接）'"
+              @click="handleReloadConfig"
+            >
+              <ArrowPathIcon
+                class="h-4 w-4"
+                :class="{ 'animate-spin': reloadingConfig }"
+              />
+              <span>{{ $t('reloadConfigs') }}</span>
+            </button>
           </div>
         </header>
 
@@ -295,6 +314,9 @@ import {
   MagnifyingGlassIcon,
   ServerIcon,
 } from '@heroicons/vue/24/outline'
+import { reloadConfigsAPI } from '@/assembly/config'
+import { showToast } from '@/helper/toast'
+import { useStatusStore } from '@/store/status'
 import { useElementSize } from '@vueuse/core'
 import type { Component } from 'vue'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
@@ -312,6 +334,22 @@ type CategoryView = {
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const statusStore = useStatusStore()
+const reloadingConfig = ref(false)
+
+const handleReloadConfig = async () => {
+  reloadingConfig.value = true
+  try {
+    await reloadConfigsAPI()
+    showToast(t('reloadConfigsSuccess') || '配置重载成功', 'success')
+    await statusStore.refresh()
+  } catch (e) {
+    showToast((e as Error).message || '重载配置失败', 'error')
+  } finally {
+    reloadingConfig.value = false
+  }
+}
+
 const scrollContainerRef = ref<HTMLDivElement>()
 const { width } = useElementSize(scrollContainerRef)
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })

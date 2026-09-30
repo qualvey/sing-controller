@@ -23,6 +23,18 @@ func (h *Handler) handleNodeHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, h.nodeHealth.Snapshot())
 }
 
+func (h *Handler) handleTriggerNodeHealthScan(w http.ResponseWriter, _ *http.Request) {
+	if h.nodeHealth == nil {
+		writeError(w, http.StatusServiceUnavailable, errors.New("node health monitor is unavailable"))
+		return
+	}
+	if !h.nodeHealth.TriggerScan() {
+		writeError(w, http.StatusConflict, errors.New("a node health scan is already queued or running"))
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": true})
+}
+
 func (h *Handler) handleGetNodeHealthConfig(w http.ResponseWriter, _ *http.Request) {
 	if h.nodeHealth == nil {
 		writeError(w, http.StatusServiceUnavailable, errors.New("node health monitor is unavailable"))

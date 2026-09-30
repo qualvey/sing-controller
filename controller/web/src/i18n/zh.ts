@@ -296,6 +296,10 @@ const zh: LANG_MESSAGE = {
   nodeHealthSaved: '节点探测设置已保存',
   nodeHealthLoadFailed: '加载节点探测设置失败',
   nodeHealthSaveFailed: '保存节点探测设置失败',
+  nodeHealthScanNow: '立即扫描',
+  nodeHealthScanning: '扫描中…',
+  nodeHealthScanStarted: '节点可用性扫描已启动',
+  nodeHealthScanFailed: '启动节点可用性扫描失败',
   speedtestTimeout: '测速超时',
   speedtestMode: '测速方式',
   speedtestModeDashboard: '面板控制',
@@ -713,6 +717,12 @@ const zh: LANG_MESSAGE = {
   copyRule: '复制规则内容',
   enableRule: '启用规则',
   disableRule: '禁用规则',
+  moveRuleUp: '上移规则',
+  moveRuleDown: '下移规则',
+  moveRuleToTop: '置顶规则',
+  moveRuleToBottom: '置底规则',
+  reorderRulesSuccess: '规则顺序已更新',
+  dragToReorder: '拖拽调整顺序',
   confirmDeleteRule: '确定删除第 {index} 条路由规则？该操作不可恢复。',
 
   // Certificate Provider Dialog

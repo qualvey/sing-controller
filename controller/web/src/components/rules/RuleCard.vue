@@ -1,6 +1,10 @@
 <template>
   <div
-    :class="{ 'opacity-50': isDisabled, 'scroller-item': 1 }"
+    :class="{
+      'opacity-50': isDisabled,
+      'scroller-item': 1,
+      'cursor-grab active:cursor-grabbing select-none': canDrag,
+    }"
     @contextmenu.prevent="handleContextMenu"
   >
     <div
@@ -10,15 +14,20 @@
       <div
         class="collapse-title hover:bg-base-200/40 flex min-h-0 flex-col gap-3 overflow-hidden px-3 py-2 text-sm transition-colors"
         :class="{
-          'cursor-pointer': isSelectable,
+          'cursor-pointer': isSelectable && !canDrag,
         }"
         @click="clickHandler"
       >
-        <div class="min-h-5 leading-5">
+        <div class="flex items-center min-h-5 leading-5">
+          <Bars2Icon
+            v-if="canDrag"
+            class="text-base-content/35 hover:text-base-content/80 -ml-0.5 mr-1.5 h-4 w-4 shrink-0 transition-colors"
+            :title="$t('dragToReorder') || '拖拽调整顺序'"
+          />
           <span class="text-base-content/50 text-xs tabular-nums">
             {{ index }}
           </span>
-          <span class="text-base-content/55 ml-4 text-xs tracking-wide">
+          <span class="text-base-content/55 ml-3 text-xs tracking-wide">
             <HighlightText
               :text="rule.type"
               :filter="rulesFilter"
@@ -125,6 +134,7 @@ import {
 import type { Rule } from '@/types'
 import {
   ArrowPathIcon,
+  Bars2Icon,
   InformationCircleIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/vue/24/outline'
@@ -138,10 +148,16 @@ import ProxyChainPath from '../common/ProxyChainPath.vue'
 import ProxyGroup from '../proxies/ProxyGroup.vue'
 import { openRuleContextMenu } from '@/composables/ruleContextMenu'
 
-const props = defineProps<{
-  rule: Rule
-  index: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    rule: Rule
+    index: number
+    canDrag?: boolean
+  }>(),
+  {
+    canDrag: false,
+  },
+)
 
 const handleContextMenu = (e: MouseEvent) => {
   openRuleContextMenu(e, {

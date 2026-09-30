@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/qualvey/sing-controller/internal/logger"
@@ -35,8 +36,12 @@ type Status struct {
 }
 
 type Snapshot struct {
-	Enabled  bool              `json:"enabled"`
-	Statuses map[string]Status `json:"statuses"`
+	Enabled       bool              `json:"enabled"`
+	Scanning      bool              `json:"scanning"`
+	ScanQueued    bool              `json:"scan_queued"`
+	LastScanStart time.Time         `json:"last_scan_started,omitempty"`
+	LastScanEnd   time.Time         `json:"last_scan_completed,omitempty"`
+	Statuses      map[string]Status `json:"statuses"`
 }
 
 type Event struct {
@@ -50,10 +55,15 @@ type Runner struct {
 	cfg   *settings.Manager
 	store *store.Store
 
-	mu       sync.RWMutex
-	statuses map[string]Status
-	nativeMu sync.Mutex
-	http     *http.Client
+	mu        sync.RWMutex
+	statuses  map[string]Status
+	nativeMu  sync.Mutex
+	scanCh    chan struct{}
+	scanning  bool
+	queued    bool
+	lastStart time.Time
+	lastEnd   time.Time
+	http      *http.Client
 }
 
 func New(cfg *settings.Manager, st *store.Store) *Runner {
@@ -61,6 +71,7 @@ func New(cfg *settings.Manager, st *store.Store) *Runner {
 		cfg:      cfg,
 		store:    st,
 		statuses: make(map[string]Status),
+		scanCh:   make(chan struct{}, 1),
 		http:     &http.Client{Timeout: 65 * time.Second},
 	}
 }
@@ -72,8 +83,37 @@ func (r *Runner) Snapshot() Snapshot {
 	for tag, status := range r.statuses {
 		statuses[tag] = status
 	}
+	scanning := r.scanning
+	queued := r.queued
+	lastStart := r.lastStart
+	lastEnd := r.lastEnd
 	r.mu.RUnlock()
-	return Snapshot{Enabled: values.NodeHealth.Enabled, Statuses: statuses}
+	return Snapshot{
+		Enabled:       values.NodeHealth.Enabled,
+		Scanning:      scanning,
+		ScanQueued:    queued,
+		LastScanStart: lastStart,
+		LastScanEnd:   lastEnd,
+		Statuses:      statuses,
+	}
+}
+
+// TriggerScan queues one immediate scan. It returns false while a scan is
+// already queued or running.
+func (r *Runner) TriggerScan() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.scanning || r.queued {
+		return false
+	}
+	r.queued = true
+	select {
+	case r.scanCh <- struct{}{}:
+		return true
+	default:
+		r.queued = false
+		return false
+	}
 }
 
 func (r *Runner) Config() settings.NodeHealthOptions {
@@ -102,10 +142,20 @@ func (r *Runner) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-r.scanCh:
+			r.runScan(ctx, r.Config())
+			lastRun = time.Now()
 		case now := <-ticker.C:
 			options := r.Config()
 			if !options.Enabled {
 				continue
+			}
+			select {
+			case <-r.scanCh:
+				r.runScan(ctx, options)
+				lastRun = time.Now()
+				continue
+			default:
 			}
 			interval, err := time.ParseDuration(options.Interval)
 			if err != nil {
@@ -114,14 +164,45 @@ func (r *Runner) Run(ctx context.Context) {
 			if !lastRun.IsZero() && now.Sub(lastRun) < interval {
 				continue
 			}
-			lastRun = now
-			r.checkAll(ctx, options)
+			r.runScan(ctx, options)
+			lastRun = time.Now()
 		}
 	}
 }
 
+func (r *Runner) runScan(ctx context.Context, options settings.NodeHealthOptions) {
+	r.mu.Lock()
+	wasQueued := r.queued
+	r.queued = false
+	r.scanning = true
+	r.lastStart = time.Now().UTC()
+	r.mu.Unlock()
+	if wasQueued {
+		select {
+		case <-r.scanCh:
+		default:
+		}
+	}
+
+	r.checkAll(ctx, options)
+
+	r.mu.Lock()
+	r.scanning = false
+	r.lastEnd = time.Now().UTC()
+	r.mu.Unlock()
+}
+
 func (r *Runner) checkAll(ctx context.Context, options settings.NodeHealthOptions) {
 	proxies := r.proxyTargets()
+	startedAt := time.Now()
+	logger.Info("[NodeHealth] probe cycle started (nodes=%d, interval=%s)", len(proxies), options.Interval)
+	var succeeded atomic.Int64
+	var failed atomic.Int64
+	defer func() {
+		logger.Info("[NodeHealth] probe cycle completed (nodes=%d, succeeded=%d, failed=%d, duration=%s)",
+			len(proxies), succeeded.Load(), failed.Load(), time.Since(startedAt).Round(time.Millisecond))
+	}()
+
 	active := make(map[string]struct{}, len(proxies))
 	for _, proxy := range proxies {
 		active[proxy.Tag] = struct{}{}
@@ -143,6 +224,7 @@ func (r *Runner) checkAll(ctx context.Context, options settings.NodeHealthOption
 		select {
 		case semaphore <- struct{}{}:
 		case <-ctx.Done():
+			wg.Wait()
 			return
 		}
 		wg.Add(1)
@@ -150,6 +232,11 @@ func (r *Runner) checkAll(ctx context.Context, options settings.NodeHealthOption
 			defer wg.Done()
 			defer func() { <-semaphore }()
 			latency, err := r.probe(ctx, options, proxy.Tag)
+			if err == nil {
+				succeeded.Add(1)
+			} else {
+				failed.Add(1)
+			}
 			r.record(options, proxy, latency, err)
 		}()
 	}

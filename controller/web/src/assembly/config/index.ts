@@ -36,11 +36,12 @@ import { markCoreReloading } from '@/store/status'
 import {
   flushDNSCacheAPI,
   flushFakeIPAPI,
-  queryDNSAPI,
+  queryDNSAPI as clashQueryDNSAPI,
   reloadConfigsAPI as clashReloadConfigsAPI,
   updateConfigsAPI,
   updateGeoDataAPI,
 } from '@/api/clash'
+
 export const reloadConfigsAPI = async () => {
   markCoreReloading(4000)
   try {
@@ -53,10 +54,21 @@ export const reloadConfigsAPI = async () => {
   }
 }
 
+export const queryDNSAPI = async (params: { name: string; type: string }) => {
+  try {
+    const data = await controllerApi.queryDNS(params)
+    return { data }
+  } catch (e) {
+    if (channel.value === Channel.Clash) {
+      return clashQueryDNSAPI(params)
+    }
+    throw e
+  }
+}
+
 export {
   flushDNSCacheAPI,
   flushFakeIPAPI,
-  queryDNSAPI,
   updateConfigsAPI,
   updateGeoDataAPI,
 }
