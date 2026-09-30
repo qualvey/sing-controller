@@ -83,8 +83,9 @@ import { proxiesTabShow } from '@/assembly/proxies'
 import { disableProxiesPageTextSelect, twoColumnProxyGroup } from '@/store/settings'
 import { folderManagerOpen, isProxyFolderModeActive } from '@/store/proxyFolders'
 import { useSessionStorage } from '@vueuse/core'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useUngroupedProxies } from '@/composables/ungroupedProxies'
+import { refreshNodeHealth } from '@/store/nodeHealth'
 
 const { padding } = usePaddingForViews({
   offsetTop: 0,
@@ -93,6 +94,7 @@ const { padding } = usePaddingForViews({
 const { ungroupedNodeNames } = useUngroupedProxies()
 const renderPageItems = renderProxiesPageItems
 const proxiesRef = ref()
+let healthTimer: number | undefined
 const scrollStatus = useSessionStorage('cache/proxies-scroll-status', {
   [PROXY_TAB_TYPE.PROVIDER]: 0,
   [PROXY_TAB_TYPE.PROXIES]: 0,
@@ -132,6 +134,8 @@ watch(proxiesTabShow, () =>
 isProxiesPageMounted.value = false
 
 onMounted(() => {
+  void refreshNodeHealth()
+  healthTimer = window.setInterval(() => void refreshNodeHealth(), 30_000)
   setTimeout(() => {
     isProxiesPageMounted.value = true
     nextTick(() => {
@@ -139,6 +143,10 @@ onMounted(() => {
       fetchProxies()
     })
   })
+})
+
+onUnmounted(() => {
+  if (healthTimer !== undefined) window.clearInterval(healthTimer)
 })
 
 const renderComponent = computed(() => {

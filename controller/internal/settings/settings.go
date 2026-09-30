@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -126,13 +127,106 @@ type StatsOptions struct {
 	RealTime     RealTimeStats `json:"real_time"`
 }
 
+// NodeHealthOptions configures scheduled outbound availability probes and webhook notifications.
+type NodeHealthOptions struct {
+	Enabled           bool   `json:"enabled"`
+	Interval          string `json:"interval,omitempty"`
+	TestURL           string `json:"test_url,omitempty"`
+	TimeoutMS         int    `json:"timeout_ms,omitempty"`
+	FailureThreshold  int    `json:"failure_threshold,omitempty"`
+	Concurrency       int    `json:"concurrency,omitempty"`
+	WebhookURL        string `json:"webhook_url,omitempty"`
+	WebhookToken      string `json:"webhook_token,omitempty"`
+	WebhookSignSecret string `json:"webhook_sign_secret,omitempty"`
+}
+
+func DefaultNodeHealthOptions() NodeHealthOptions {
+	return NodeHealthOptions{
+		Interval:         "5m",
+		TestURL:          "https://www.gstatic.com/generate_204",
+		TimeoutMS:        5000,
+		FailureThreshold: 2,
+		Concurrency:      5,
+	}
+}
+
+func (o *NodeHealthOptions) FillDefaults() {
+	defaults := DefaultNodeHealthOptions()
+	if o.Interval == "" {
+		o.Interval = defaults.Interval
+	}
+	if o.TestURL == "" {
+		o.TestURL = defaults.TestURL
+	}
+	if o.TimeoutMS == 0 {
+		o.TimeoutMS = defaults.TimeoutMS
+	}
+	if o.FailureThreshold == 0 {
+		o.FailureThreshold = defaults.FailureThreshold
+	}
+	if o.Concurrency == 0 {
+		o.Concurrency = defaults.Concurrency
+	}
+}
+
+func (o *NodeHealthOptions) Normalize() {
+	o.FillDefaults()
+	defaults := DefaultNodeHealthOptions()
+	interval, intervalErr := time.ParseDuration(o.Interval)
+	if intervalErr != nil || interval < 30*time.Second {
+		o.Interval = defaults.Interval
+	}
+	if o.TimeoutMS < 500 || o.TimeoutMS > 60000 {
+		o.TimeoutMS = defaults.TimeoutMS
+	}
+	if o.FailureThreshold < 1 || o.FailureThreshold > 10 {
+		o.FailureThreshold = defaults.FailureThreshold
+	}
+	if o.Concurrency < 1 || o.Concurrency > 32 {
+		o.Concurrency = defaults.Concurrency
+	}
+}
+
+func (o NodeHealthOptions) Validate() error {
+	if _, err := time.ParseDuration(o.Interval); err != nil {
+		return fmt.Errorf("node_health.interval 格式无效: %w", err)
+	}
+	interval, _ := time.ParseDuration(o.Interval)
+	if interval < 30*time.Second {
+		return errors.New("node_health.interval 不能小于 30s")
+	}
+	if o.TimeoutMS < 500 || o.TimeoutMS > 60000 {
+		return errors.New("node_health.timeout_ms 必须在 500 到 60000 之间")
+	}
+	if o.FailureThreshold < 1 || o.FailureThreshold > 10 {
+		return errors.New("node_health.failure_threshold 必须在 1 到 10 之间")
+	}
+	if o.Concurrency < 1 || o.Concurrency > 32 {
+		return errors.New("node_health.concurrency 必须在 1 到 32 之间")
+	}
+	if o.TestURL != "" {
+		u, err := url.ParseRequestURI(o.TestURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return errors.New("node_health.test_url 必须是有效的 HTTP/HTTPS URL")
+		}
+	}
+	if o.WebhookURL != "" {
+		u, err := url.ParseRequestURI(o.WebhookURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return errors.New("node_health.webhook_url 必须是有效的 HTTP/HTTPS URL")
+		}
+	}
+	return nil
+}
+
 // Settings 是 controller 的主配置根结构
 type Settings struct {
 	Server ServerOptions `json:"server"`
 	Log    *LogOptions   `json:"log,omitempty"`
 	Core   CoreOptions   `json:"core"`
 	API    APIOptions    `json:"api"`
-	Stats  StatsOptions  `json:"stats"`
+	Stats      StatsOptions      `json:"stats"`
+	NodeHealth NodeHealthOptions `json:"node_health"`
 }
 
 func (s *Settings) UnmarshalJSON(data []byte) error {
@@ -237,6 +331,7 @@ func defaultSettings() Settings {
 				OnlineThresholdSec: 60,
 			},
 		},
+		NodeHealth: DefaultNodeHealthOptions(),
 	}
 }
 
@@ -336,6 +431,7 @@ func (m *Manager) Load() error {
 		defaultManaged := runtime.GOOS == "windows"
 		values.Core.Managed = &defaultManaged
 	}
+	values.NodeHealth.Normalize()
 
 	// 4. 自动推断 service API
 	if values.API.Service == nil || values.API.Service.Address == "" {

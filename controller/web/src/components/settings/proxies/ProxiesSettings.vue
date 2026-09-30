@@ -200,6 +200,7 @@
         <IconSettings />
       </div>
     </template>
+    <NodeHealthSettings />
   </div>
 </template>
 
@@ -235,6 +236,7 @@ import { useI18n } from 'vue-i18n'
 import TextInput from '../../common/TextInput.vue'
 import GroupTestUrlsSettings from './GroupTestUrlsSettings.vue'
 import IconSettings from './IconSettings.vue'
+import NodeHealthSettings from './NodeHealthSettings.vue'
 
 const k = PROXIES_ITEM_KEYS
 const isVisibleSpeedtestUrl = useIsSettingVisible(k.speedtestUrl)

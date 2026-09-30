@@ -12,6 +12,7 @@ import { openProxyContextMenu } from '@/composables/proxyContextMenu'
 import LatencyTag from '@/components/proxies/LatencyTag.vue'
 import ProxyIcon from '@/components/proxies/ProxyIcon.vue'
 import ProxyNodeGrid from '@/components/proxies/ProxyNodeGrid.vue'
+import { nodeHealthEnabled, nodeHealthStatuses } from '@/store/nodeHealth'
 import {
   BoltIcon,
   ChevronDownIcon,
@@ -37,6 +38,11 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const { ungroupedNodeNames, batchSpeedtest } = useUngroupedProxies()
+const nodeHealthStatus = (name: string) => {
+  if (!nodeHealthEnabled.value) return undefined
+  const status = nodeHealthStatuses.value[name]
+  return status?.state === 'available' || status?.state === 'unavailable' ? status : undefined
+}
 
 const isCollapsed = useStorage('config/ungrouped-proxies-collapsed', false)
 const isSelectionMode = ref(false)
@@ -283,6 +289,12 @@ const handleContextMenu = (e: MouseEvent, name: string) => {
             <span class="badge badge-xs badge-ghost font-mono uppercase text-[10px] text-base-content/60 tracking-wider">
               {{ proxyMap[name]?.type || 'node' }}
             </span>
+            <span
+              v-if="nodeHealthStatus(name)"
+              class="size-2 rounded-full"
+              :class="nodeHealthStatus(name)?.state === 'available' ? 'bg-success' : 'bg-error'"
+              :title="nodeHealthStatus(name)?.state === 'available' ? t('nodeHealthAvailable') : t('nodeHealthUnavailable')"
+            />
             <LatencyTag
               class="shrink-0"
               :name="name"

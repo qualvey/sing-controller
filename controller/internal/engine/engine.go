@@ -15,6 +15,7 @@ import (
 	"github.com/qualvey/sing-controller/internal/api"
 	"github.com/qualvey/sing-controller/internal/collector"
 	"github.com/qualvey/sing-controller/internal/logger"
+	"github.com/qualvey/sing-controller/internal/nodehealth"
 	"github.com/qualvey/sing-controller/internal/provider"
 	"github.com/qualvey/sing-controller/internal/realtime"
 	"github.com/qualvey/sing-controller/internal/settings"
@@ -88,6 +89,7 @@ type Engine struct {
 	rt         *realtime.Broadcaster
 	handler    http.Handler
 	apiHandler *api.Handler
+	nodeHealth *nodehealth.Runner
 	server     *http.Server
 
 	opts       Config
@@ -203,6 +205,7 @@ func New(opts Config) (*Engine, error) {
 	}
 
 	// API Handler
+	nodeHealthRunner := nodehealth.New(cfg, cfgStore)
 	apiH := api.NewHandler(api.HandlerOptions{
 		Store:       cfgStore,
 		Settings:    cfg,
@@ -211,8 +214,10 @@ func New(opts Config) (*Engine, error) {
 		Secret:      secret,
 		Version:     opts.Version,
 		Static:      opts.StaticHandler,
+		NodeHealth:  nodeHealthRunner,
 	})
 	e.apiHandler = apiH
+	e.nodeHealth = nodeHealthRunner
 	e.handler = apiH
 
 	return e, nil
@@ -245,6 +250,11 @@ func (e *Engine) Start(parentCtx context.Context) error {
 	e.rt.Start()
 	e.wg.Add(1)
 	go collector.StartCollector(ctx, &e.wg, e.cfg, e.rt)
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+		e.nodeHealth.Run(ctx)
+	}()
 
 	// 3. Supervisor 托管状态检查与启动
 	if e.supervisor != nil {

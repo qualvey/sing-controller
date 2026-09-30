@@ -29,7 +29,12 @@
         v-else
         class="text-base-content"
         >{{ node.name }}</span
-      >
+      ><span
+        v-if="healthStatus"
+        class="ml-1 inline-block size-2 rounded-full align-middle"
+        :class="healthStatus.state === 'available' ? 'bg-success' : 'bg-error'"
+        :title="healthTitle"
+      />
     </div>
 
     <div class="flex h-4 w-full items-center justify-between">
@@ -58,6 +63,7 @@ import { getIPv6ByName, getTestUrl, isTestingNode, proxyLatencyTest, proxyMap } 
 import { openProxyContextMenu } from '@/composables/proxyContextMenu'
 import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
 import { smartWeightsMap } from '@/store/smart'
+import { nodeHealthEnabled, nodeHealthStatuses } from '@/store/nodeHealth'
 import { twMerge } from 'tailwind-merge'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -80,6 +86,16 @@ const handleContextMenu = (e: MouseEvent) => {
 
 const cardRef = ref()
 const node = computed(() => proxyMap.value[props.name])
+const healthStatus = computed(() => {
+  if (!nodeHealthEnabled.value) return undefined
+  const status = nodeHealthStatuses.value[props.name]
+  return status?.state === 'available' || status?.state === 'unavailable' ? status : undefined
+})
+const healthTitle = computed(() => {
+  if (!healthStatus.value) return ''
+  const label = healthStatus.value.state === 'available' ? t('nodeHealthAvailable') : t('nodeHealthUnavailable')
+  return healthStatus.value.latency_ms ? `${label} · ${healthStatus.value.latency_ms} ms` : label
+})
 const isLatencyTesting = computed(() => isTestingNode(props.name))
 const typeFormatter = (type: string) => {
   type = type.toLowerCase()

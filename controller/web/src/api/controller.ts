@@ -58,6 +58,28 @@ export interface ControllerSettings {
   }
 }
 
+export interface NodeHealthConfig {
+  enabled: boolean
+  interval: string
+  test_url: string
+  timeout_ms: number
+  failure_threshold: number
+  concurrency: number
+  webhook_url: string
+  webhook_token: string
+  webhook_sign_secret: string
+}
+
+export interface NodeHealthStatus {
+  tag: string
+  type: string
+  state: 'available' | 'unavailable' | 'unknown'
+  latency_ms?: number
+  consecutive_failures: number
+  checked_at?: string
+  error?: string
+}
+
 export interface Outbound {
   type: string
   tag: string
@@ -210,6 +232,23 @@ export const api = {
   // Controller 设置
   settings: () => http.get<ControllerSettings>('/settings').then((r) => r.data),
   updateSettings: (s: ControllerSettings) => http.put('/settings', s).then((r) => r.data),
+  nodeHealth: () =>
+    http.get<{ enabled: boolean; statuses: Record<string, NodeHealthStatus> }>('/node-health').then((r) => r.data),
+  nodeHealthConfig: () =>
+    http
+      .get<{
+        config: NodeHealthConfig
+        webhook_token_configured: boolean
+        webhook_sign_secret_configured: boolean
+      }>('/node-health/config')
+      .then((r) => r.data),
+  updateNodeHealthConfig: (
+    config: NodeHealthConfig & {
+      clear_webhook_token?: boolean
+      clear_webhook_sign_secret?: boolean
+    },
+  ) =>
+    http.put('/node-health/config', config).then((r) => r.data),
   availablePort: (start?: number) =>
     http
       .get<{ port: number; start: number }>('/ports/available', {

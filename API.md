@@ -92,6 +92,9 @@
 | | `GET` | `/api/diagnostics` | 静态配置分析诊断（引用悬空、tag 重复等） |
 | **Controller 设置** | `GET` | `/api/settings` | 读取 controller 自身运行设置 |
 | | `PUT` | `/api/settings` | 更新 controller 运行设置 |
+| **节点健康探测** | `GET` | `/api/node-health` | 获取节点可用状态与最近探测结果 |
+| | `GET` | `/api/node-health/config` | 读取探测与 webhook 配置（Webhook 凭据不回传） |
+| | `PUT` | `/api/node-health/config` | 更新探测与 webhook 配置 |
 | | `GET` | `/api/ports/available` | 探测并分配下一个可用 TCP 端口 |
 | **用户池 (Users)** | `GET` | `/api/users` | 获取全局用户池列表 |
 | | `POST` | `/api/users` | 创建用户并同步绑定到指定入站 |

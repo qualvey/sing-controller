@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/qualvey/sing-controller/internal/logger"
+	"github.com/qualvey/sing-controller/internal/nodehealth"
 	"github.com/qualvey/sing-controller/internal/provider"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
@@ -39,7 +40,8 @@ type HandlerOptions struct {
 	Secret      string
 	Version     string
 	// Static 嵌入的 webui 静态资源（SPA）；nil 时根路径返回服务信息 JSON（API-only 模式）
-	Static http.Handler
+	Static     http.Handler
+	NodeHealth *nodehealth.Runner
 }
 
 type Handler struct {
@@ -50,6 +52,7 @@ type Handler struct {
 	secret      string
 	version     string
 	static      http.Handler
+	nodeHealth  *nodehealth.Runner
 	wrapped     http.Handler
 
 	schemaOnce sync.Once
@@ -80,6 +83,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 		secret:      opts.Secret,
 		version:     opts.Version,
 		static:      opts.Static,
+		nodeHealth:  opts.NodeHealth,
 		proxies:     newProxyCache(),
 	}
 	mux := http.NewServeMux()
@@ -102,6 +106,9 @@ func NewHandler(opts HandlerOptions) *Handler {
 	mux.HandleFunc("GET /api/types", h.handleTypes)
 	mux.HandleFunc("GET /api/settings", h.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", h.handlePutSettings)
+	mux.HandleFunc("GET /api/node-health", h.handleNodeHealth)
+	mux.HandleFunc("GET /api/node-health/config", h.handleGetNodeHealthConfig)
+	mux.HandleFunc("PUT /api/node-health/config", h.handlePutNodeHealthConfig)
 	mux.HandleFunc("GET /api/ports/available", h.handlePortAvailable)
 
 	// core supervisor 控制器（进程启停 / 状态 / 日志）
@@ -533,7 +540,10 @@ func (h *Handler) handleSchema(w http.ResponseWriter, r *http.Request) {
 // ---------- settings ----------
 
 func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.settings.Values())
+	values := h.settings.Values()
+	values.NodeHealth.WebhookToken = ""
+	values.NodeHealth.WebhookSignSecret = ""
+	writeJSON(w, http.StatusOK, values)
 }
 
 func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
@@ -546,6 +556,17 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &newValues); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	newValues.NodeHealth.FillDefaults()
+	if err := newValues.NodeHealth.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if newValues.NodeHealth.WebhookToken == "" {
+		newValues.NodeHealth.WebhookToken = h.settings.Values().NodeHealth.WebhookToken
+	}
+	if newValues.NodeHealth.WebhookSignSecret == "" {
+		newValues.NodeHealth.WebhookSignSecret = h.settings.Values().NodeHealth.WebhookSignSecret
 	}
 	var privilegedPortWarning string
 	if newValues.Core.ConfigPath == "" {

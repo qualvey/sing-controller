@@ -134,4 +134,33 @@ func TestLoadModularAndLegacyCompatibility(t *testing.T) {
 	if v2.API.Clash.Address != "http://127.0.0.1:9090" {
 		t.Errorf("Clash API mismatch: %+v", v2.API.Clash)
 	}
+	if v2.NodeHealth.Interval != "5m" || v2.NodeHealth.FailureThreshold != 2 || v2.NodeHealth.Enabled {
+		t.Errorf("node health defaults mismatch: %+v", v2.NodeHealth)
+	}
+}
+
+func TestNodeHealthOptionsValidate(t *testing.T) {
+	options := DefaultNodeHealthOptions()
+	if err := options.Validate(); err != nil {
+		t.Fatalf("valid defaults rejected: %v", err)
+	}
+
+	cases := []struct {
+		name   string
+		update func(*NodeHealthOptions)
+	}{
+		{"short interval", func(o *NodeHealthOptions) { o.Interval = "1s" }},
+		{"invalid test url", func(o *NodeHealthOptions) { o.TestURL = "file:///tmp/probe" }},
+		{"invalid webhook url", func(o *NodeHealthOptions) { o.WebhookURL = "not-a-url" }},
+		{"invalid concurrency", func(o *NodeHealthOptions) { o.Concurrency = 100 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate := DefaultNodeHealthOptions()
+			tc.update(&candidate)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("Validate() accepted invalid options")
+			}
+		})
+	}
 }
