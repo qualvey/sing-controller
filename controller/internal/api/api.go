@@ -307,8 +307,8 @@ func (h *Handler) withMiddleware(next http.Handler) http.Handler {
 				path += "?" + r.URL.RawQuery
 			}
 
-			// 对健康检查接口在 Debug 级别输出，避免高频刷屏
-			if r.URL.Path == "/healthz" {
+			// 高频探活与批量 DNS 解析在 Debug 级别输出，避免刷屏
+			if r.URL.Path == "/healthz" || r.URL.Path == "/api/dns/lookup" {
 				logger.Debug("[HTTP] %s %s %d (%s) - %s %dB", r.Method, path, status, duration, ip, wrapped.bytesWritten)
 				return
 			}

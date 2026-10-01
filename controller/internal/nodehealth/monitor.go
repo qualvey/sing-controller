@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -24,6 +25,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+const failureRetryDelay = time.Minute
 
 type Status struct {
 	Tag              string    `json:"tag"`
@@ -51,6 +54,11 @@ type Event struct {
 	CheckedAt        time.Time `json:"checked_at"`
 }
 
+type retryTask struct {
+	target  proxyTarget
+	retryAt time.Time
+}
+
 type Runner struct {
 	cfg   *settings.Manager
 	store *store.Store
@@ -63,6 +71,7 @@ type Runner struct {
 	queued    bool
 	lastStart time.Time
 	lastEnd   time.Time
+	retries   map[string]retryTask
 	http      *http.Client
 }
 
@@ -72,6 +81,7 @@ func New(cfg *settings.Manager, st *store.Store) *Runner {
 		store:    st,
 		statuses: make(map[string]Status),
 		scanCh:   make(chan struct{}, 1),
+		retries:  make(map[string]retryTask),
 		http:     &http.Client{Timeout: 65 * time.Second},
 	}
 }
@@ -143,16 +153,17 @@ func (r *Runner) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-r.scanCh:
-			r.runScan(ctx, r.Config())
+			r.runScan(ctx, r.Config(), "manual")
 			lastRun = time.Now()
 		case now := <-ticker.C:
 			options := r.Config()
 			if !options.Enabled {
+				r.runDueRetries(ctx, options, now)
 				continue
 			}
 			select {
 			case <-r.scanCh:
-				r.runScan(ctx, options)
+				r.runScan(ctx, options, "manual")
 				lastRun = time.Now()
 				continue
 			default:
@@ -161,16 +172,17 @@ func (r *Runner) Run(ctx context.Context) {
 			if err != nil {
 				interval = 5 * time.Minute
 			}
-			if !lastRun.IsZero() && now.Sub(lastRun) < interval {
+			if lastRun.IsZero() || now.Sub(lastRun) >= interval {
+				r.runScan(ctx, options, "scheduled")
+				lastRun = time.Now()
 				continue
 			}
-			r.runScan(ctx, options)
-			lastRun = time.Now()
+			r.runDueRetries(ctx, options, now)
 		}
 	}
 }
 
-func (r *Runner) runScan(ctx context.Context, options settings.NodeHealthOptions) {
+func (r *Runner) runScan(ctx context.Context, options settings.NodeHealthOptions, kind string) {
 	r.mu.Lock()
 	wasQueued := r.queued
 	r.queued = false
@@ -184,7 +196,7 @@ func (r *Runner) runScan(ctx context.Context, options settings.NodeHealthOptions
 		}
 	}
 
-	r.checkAll(ctx, options)
+	r.checkAll(ctx, options, kind)
 
 	r.mu.Lock()
 	r.scanning = false
@@ -192,28 +204,84 @@ func (r *Runner) runScan(ctx context.Context, options settings.NodeHealthOptions
 	r.mu.Unlock()
 }
 
-func (r *Runner) checkAll(ctx context.Context, options settings.NodeHealthOptions) {
-	proxies := r.proxyTargets()
-	startedAt := time.Now()
-	logger.Info("[NodeHealth] probe cycle started (nodes=%d, interval=%s)", len(proxies), options.Interval)
-	var succeeded atomic.Int64
-	var failed atomic.Int64
-	defer func() {
-		logger.Info("[NodeHealth] probe cycle completed (nodes=%d, succeeded=%d, failed=%d, duration=%s)",
-			len(proxies), succeeded.Load(), failed.Load(), time.Since(startedAt).Round(time.Millisecond))
-	}()
-
-	active := make(map[string]struct{}, len(proxies))
-	for _, proxy := range proxies {
+func (r *Runner) checkAll(ctx context.Context, options settings.NodeHealthOptions, kind string) {
+	configured := r.proxyTargets()
+	active := make(map[string]struct{}, len(configured))
+	for _, proxy := range configured {
 		active[proxy.Tag] = struct{}{}
 	}
 	r.mu.Lock()
 	for tag := range r.statuses {
 		if _, ok := active[tag]; !ok {
 			delete(r.statuses, tag)
+			delete(r.retries, tag)
+		}
+	}
+	for tag := range r.retries {
+		if _, ok := active[tag]; !ok {
+			delete(r.retries, tag)
 		}
 	}
 	r.mu.Unlock()
+	r.checkTargets(ctx, options, r.targetsForScan(configured, kind, time.Now()), kind)
+}
+
+func (r *Runner) targetsForScan(targets []proxyTarget, kind string, now time.Time) []proxyTarget {
+	if kind != "scheduled" {
+		return targets
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	filtered := make([]proxyTarget, 0, len(targets))
+	for _, target := range targets {
+		if retry, pending := r.retries[target.Tag]; pending && now.Before(retry.retryAt) {
+			continue
+		}
+		filtered = append(filtered, target)
+	}
+	return filtered
+}
+
+func (r *Runner) runDueRetries(ctx context.Context, options settings.NodeHealthOptions, now time.Time) {
+	targets := r.takeDueRetries(now)
+	if len(targets) > 0 {
+		r.checkTargets(ctx, options, targets, "retry")
+	}
+}
+
+func (r *Runner) takeDueRetries(now time.Time) []proxyTarget {
+	activeTargets := r.proxyTargets()
+	active := make(map[string]proxyTarget, len(activeTargets))
+	for _, target := range activeTargets {
+		active[target.Tag] = target
+	}
+	r.mu.Lock()
+	targets := make([]proxyTarget, 0, len(r.retries))
+	for tag, task := range r.retries {
+		target, exists := active[tag]
+		if !exists {
+			delete(r.retries, tag)
+			delete(r.statuses, tag)
+			continue
+		}
+		if !now.Before(task.retryAt) {
+			targets = append(targets, target)
+			delete(r.retries, tag)
+		}
+	}
+	r.mu.Unlock()
+	return targets
+}
+
+func (r *Runner) checkTargets(ctx context.Context, options settings.NodeHealthOptions, proxies []proxyTarget, kind string) {
+	startedAt := time.Now()
+	logger.Info("[NodeHealth] %s probe cycle started (nodes=%d, interval=%s)", kind, len(proxies), options.Interval)
+	var succeeded atomic.Int64
+	var failed atomic.Int64
+	defer func() {
+		logger.Info("[NodeHealth] %s probe cycle completed (nodes=%d, succeeded=%d, failed=%d, duration=%s)",
+			kind, len(proxies), succeeded.Load(), failed.Load(), time.Since(startedAt).Round(time.Millisecond))
+	}()
 	if len(proxies) == 0 {
 		return
 	}
@@ -441,20 +509,44 @@ func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, 
 		}
 	}
 	r.statuses[target.Tag] = status
+	if probeErr != nil && status.ConsecutiveFails < options.FailureThreshold {
+		r.retries[target.Tag] = retryTask{target: target, retryAt: now.Add(failureRetryDelay)}
+	} else {
+		delete(r.retries, target.Tag)
+	}
 	shouldNotify := (status.State == "unavailable" && oldState != "unavailable") ||
 		(status.State == "available" && oldState == "unavailable")
 	r.mu.Unlock()
 
 	if probeErr != nil {
-		logger.Debug("[NodeHealth] probe %s failed (%d/%d): %v", target.Tag, status.ConsecutiveFails, options.FailureThreshold, probeErr)
+		if status.ConsecutiveFails < options.FailureThreshold {
+			logger.Info("[NodeHealth] probe failed; retry scheduled (tag=%s, failures=%d/%d, retry_after=%s, error=%v)",
+				target.Tag, status.ConsecutiveFails, options.FailureThreshold, failureRetryDelay, probeErr)
+		} else {
+			logger.Debug("[NodeHealth] probe %s failed (%d/%d): %v", target.Tag, status.ConsecutiveFails, options.FailureThreshold, probeErr)
+		}
 	}
-	if !shouldNotify || options.WebhookURL == "" {
+	if !shouldNotify {
+		return
+	}
+	logger.Info("[NodeHealth] node status changed (tag=%s, state=%s, consecutive_failures=%d)",
+		status.Tag, status.State, status.ConsecutiveFails)
+	if options.WebhookURL == "" {
+		logger.Info("[NodeHealth] webhook skipped for %s: no webhook URL configured", status.Tag)
 		return
 	}
 	eventName := "node.available"
 	if status.State == "unavailable" {
 		eventName = "node.unavailable"
 	}
+	adapter := "generic"
+	signed := false
+	if isFeishuWebhook(options.WebhookURL) {
+		adapter = "feishu"
+		signed = options.WebhookSignSecret != ""
+	}
+	logger.Info("[NodeHealth] dispatching webhook (event=%s, tag=%s, adapter=%s, signed=%t)",
+		eventName, status.Tag, adapter, signed)
 	go r.sendWebhook(options, Event{
 		Event:            eventName,
 		Node:             status,
@@ -466,7 +558,16 @@ func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, 
 func (r *Runner) sendWebhook(options settings.NodeHealthOptions, event Event) {
 	body, useBearerToken, err := buildWebhookPayload(options, event)
 	if err != nil {
+		logger.Warn("[NodeHealth] build webhook payload failed (event=%s, tag=%s): %v", event.Event, event.Node.Tag, err)
 		return
+	}
+	if isFeishuWebhook(options.WebhookURL) {
+		var payload struct {
+			Timestamp string `json:"timestamp"`
+		}
+		if err := json.Unmarshal(body, &payload); err == nil && payload.Timestamp != "" {
+			logger.Info("[NodeHealth] Feishu signing timestamp (tag=%s, timestamp=%s)", event.Node.Tag, payload.Timestamp)
+		}
 	}
 	r.postWebhook(options, body, useBearerToken)
 }
@@ -557,15 +658,40 @@ func (r *Runner) postWebhook(options settings.NodeHealthOptions, body []byte, us
 		resp, err := r.http.Do(req)
 		cancel()
 		if err == nil {
+			responseBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 			resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			if readErr != nil {
+				err = fmt.Errorf("read webhook response: %w", readErr)
+			} else {
+				err = webhookResponseError(resp.StatusCode, responseBody, isFeishuWebhook(options.WebhookURL))
+			}
+			if err == nil {
 				return
 			}
-			err = fmt.Errorf("webhook returned HTTP %d", resp.StatusCode)
 		}
 		if attempt == 0 {
 			time.Sleep(500 * time.Millisecond)
 		}
 		logger.Warn("[NodeHealth] webhook delivery failed (attempt %d/2): %v", attempt+1, err)
 	}
+}
+
+func webhookResponseError(statusCode int, body []byte, feishu bool) error {
+	if statusCode < 200 || statusCode >= 300 {
+		return fmt.Errorf("webhook returned HTTP %d", statusCode)
+	}
+	if !feishu || len(strings.TrimSpace(string(body))) == 0 {
+		return nil
+	}
+	var response struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return fmt.Errorf("decode Feishu webhook response: %w", err)
+	}
+	if response.Code != 0 {
+		return fmt.Errorf("Feishu webhook rejected message (code=%d, msg=%s)", response.Code, response.Msg)
+	}
+	return nil
 }

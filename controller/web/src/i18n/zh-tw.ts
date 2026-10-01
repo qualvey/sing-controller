@@ -274,7 +274,7 @@ const zhTW: LANG_MESSAGE = {
   settings: '設定',
   speedtestUrl: '測速地址',
   nodeHealthTitle: '節點可用性自動探測',
-  nodeHealthDescription: '由 Controller 後台持續執行，關閉 WebUI 後仍會探測。Clash API 使用下方 URL，sing-box 原生通道使用 URLTest。網域包含 feishu 時自動使用飛書文字訊息格式，並可啟用請求簽章。僅在節點不可用或恢復時傳送 webhook。',
+  nodeHealthDescription: '由 Controller 後台持續執行，關閉 WebUI 後仍會探測。單次探測失敗後 1 分鐘快速重試，達到失敗閾值才判定不可用。Clash API 使用下方 URL，sing-box 原生通道使用 URLTest。網域包含 feishu 時自動使用飛書訊息格式並可啟用簽章。',
   nodeHealthEnabled: '啟用自動探測',
   nodeHealthInterval: '探測間隔',
   nodeHealthTestUrl: '探測 URL',

@@ -276,7 +276,7 @@ const en = {
   settings: 'Settings',
   speedtestUrl: 'Speedtest URL',
   nodeHealthTitle: 'Automatic node availability checks',
-  nodeHealthDescription: 'Runs in the Controller background, including while the WebUI is closed. Clash API probes use the URL below; sing-box native probes use URLTest. Domains containing “feishu” use Feishu text messages and optional request signing. Webhooks are sent only when a node goes down or recovers.',
+  nodeHealthDescription: 'Runs in the Controller background, including while the WebUI is closed. A failed probe is retried after 1 minute; reaching the failure threshold marks the node unavailable. Clash API probes use the URL below; sing-box native probes use URLTest. Domains containing “feishu” use Feishu text messages and optional request signing.',
   nodeHealthEnabled: 'Enable automatic checks',
   nodeHealthInterval: 'Check interval',
   nodeHealthTestUrl: 'Probe URL',

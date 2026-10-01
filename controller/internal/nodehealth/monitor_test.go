@@ -155,6 +155,25 @@ func TestFeishuDetectionUsesDomainOnly(t *testing.T) {
 	}
 }
 
+func TestFeishuSignatureMatchesOfficialExample(t *testing.T) {
+	const want = "l1N0gAcBjdwBvGm1xMjOF0XSyaLRpR7tuO5dHfhAYc8="
+	if got := signFeishuWebhook("demo", 1599360473); got != want {
+		t.Fatalf("Feishu signature = %q, want %q", got, want)
+	}
+}
+
+func TestWebhookResponseChecksFeishuApplicationCode(t *testing.T) {
+	if err := webhookResponseError(http.StatusOK, []byte(`{"code":0,"msg":"success"}`), true); err != nil {
+		t.Fatalf("successful Feishu response rejected: %v", err)
+	}
+	if err := webhookResponseError(http.StatusOK, []byte(`{"code":19024,"msg":"sign match fail"}`), true); err == nil || !strings.Contains(err.Error(), "19024") {
+		t.Fatalf("Feishu application error was not reported: %v", err)
+	}
+	if err := webhookResponseError(http.StatusOK, []byte(`{"code":19024}`), false); err != nil {
+		t.Fatalf("generic webhook response should only use HTTP status: %v", err)
+	}
+}
+
 func TestWebhookOnlySendsAvailabilityTransitions(t *testing.T) {
 	events := make(chan Event, 4)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -203,4 +222,47 @@ func TestWebhookOnlySendsAvailabilityTransitions(t *testing.T) {
 	}
 	runner.record(options, target, 25, nil)
 	assertEvent("node.available")
+}
+
+func TestProbeFailureSchedulesOneMinuteRetry(t *testing.T) {
+	runner := newTestRunner(t)
+	st := store.New(filepath.Join(t.TempDir(), "sing-box.json"))
+	st.Options.Outbounds = []option.Outbound{{Type: "vless", Tag: "edge-1"}}
+	runner.store = st
+	options := settings.DefaultNodeHealthOptions()
+	target := proxyTarget{Tag: "edge-1", Type: "vless"}
+
+	runner.record(options, target, 0, context.DeadlineExceeded)
+	runner.mu.RLock()
+	status := runner.statuses[target.Tag]
+	retry, queued := runner.retries[target.Tag]
+	runner.mu.RUnlock()
+	if !queued || !retry.retryAt.Equal(status.CheckedAt.Add(time.Minute)) {
+		t.Fatalf("retry was not scheduled one minute after failure: status=%#v retry=%#v queued=%v", status, retry, queued)
+	}
+	if status.State != "unknown" || status.ConsecutiveFails != 1 {
+		t.Fatalf("first failure should be pending threshold: %#v", status)
+	}
+	if targets := runner.targetsForScan([]proxyTarget{target}, "scheduled", retry.retryAt.Add(-time.Nanosecond)); len(targets) != 0 {
+		t.Fatalf("scheduled scan should not retry node before one minute: %#v", targets)
+	}
+	if targets := runner.targetsForScan([]proxyTarget{target}, "manual", retry.retryAt.Add(-time.Nanosecond)); len(targets) != 1 {
+		t.Fatalf("manual scan should still include configured node: %#v", targets)
+	}
+	if due := runner.takeDueRetries(retry.retryAt.Add(-time.Nanosecond)); len(due) != 0 {
+		t.Fatalf("retry ran early: %#v", due)
+	}
+	if due := runner.takeDueRetries(retry.retryAt); len(due) != 1 || due[0].Tag != target.Tag {
+		t.Fatalf("retry not released at deadline: %#v", due)
+	}
+
+	runner.record(options, target, 0, context.DeadlineExceeded)
+	runner.record(options, target, 20, nil)
+	runner.mu.RLock()
+	_, queued = runner.retries[target.Tag]
+	status = runner.statuses[target.Tag]
+	runner.mu.RUnlock()
+	if queued || status.State != "available" || status.ConsecutiveFails != 0 {
+		t.Fatalf("successful retry did not clear failures: status=%#v queued=%v", status, queued)
+	}
 }

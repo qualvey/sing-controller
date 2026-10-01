@@ -52,7 +52,7 @@
       <label class="setting-item">
         <span class="setting-item-label">{{ $t('nodeHealthFeishuSignSecret') }}</span>
         <input
-          v-model="form.webhook_sign_secret"
+          v-model.trim="form.webhook_sign_secret"
           class="input input-sm min-w-40 flex-1"
           type="password"
           :placeholder="signSecretConfigured ? $t('nodeHealthTokenPlaceholder') : ''"
