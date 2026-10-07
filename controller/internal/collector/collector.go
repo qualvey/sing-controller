@@ -31,6 +31,10 @@ func StartCollector(ctx context.Context, wg *sync.WaitGroup, cfg *settings.Manag
 		logger.Warn("[Collector] api.v2ray.address is empty, collector disabled")
 		return // 直接退出，defer 会正常调用 wg.Done()
 	}
+	if !db.Enabled() {
+		logger.Warn("[Collector] database is not configured, collector disabled")
+		return
+	}
 	interval := cfg.PollIntervalDuration()
 	conn, err := grpc.NewClient(apiAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -177,6 +181,12 @@ func record(ts time.Time, category, tag string, up, down int64) error {
 	if up == 0 && down == 0 {
 		return nil
 	}
+	// 取一次连接快照：Engine 关闭会在另一个协程里把全局 DB 置空，
+	// 直接解引用 db.DB 会与那次写入形成数据竞争（甚至 panic）。
+	database, err := db.Get()
+	if err != nil {
+		return err
+	}
 	// 增量日志
 	logRow := models.TrafficLog{
 		Category:      category,
@@ -185,18 +195,18 @@ func record(ts time.Time, category, tag string, up, down int64) error {
 		DownlinkDelta: down,
 		Timestamp:     ts,
 	}
-	if err := db.DB.Create(&logRow).Error; err != nil {
+	if err := database.Create(&logRow).Error; err != nil {
 		return err
 	}
 
 	// 累计表：存在则累加，不存在则创建（采集为单协程，无并发竞争）
 	var total models.TrafficTotal
-	err := db.DB.Where("category = ? AND target_name = ?", category, tag).First(&total).Error
+	err = database.Where("category = ? AND target_name = ?", category, tag).First(&total).Error
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		return db.DB.Create(&models.TrafficTotal{
+		return database.Create(&models.TrafficTotal{
 			Category:      category,
 			TargetName:    tag,
 			UplinkBytes:   up,
@@ -205,7 +215,7 @@ func record(ts time.Time, category, tag string, up, down int64) error {
 			UpdatedAt:     ts,
 		}).Error
 	}
-	return db.DB.Model(&models.TrafficTotal{}).
+	return database.Model(&models.TrafficTotal{}).
 		Where("id = ?", total.ID).
 		Updates(map[string]interface{}{
 			"uplink_bytes":   gorm.Expr("uplink_bytes + ?", up),
@@ -217,11 +227,12 @@ func record(ts time.Time, category, tag string, up, down int64) error {
 
 // CleanOldLogs 定期清理指定天数前的 TrafficLog 增量明细，防止 SQLite/Postgres 时序表无限膨胀
 func CleanOldLogs(ctx context.Context, retentionDays int) (int64, error) {
-	if db.DB == nil || retentionDays <= 0 {
+	database, err := db.Get()
+	if err != nil || retentionDays <= 0 {
 		return 0, nil
 	}
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
-	res := db.DB.WithContext(ctx).Where("timestamp < ?", cutoff).Delete(&models.TrafficLog{})
+	res := database.WithContext(ctx).Where("timestamp < ?", cutoff).Delete(&models.TrafficLog{})
 	if res.Error != nil {
 		logger.Error("[Collector] CleanOldLogs error: %v", res.Error)
 		return 0, res.Error

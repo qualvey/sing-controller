@@ -73,6 +73,19 @@
     "webhook_url": "",
     "webhook_token": "",
     "webhook_sign_secret": ""
+  },
+
+  "database": {
+    "dsn": ""
+  },
+
+  "node_probe": {
+    "enabled": true,
+    "interval": "120s",
+    "test_url": "https://www.gstatic.com/generate_204",
+    "timeout": "10s",
+    "history_retention_days": 30,
+    "webhooks": []
   }
 }
 ```
@@ -142,3 +155,32 @@ Webhook 请求体示例：
 ```
 
 如果飞书机器人开启了签名校验，请在 WebUI 中填写 `webhook_sign_secret`。WebUI 配置接口不会回传 `webhook_token` 或 `webhook_sign_secret`。
+
+---
+
+### 6. `database`（PostgreSQL 持久化，可选）
+
+| 字段 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `dsn` | string | `""` | PostgreSQL DSN；留空时禁用数据库，也可通过 `SING_CONTROLLER_DATABASE_DSN` 环境变量配置 |
+
+节点探测历史、状态和 Webhook 投递记录会写入数据库；数据库未配置时，持久化节点探测与流量采集不可用。`GET /api/settings` 会对 DSN 脱敏。
+
+---
+
+### 7. `node_probe`（持久化节点状态与延迟探测）
+
+此探测器按周期查询 sing-box 的叶子出站节点，并将状态与历史写入数据库。它与上面的 `node_health` 兼容并存：`node_health` 提供轻量内存探测，`node_probe` 提供数据库持久化及历史查询；`node_probe` 需要配置数据库。
+
+| 字段 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `enabled` | bool | `true` | 是否启用周期探测 |
+| `interval` | string | `"120s"` | 探测周期（Go duration） |
+| `test_url` | string | `"https://www.gstatic.com/generate_204"` | 探测 URL |
+| `timeout` | string | `"10s"` | 单次探测超时 |
+| `history_retention_days` | int | `30` | 探测历史保留天数 |
+| `webhooks` | array | `[]` | 节点状态变化时触发的 Webhook 列表 |
+| `webhooks[].url` | string | — | HTTP/HTTPS 接收地址 |
+| `webhooks[].secret` | string | — | 可选密钥，通过 `X-Secret` 请求头发送；设置接口会脱敏 |
+
+探测优先使用 `api.service` 的 gRPC-Web URLTest，失败时回退到 `api.clash` 的延迟接口。仅探测叶子节点，组出站会跳过。状态包括 `online`、`offline`、`degraded` 和 `unknown`；手动探测接口为 `POST /api/node-probes`，单节点历史接口为 `GET /api/node-probes/{tag}/history`。

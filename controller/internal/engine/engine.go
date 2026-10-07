@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -9,18 +10,22 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/qualvey/sing-controller/internal/api"
 	"github.com/qualvey/sing-controller/internal/collector"
+	"github.com/qualvey/sing-controller/internal/db"
 	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/nodehealth"
+	"github.com/qualvey/sing-controller/internal/probe"
 	"github.com/qualvey/sing-controller/internal/provider"
 	"github.com/qualvey/sing-controller/internal/realtime"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
 	"github.com/qualvey/sing-controller/internal/supervisor"
+	"gorm.io/gorm"
 )
 
 // FindSingBoxBinary 自动探测可用 sing-box 二进制文件路径
@@ -90,6 +95,7 @@ type Engine struct {
 	handler    http.Handler
 	apiHandler *api.Handler
 	nodeHealth *nodehealth.Runner
+	probeMgr   *probe.Manager
 	server     *http.Server
 
 	opts       Config
@@ -149,12 +155,17 @@ func New(opts Config) (*Engine, error) {
 		listenAddr: listenAddr,
 	}
 
+	// 数据库是可选依赖：配置 DSN 后启用节点状态持久化和 Webhook 投递。
+	// 环境变量便于容器部署，避免把凭据直接写入配置文件。
+	database := initDatabase(values.Database.DSN)
+
 	// 实时广播器
 	e.rt = realtime.NewBroadcaster(values.Stats.RealTime.IntervalMS, values.Stats.RealTime.OnlineThresholdSec)
 
 	// 配置存储
 	cfgStore := store.New(values.Core.ConfigPath)
 	e.store = cfgStore
+	e.probeMgr = probe.NewManager(cfg, cfgStore, database)
 
 	// 二进制定位
 	binPath := opts.BinaryPath
@@ -211,6 +222,7 @@ func New(opts Config) (*Engine, error) {
 		Settings:    cfg,
 		Supervisor:  e.supervisor,
 		ProviderMgr: e.provMgr,
+		Probe:       e.probeMgr,
 		Secret:      secret,
 		Version:     opts.Version,
 		Static:      opts.StaticHandler,
@@ -221,6 +233,44 @@ func New(opts Config) (*Engine, error) {
 	e.handler = apiH
 
 	return e, nil
+}
+
+// initDatabase 按 DSN 建立数据库连接；DSN 为空或连接失败时返回 nil，
+// 表示「数据库不可用」，此时节点探测与流量统计整体停用。
+// SING_CONTROLLER_DATABASE_DSN 作为兜底，便于容器部署时注入凭据。
+func initDatabase(dsn string) *gorm.DB {
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		dsn = strings.TrimSpace(os.Getenv("SING_CONTROLLER_DATABASE_DSN"))
+	}
+	if dsn == "" {
+		return nil
+	}
+	if err := db.InitDB(dsn); err != nil {
+		slog.Warn("database init failed; node probe persistence disabled", "error", err)
+		return nil
+	}
+	database, err := db.Get()
+	if err != nil {
+		slog.Warn("database unavailable after init", "error", err)
+		return nil
+	}
+	slog.Info("database initialized; node probe persistence enabled")
+	return database
+}
+
+// bindDatabase 让探测管理器拿到当前数据库连接。
+// 已连接时不重复初始化，避免无谓地重连与迁移；
+// 未连接时按「配置 DSN → 环境变量」的顺序重连，两处都没有才判定为不可用。
+func (e *Engine) bindDatabase() {
+	if e.probeMgr == nil {
+		return
+	}
+	if database, err := db.Get(); err == nil {
+		e.probeMgr.SetDatabase(database)
+		return
+	}
+	e.probeMgr.SetDatabase(initDatabase(e.cfg.Values().Database.DSN))
 }
 
 // Start 启动 Engine 各后台工作协程与托管内核
@@ -246,8 +296,16 @@ func (e *Engine) Start(parentCtx context.Context) error {
 		slog.Error("load sing-box config", "path", e.cfg.Values().Core.ConfigPath, "error", err)
 	}
 
-	// 2. 启动实时状态广播与后台采集
+	// 2. 启动实时状态广播、节点探测与后台采集
 	e.rt.Start()
+	// Stop 会关闭并解绑数据库连接；这里按需重新建立，
+	// 否则重启周期内探测与统计会一直对着已关闭的连接池。
+	e.bindDatabase()
+	if e.probeMgr != nil {
+		if err := e.probeMgr.Start(ctx); err != nil && !errors.Is(err, probe.ErrUnavailable) {
+			slog.Warn("node probe manager start failed", "error", err)
+		}
+	}
 	e.wg.Add(1)
 	go collector.StartCollector(ctx, &e.wg, e.cfg, e.rt)
 	e.wg.Add(1)
@@ -307,6 +365,10 @@ func (e *Engine) Stop() error {
 	if e.cancel != nil {
 		e.cancel()
 	}
+	// 先停止节点探测，确保不会在 Supervisor 关闭 sing-box 后继续等待 gRPC。
+	if e.probeMgr != nil {
+		e.probeMgr.Stop()
+	}
 
 	// 停止 HTTP 服务
 	if e.server != nil {
@@ -328,6 +390,13 @@ func (e *Engine) Stop() error {
 	e.wg.Wait()
 	if e.rt != nil {
 		e.rt.Stop()
+	}
+	if err := db.Close(); err != nil {
+		slog.Warn("close database failed", "error", err)
+	}
+	// 解绑后探测子系统对 API 报 503，而不是继续使用已关闭的连接池。
+	if e.probeMgr != nil {
+		e.probeMgr.Invalidate()
 	}
 
 	e.running = false

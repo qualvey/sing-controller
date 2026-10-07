@@ -34,5 +34,16 @@
       "interval_ms": 1000,
       "online_threshold_sec": 60
     }
+  },
+  "database": {
+    "dsn": ""
+  },
+  "node_probe": {
+    "enabled": true,
+    "interval": "120s",
+    "test_url": "https://www.gstatic.com/generate_204",
+    "timeout": "10s",
+    "history_retention_days": 30,
+    "webhooks": []
   }
 }

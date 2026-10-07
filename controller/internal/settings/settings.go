@@ -218,6 +218,110 @@ func (o NodeHealthOptions) Validate() error {
 			return errors.New("node_health.webhook_url 必须是有效的 HTTP/HTTPS URL")
 		}
 	}
+
+	return nil
+}
+
+// DatabaseOptions 配置 Controller 使用的 PostgreSQL 数据库。
+// DSN 留空时不会初始化数据库，节点探测也会保持未启用状态。
+type DatabaseOptions struct {
+	DSN string `json:"dsn,omitempty"`
+}
+
+// WebhookOptions 配置节点状态变化通知端点。
+// 配置了 URL 即视为启用；Secret 会作为 X-Secret 请求头发送。
+type WebhookOptions struct {
+	URL    string `json:"url"`
+	Secret string `json:"secret,omitempty"`
+}
+
+// NodeProbeOptions 节点在线状态与延迟探测配置。
+type NodeProbeOptions struct {
+	Enabled              bool             `json:"enabled"`
+	Interval             string           `json:"interval,omitempty"`
+	TestURL              string           `json:"test_url,omitempty"`
+	Timeout              string           `json:"timeout,omitempty"`
+	HistoryRetentionDays int              `json:"history_retention_days,omitempty"`
+	Webhooks             []WebhookOptions `json:"webhooks,omitempty"`
+}
+
+const (
+	// DefaultNodeProbeInterval 是节点探测的默认周期。
+	DefaultNodeProbeInterval  = "120s"
+	defaultNodeProbeTestURL   = "https://www.gstatic.com/generate_204"
+	defaultNodeProbeTimeout   = "10s"
+	defaultProbeRetentionDays = 30
+)
+
+// IntervalDuration 返回节点探测周期，非法值回退到默认 120 秒。
+func (o NodeProbeOptions) IntervalDuration() time.Duration {
+	d, err := time.ParseDuration(strings.TrimSpace(o.Interval))
+	if err != nil || d <= 0 {
+		d, _ = time.ParseDuration(DefaultNodeProbeInterval)
+	}
+	return d
+}
+
+// TimeoutDuration 返回单次探测超时，非法值回退到默认 10 秒。
+func (o NodeProbeOptions) TimeoutDuration() time.Duration {
+	d, err := time.ParseDuration(strings.TrimSpace(o.Timeout))
+	if err != nil || d <= 0 {
+		d, _ = time.ParseDuration(defaultNodeProbeTimeout)
+	}
+	return d
+}
+
+func (o *NodeProbeOptions) Normalize() {
+	if o == nil {
+		return
+	}
+	o.Interval = strings.TrimSpace(o.Interval)
+	if o.Interval == "" {
+		o.Interval = DefaultNodeProbeInterval
+	}
+	o.TestURL = strings.TrimSpace(o.TestURL)
+	if o.TestURL == "" {
+		o.TestURL = defaultNodeProbeTestURL
+	}
+	o.Timeout = strings.TrimSpace(o.Timeout)
+	if o.Timeout == "" {
+		o.Timeout = defaultNodeProbeTimeout
+	}
+	if o.HistoryRetentionDays <= 0 {
+		o.HistoryRetentionDays = defaultProbeRetentionDays
+	}
+	// 重新构造切片而不是就地改写：NodeProbeOptions 常来自浅拷贝，
+	// 就地修改会写到别处（甚至已发布的 Values() 快照）共享的底层数组上。
+	if len(o.Webhooks) > 0 {
+		normalized := make([]WebhookOptions, len(o.Webhooks))
+		for i, webhook := range o.Webhooks {
+			webhook.URL = strings.TrimSpace(webhook.URL)
+			normalized[i] = webhook
+		}
+		o.Webhooks = normalized
+	}
+}
+
+// Validate 校验节点探测配置。URL 在保存设置时校验，避免后台任务持续失败。
+func (o NodeProbeOptions) Validate() error {
+	if _, err := time.ParseDuration(o.Interval); err != nil || strings.TrimSpace(o.Interval) == "" {
+		return fmt.Errorf("node_probe.interval 必须是合法的 Go duration")
+	}
+	if d, err := time.ParseDuration(o.Timeout); err != nil || d <= 0 {
+		return fmt.Errorf("node_probe.timeout 必须是合法的正 Go duration")
+	}
+	if o.HistoryRetentionDays < 0 {
+		return fmt.Errorf("node_probe.history_retention_days 不能为负数")
+	}
+	if _, err := url.ParseRequestURI(o.TestURL); err != nil {
+		return fmt.Errorf("node_probe.test_url 无效: %w", err)
+	}
+	for _, webhook := range o.Webhooks {
+		u, err := url.Parse(webhook.URL)
+		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return fmt.Errorf("node_probe.webhooks.url 无效: %q", webhook.URL)
+		}
+	}
 	return nil
 }
 
@@ -229,6 +333,8 @@ type Settings struct {
 	API        APIOptions        `json:"api"`
 	Stats      StatsOptions      `json:"stats"`
 	NodeHealth NodeHealthOptions `json:"node_health"`
+	Database   DatabaseOptions   `json:"database"`
+	NodeProbe  NodeProbeOptions  `json:"node_probe"`
 }
 
 func (s *Settings) UnmarshalJSON(data []byte) error {
@@ -338,6 +444,13 @@ func defaultSettings() Settings {
 			},
 		},
 		NodeHealth: DefaultNodeHealthOptions(),
+		NodeProbe: NodeProbeOptions{
+			Enabled:              true,
+			Interval:             DefaultNodeProbeInterval,
+			TestURL:              defaultNodeProbeTestURL,
+			Timeout:              defaultNodeProbeTimeout,
+			HistoryRetentionDays: defaultProbeRetentionDays,
+		},
 	}
 }
 
@@ -442,6 +555,10 @@ func (m *Manager) Load() error {
 		values.Core.Managed = &defaultManaged
 	}
 	values.NodeHealth.Normalize()
+	values.NodeProbe.Normalize()
+	if err := values.NodeProbe.Validate(); err != nil {
+		return err
+	}
 
 	// 4. 自动推断 service API
 	if values.API.Service == nil || values.API.Service.Address == "" {
@@ -455,20 +572,45 @@ func (m *Manager) Load() error {
 }
 
 // Values 返回当前配置副本。
+// Webhooks 是切片，必须深拷贝：否则调用方拿到的是与内部配置
+// 共享的底层数组，锁外的写入会与其他读路径形成数据竞争。
 func (m *Manager) Values() Settings {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.values
+	values := m.values
+	values.NodeProbe.Webhooks = cloneWebhooks(values.NodeProbe.Webhooks)
+	return values
+}
+
+func cloneWebhooks(source []WebhookOptions) []WebhookOptions {
+	if len(source) == 0 {
+		return nil
+	}
+	return append(make([]WebhookOptions, 0, len(source)), source...)
 }
 
 // Update 更新配置并原子写盘。
+// 先在副本上变更与校验，只有全部通过才提交到内存与磁盘，
+// 避免校验失败或写盘失败后内存里残留半成品配置。
 func (m *Manager) Update(mutate func(*Settings) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := mutate(&m.values); err != nil {
+	previous := m.values
+	next := previous
+	next.NodeProbe.Webhooks = cloneWebhooks(previous.NodeProbe.Webhooks)
+	if err := mutate(&next); err != nil {
 		return err
 	}
-	return m.saveLocked()
+	next.NodeProbe.Normalize()
+	if err := next.NodeProbe.Validate(); err != nil {
+		return err
+	}
+	m.values = next
+	if err := m.saveLocked(); err != nil {
+		m.values = previous
+		return err
+	}
+	return nil
 }
 
 func (m *Manager) saveLocked() error {

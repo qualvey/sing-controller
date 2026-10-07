@@ -98,6 +98,11 @@
 | | `GET` | `/api/node-health/config` | 读取探测与 webhook 配置（Webhook 凭据不回传） |
 | | `PUT` | `/api/node-health/config` | 更新探测与 webhook 配置 |
 | | `GET` | `/api/ports/available` | 探测并分配下一个可用 TCP 端口 |
+| **节点探测 (Node Probes)** | `GET` | `/api/node-probes` | 获取全部节点在线状态与延迟 |
+| | `POST` | `/api/node-probes` | 立即对全部可探测节点执行探测 |
+| | `GET` | `/api/node-probes/{tag}` | 获取单个节点当前状态 |
+| | `POST` | `/api/node-probes/{tag}` | 立即对单个节点执行探测 |
+| | `GET` | `/api/node-probes/{tag}/history` | 获取单个节点的探测历史 |
 | **用户池 (Users)** | `GET` | `/api/users` | 获取全局用户池列表 |
 | | `POST` | `/api/users` | 创建用户并同步绑定到指定入站 |
 | | `PUT` | `/api/users/{name}` | 更新用户凭证及绑定关系 |
@@ -286,37 +291,130 @@ Clash API 透明反向代理，无缝转发到 sing-box 的 `experimental.clash_
 ### 3.3 Controller 设置 (Settings)
 
 #### GET `/api/settings`
-获取 controller 自身的配置文件设置。
-- **Response `200 OK`**:
+获取 controller 自身的配置文件设置（模块化结构，与 `docs/config.md` 一致）。
+- **Response `200 OK`（节选）**:
   ```json
   {
-    "config": "./config.json",
-    "listen": "127.0.0.1:8080",
-    "log": { "level": "info" },
-    "min_port": 8000,
-    "reload": {
-      "mode": "auto",
-      "service": "sing-box",
-      "after_save": false
+    "server": { "listen": "::", "listen_port": 8080, "secret": "" },
+    "log": { "level": "info", "output": "stderr" },
+    "core": {
+      "config_path": "/etc/sing-box/config.json",
+      "managed": false,
+      "reload": { "mode": "auto", "after_save": false }
     },
-    "defaults": {
-      "inbound_type": "mixed",
-      "outbound_type": "vless",
-      "listen": "0.0.0.0",
-      "listen_port": 10808,
-      "attach_to_selector": true,
-      "proxy_selector": "Proxy"
+    "api": {
+      "clash": { "address": "", "secret": "" },
+      "service": { "address": "", "secret": "" },
+      "v2ray": { "address": "127.0.0.1:10085" }
+    },
+    "stats": { "poll_interval": "10s", "real_time": { "enabled": false, "interval_ms": 1000, "online_threshold_sec": 60 } },
+    "database": { "dsn": "" },
+    "node_probe": {
+      "enabled": true,
+      "interval": "120s",
+      "test_url": "https://www.gstatic.com/generate_204",
+      "timeout": "10s",
+      "history_retention_days": 30,
+      "webhooks": [{ "url": "https://example.com/hook", "secret": "" }]
     }
   }
   ```
+- **安全说明**：`database.dsn` 与 `node_probe.webhooks[].secret` 在响应中始终被清空，数据库口令与 Webhook 密钥不会经由本接口泄露。
 
 #### PUT `/api/settings`
 更新 controller 自身设置。
-- **Request Body**: 与 GET `/api/settings` 结构一致的 JSON 对象。
+- **Request Body**: 与 GET `/api/settings` 结构一致的 JSON 对象（整对象替换）。
+  - 为兼容旧客户端，缺省 `node_probe` / `database` 段时会保留当前已保存的值。
+  - `database.dsn` 或 `webhooks[].secret` 传空字符串表示"保持原值"，不会清空已保存的凭据。
+  - 需要**清空**数据库配置时传显式 `null`：`{"database": {"dsn": null}}`。
+    （空串无法表达"关闭"——脱敏后的 GET 也返回空串。）
+  - `node_probe.interval` 必须是合法 Go duration，`webhooks[].url` 仅接受 `http` / `https`；非法时返回 `400`。
 - **Response `200 OK`**:
   ```json
   { "saved": true }
   ```
+  当 `database.dsn` 与当前值不同时（包括清空），响应会附带 `restart_required: true` 与 `restart_reason`：
+  数据库连接在启动时建立，改 DSN 后需重启 controller 才会生效。
+
+#### 节点在线状态与延迟探测（Node Probes）
+
+节点探测依赖 PostgreSQL（`settings.database.dsn` 或环境变量 `SING_CONTROLLER_DATABASE_DSN`）。
+数据库不可用时，以下接口统一返回 `503 Service Unavailable`：
+```json
+{ "error": "node probe persistence is unavailable" }
+```
+
+##### GET `/api/node-probes`
+列出全部节点的当前状态（按 `node_tag` 升序；尚未探测过的节点以 `unknown` 补齐）。
+- **Query Parameters**:
+  - `tag` *(string, 可选)*: 仅返回指定节点。
+- **Response `200 OK`**:
+  ```json
+  {
+    "nodes": [
+      {
+        "node_tag": "jp-01",
+        "node_type": "vless",
+        "status": "online",
+        "latency_ms": 128,
+        "last_checked_at": "2026-03-01T10:00:00Z",
+        "last_success_at": "2026-03-01T10:00:00Z",
+        "consecutive_failures": 0
+      }
+    ]
+  }
+  ```
+  `status` 取值：`online` / `offline` / `degraded` / `unknown`；仅 `online` 时 `latency_ms` 非零。
+
+##### GET `/api/node-probes/{tag}`
+查询单个节点当前状态。节点不存在时返回 `404`。
+
+##### GET `/api/node-probes/{tag}/history`
+查询单个节点的探测历史（倒序）。
+- **Query Parameters**:
+  - `limit` *(integer, 可选)*: 返回条数，缺省 `100`，上限 `1000`；非法值返回 `400`。
+- **Response `200 OK`**:
+  ```json
+  {
+    "node_tag": "jp-01",
+    "history": [
+      {
+        "id": 42,
+        "node_tag": "jp-01",
+        "node_type": "vless",
+        "status": "online",
+        "latency_ms": 128,
+        "trigger": "scheduler",
+        "checked_at": "2026-03-01T10:00:00Z"
+      }
+    ]
+  }
+  ```
+  `trigger` 为 `scheduler`（周期任务）或 `manual`（手动触发）。
+
+##### POST `/api/node-probes`
+立即对全部可探测节点执行一次探测（历史记录标记为 `manual`）。
+- **Response `202 Accepted`**:
+  ```json
+  {
+    "count": 2,
+    "results": [
+      { "node_tag": "jp-01", "node_type": "vless", "status": "online", "latency_ms": 130, "trigger": "manual", "checked_at": "2026-03-01T10:05:00Z" }
+    ]
+  }
+  ```
+  状态码语义：
+  - `202`：整轮完成。
+  - `502`：部分节点失败（如整轮超时），响应里仍带 `error` 与**已落库的部分结果**。
+  - `404`：当前配置里没有任何可探测节点。
+  - `503`：未配置 `database.dsn`，或探测子系统已停止（例如 controller 正在关闭）。
+  - `500`：探测后端不可用且没有任何结果（响应体含 `error`）。
+
+##### POST `/api/node-probes/{tag}`
+立即对单个节点执行探测，响应结构同上。节点不在可探测列表中（已删除或类型不可探测）时返回 `404`。
+
+> 单节点探测只更新该节点的状态与历史，不参与「出站已删除」的状态行清理：
+> 整轮探测的节点列表只含被探测的这一个 tag，把它当作白名单会清空其余节点的状态。
 
 #### GET `/api/ports/available`
 探测系统下一个可绑定的空闲 TCP 端口。

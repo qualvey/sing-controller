@@ -1,5 +1,28 @@
 # Changelog
 
+## 未发布（Unreleased）
+
+### 新功能
+- **节点在线状态与延迟探测**：
+  - 后台按 `node_probe.interval`（默认 `120s`）周期性探测 sing-box 叶子出站的连通性与延迟，
+    结果写入 PostgreSQL（`node_probe_statuses` / `node_probe_records`），状态变化时通过 Webhook 通知
+  - 探测后端优先 sing-box `services[type=api]` 的 `URLTest`（`SubscribeOutbounds` 差分基线，
+    避免把上一轮历史当成本轮结果），回退 Clash `/proxies/{tag}/delay`（16 并发 + 整轮超时上限）
+  - 新增 `database.dsn` 与 `node_probe` 配置段；未配置 DSN 时探测整体停用，其余功能不受影响
+  - 新增 REST 接口：`GET/POST /api/node-probes`、`GET/POST /api/node-probes/{tag}`、
+    `GET /api/node-probes/{tag}/history`
+  - 代理卡片新增状态点（仅在状态已知时显示，数据库未配置时不渲染，避免误报离线）
+
+### 优化与修复
+- `GET /api/settings` 脱敏 `database.dsn` 与 `node_probe.webhooks[].secret`；
+  `PUT /api/settings` 回传脱敏值时保留既有凭据，DSN 变更返回 `restart_required`
+- `db.InitDB` 迁移失败时关闭连接池并保持数据库不可用，避免连接泄漏与半初始化连接
+- Clash 探测整轮时间上限按并发波次放大（`timeout × ⌈N/16⌉`，封顶 2 分钟），
+  避免节点多时健康节点被误判为离线
+- 探测部分结果不再被整轮错误丢弃：单节点异常只影响该节点，其余节点照常落库
+- controller 关闭时等待在途的手动探测结束再关闭数据库连接，避免事务写到已关闭的连接池
+- Webhook 投递改为 4 并发（单端点挂死不再堵住整批），并清理 7 天前的终态投递记录
+
 ## v0.11.0（2026-09-01）
 
 ### 新功能
