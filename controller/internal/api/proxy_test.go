@@ -92,3 +92,43 @@ func TestClashProxyUnavailable(t *testing.T) {
 		t.Errorf("status = %d, want 404 (clash API not configured)", rec.Code)
 	}
 }
+
+func TestChannelAvailabilityUsesClashWhenGRPCIsNotConfigured(t *testing.T) {
+	backend := clashBackend(t, "")
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	config := `{"log":{"level":"info"},"inbounds":[],"outbounds":[{"type":"direct","tag":"direct"}]}`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	coreStore := store.New(configPath)
+	if err := coreStore.Load(t.Context(), store.DefaultConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	controllerSettings := settings.New(filepath.Join(dir, "settings.json"))
+	if err := controllerSettings.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if err := controllerSettings.Update(func(s *settings.Settings) error {
+		s.API.Clash = &settings.EndpointAPI{Address: backend.URL}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(HandlerOptions{Store: coreStore, Settings: controllerSettings, Version: "test"})
+
+	rec := doRequest(t, h, http.MethodGet, "/api/channels", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var got channelAvailability
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.GRPC.Configured || got.GRPC.Available {
+		t.Fatalf("gRPC channel = %+v, want unconfigured and unavailable", got.GRPC)
+	}
+	if !got.Clash.Configured || !got.Clash.Available {
+		t.Fatalf("Clash channel = %+v, want configured and available", got.Clash)
+	}
+}

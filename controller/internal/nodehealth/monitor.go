@@ -27,6 +27,7 @@ import (
 )
 
 const failureRetryDelay = time.Minute
+const webhookBatchWindow = 2 * time.Second
 
 type Status struct {
 	Tag              string    `json:"tag"`
@@ -54,6 +55,12 @@ type Event struct {
 	CheckedAt        time.Time `json:"checked_at"`
 }
 
+type webhookBatch struct {
+	options settings.NodeHealthOptions
+	events  []Event
+	timer   *time.Timer
+}
+
 type retryTask struct {
 	target  proxyTarget
 	retryAt time.Time
@@ -72,6 +79,8 @@ type Runner struct {
 	lastStart time.Time
 	lastEnd   time.Time
 	retries   map[string]retryTask
+	webhookMu sync.Mutex
+	webhook   *webhookBatch
 	http      *http.Client
 }
 
@@ -305,7 +314,7 @@ func (r *Runner) checkTargets(ctx context.Context, options settings.NodeHealthOp
 			} else {
 				failed.Add(1)
 			}
-			r.record(options, proxy, latency, err)
+			r.record(options, proxy, latency, err, kind)
 		}()
 	}
 	wg.Wait()
@@ -484,7 +493,7 @@ func (r *Runner) probeService(parent context.Context, options settings.NodeHealt
 	}
 }
 
-func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, latency int64, probeErr error) {
+func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, latency int64, probeErr error, kind ...string) {
 	now := time.Now().UTC()
 	r.mu.Lock()
 	status := r.statuses[target.Tag]
@@ -516,6 +525,11 @@ func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, 
 	}
 	shouldNotify := (status.State == "unavailable" && oldState != "unavailable") ||
 		(status.State == "available" && oldState == "unavailable")
+	// Scheduled probes notify only after a failed retry has confirmed the state.
+	// Manual probes are intentionally immediate so operators can verify recovery.
+	if probeErr != nil && len(kind) > 0 && kind[0] == "scheduled" && status.ConsecutiveFails < options.FailureThreshold {
+		shouldNotify = false
+	}
 	r.mu.Unlock()
 
 	if probeErr != nil {
@@ -547,7 +561,7 @@ func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, 
 	}
 	logger.Info("[NodeHealth] dispatching webhook (event=%s, tag=%s, adapter=%s, signed=%t)",
 		eventName, status.Tag, adapter, signed)
-	go r.sendWebhook(options, Event{
+	r.queueWebhook(options, Event{
 		Event:            eventName,
 		Node:             status,
 		ConsecutiveFails: status.ConsecutiveFails,
@@ -555,8 +569,38 @@ func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, 
 	})
 }
 
+func (r *Runner) queueWebhook(options settings.NodeHealthOptions, event Event) {
+	r.webhookMu.Lock()
+	defer r.webhookMu.Unlock()
+	if r.webhook == nil {
+		r.webhook = &webhookBatch{options: options, events: []Event{event}}
+		r.webhook.timer = time.AfterFunc(webhookBatchWindow, r.flushWebhook)
+		return
+	}
+	r.webhook.events = append(r.webhook.events, event)
+}
+
+func (r *Runner) flushWebhook() {
+	r.webhookMu.Lock()
+	batch := r.webhook
+	r.webhook = nil
+	r.webhookMu.Unlock()
+	if batch == nil || len(batch.events) == 0 {
+		return
+	}
+	go r.sendWebhookBatch(batch.options, batch.events)
+}
+
 func (r *Runner) sendWebhook(options settings.NodeHealthOptions, event Event) {
-	body, useBearerToken, err := buildWebhookPayload(options, event)
+	r.sendWebhookBatch(options, []Event{event})
+}
+
+func (r *Runner) sendWebhookBatch(options settings.NodeHealthOptions, events []Event) {
+	if len(events) == 0 {
+		return
+	}
+	event := events[0]
+	body, useBearerToken, err := buildWebhookBatchPayload(options, events)
 	if err != nil {
 		logger.Warn("[NodeHealth] build webhook payload failed (event=%s, tag=%s): %v", event.Event, event.Node.Tag, err)
 		return
@@ -594,6 +638,31 @@ func buildWebhookPayload(options settings.NodeHealthOptions, event Event) ([]byt
 		return nil, false, err
 	}
 	return body, !feishu, nil
+}
+
+func buildWebhookBatchPayload(options settings.NodeHealthOptions, events []Event) ([]byte, bool, error) {
+	if len(events) == 1 {
+		return buildWebhookPayload(options, events[0])
+	}
+	texts := make([]string, 0, len(events))
+	for _, event := range events {
+		texts = append(texts, formatFeishuEvent(event))
+	}
+	if isFeishuWebhook(options.WebhookURL) {
+		message := feishuMessage{
+			MsgType: "text",
+			Content: feishuTextContent{Text: strings.Join(texts, "\n\n---\n\n")},
+		}
+		if options.WebhookSignSecret != "" {
+			timestamp := time.Now().Unix()
+			message.Timestamp = fmt.Sprint(timestamp)
+			message.Sign = signFeishuWebhook(options.WebhookSignSecret, timestamp)
+		}
+		body, err := json.Marshal(message)
+		return body, false, err
+	}
+	body, err := json.Marshal(map[string]any{"events": events})
+	return body, true, err
 }
 
 type feishuMessage struct {

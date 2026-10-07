@@ -83,6 +83,7 @@
 | | `*` | `/api/clash/*` | Clash API 透明反向代理 |
 | | `*` | `/api/grpc/*` | gRPC-Web / WebSocket 服务代理 |
 | **状态与配置** | `GET` | `/api/status` | 获取运行状态与资源统计 |
+| | `GET` | `/api/channels` | 探测 gRPC 与 Clash 通道的配置及可用性 |
 | | `GET` | `/api/config` | 获取完整解析后的 sing-box 主配置 (JSON) |
 | | `PUT` | `/api/config` | 全量更新主配置 (JSON) |
 | | `GET` | `/api/config/raw` | 获取配置文件原始文本（保留注释） |
@@ -267,6 +268,16 @@ Clash API 透明反向代理，无缝转发到 sing-box 的 `experimental.clash_
         "message": "共 3 个入站, 8 个出站, 12 条路由规则"
       }
     ]
+  }
+```
+
+#### GET `/api/channels`
+并行探测 gRPC-Web 与 Clash API 通道。前端优先使用 gRPC；gRPC 不可用时回退到可用的 Clash 通道。
+- **Response `200 OK`**:
+  ```json
+  {
+    "grpc": { "configured": false, "available": false },
+    "clash": { "configured": true, "available": true }
   }
   ```
 

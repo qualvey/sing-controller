@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/qualvey/sing-controller/internal/jsonc"
 )
 
 // ServerOptions 定义 Controller HTTP / WebUI 服务的监听配置
@@ -230,14 +232,18 @@ type Settings struct {
 }
 
 func (s *Settings) UnmarshalJSON(data []byte) error {
+	cleanData, err := jsonc.StripComments(data)
+	if err != nil {
+		return err
+	}
 	type Alias Settings
 	aux := (*Alias)(s)
-	if err := json.Unmarshal(data, aux); err != nil {
+	if err := json.Unmarshal(cleanData, aux); err != nil {
 		return err
 	}
 
 	var old rawOldSettings
-	if err := json.Unmarshal(data, &old); err == nil {
+	if err := json.Unmarshal(cleanData, &old); err == nil {
 		if old.Config != "" && s.Core.ConfigPath == "" {
 			s.Core.ConfigPath = old.Config
 		}
@@ -371,6 +377,10 @@ func (m *Manager) Load() error {
 	if err != nil {
 		return err
 	}
+	content, err = jsonc.StripComments(content)
+	if err != nil {
+		return err
+	}
 
 	values := defaultSettings()
 	// 1. 尝试反序列化新版模块化配置
@@ -489,8 +499,12 @@ func (m *Manager) autoDetectServiceAPI(singBoxConfigPath string) *EndpointAPI {
 		return nil
 	}
 
+	cleanData, err := jsonc.StripComments(data)
+	if err != nil {
+		return nil
+	}
 	var sbCfg singBoxServiceConfig
-	if err := json.Unmarshal(data, &sbCfg); err != nil {
+	if err := json.Unmarshal(cleanData, &sbCfg); err != nil {
 		return nil
 	}
 

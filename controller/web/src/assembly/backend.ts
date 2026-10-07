@@ -49,9 +49,33 @@ export enum Core {
   Unknown = 'unknown',
 }
 
+const channelByBackend = ref<Record<string, Channel>>({})
+
 export const channel = computed<Channel>(() => {
-  return activeBackend.value?.type === 'singbox' ? Channel.Singbox : Channel.Clash
+  const backend = activeBackend.value
+  if (!backend) return Channel.Clash
+  return channelByBackend.value[backend.uuid] ??
+    (backend.type === 'singbox' ? Channel.Singbox : Channel.Clash)
 })
+
+// Backend reports runtime channel health. Prefer the explicitly configured channel;
+// sing-box backends fall back to Clash only when gRPC is unavailable.
+export const resolveAvailableChannel = (
+  backendUUID: string,
+  preferred: Channel,
+  availability: { grpc: { available: boolean }; clash: { available: boolean } },
+) => {
+  let selected = preferred
+  if (preferred === Channel.Singbox) {
+    if (availability.grpc.available) selected = Channel.Singbox
+    else if (availability.clash.available) selected = Channel.Clash
+  } else {
+    if (availability.clash.available) selected = Channel.Clash
+    else if (availability.grpc.available) selected = Channel.Singbox
+  }
+  channelByBackend.value = { ...channelByBackend.value, [backendUUID]: selected }
+  return selected
+}
 
 // core / apiVersion 由 assembly/version.ts 在探测 /version 后写入,
 // 后端切换时先重置为未知,避免沿用上一个后端的结论。

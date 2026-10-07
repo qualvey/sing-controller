@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -224,6 +225,108 @@ func (h *Handler) handleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e.proxy.ServeHTTP(w, r)
+}
+
+type channelProbe struct {
+	Configured bool   `json:"configured"`
+	Available  bool   `json:"available"`
+	Error      string `json:"error,omitempty"`
+}
+
+type channelAvailability struct {
+	GRPC  channelProbe `json:"grpc"`
+	Clash channelProbe `json:"clash"`
+}
+
+func (h *Handler) handleChannelAvailability(w http.ResponseWriter, r *http.Request) {
+	grpcTarget, grpcSecret, _ := h.serviceAPITarget()
+	clashTarget, clashSecret, _ := h.clashTarget()
+
+	result := channelAvailability{
+		GRPC:  channelProbe{Configured: grpcTarget != nil},
+		Clash: channelProbe{Configured: clashTarget != nil},
+	}
+	var wg sync.WaitGroup
+	if grpcTarget != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result.GRPC.Available, result.GRPC.Error = probeGRPCWeb(grpcTarget, grpcSecret, 1500*time.Millisecond)
+		}()
+	}
+	if clashTarget != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result.Clash.Available, result.Clash.Error = probeClashAPI(clashTarget, clashSecret, 1500*time.Millisecond)
+		}()
+	}
+	wg.Wait()
+	writeJSON(w, http.StatusOK, result)
+}
+
+func probeClashAPI(target *url.URL, secret string, timeout time.Duration) (bool, string) {
+	u := *target
+	u.Path = strings.TrimRight(u.Path, "/") + "/version"
+	u.RawPath = ""
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return false, err.Error()
+	}
+	if secret != "" {
+		req.Header.Set("Authorization", "Bearer "+secret)
+	}
+	resp, err := (&http.Client{Timeout: timeout}).Do(req)
+	if err != nil {
+		return false, err.Error()
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode != http.StatusOK {
+		return false, "Clash API 返回 " + resp.Status
+	}
+	return true, ""
+}
+
+func probeGRPCWeb(target *url.URL, secret string, timeout time.Duration) (bool, string) {
+	u := *target
+	u.Path = strings.TrimRight(u.Path, "/") + "/daemon.StartedService/GetVersion"
+	u.RawPath = ""
+	// gRPC-Web 的空 protobuf message：压缩标志 0 + 32-bit 长度 0。
+	req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader([]byte{0, 0, 0, 0, 0}))
+	if err != nil {
+		return false, err.Error()
+	}
+	req.Header.Set("Content-Type", "application/grpc-web+proto")
+	req.Header.Set("Accept", "application/grpc-web+proto")
+	req.Header.Set("X-Grpc-Web", "1")
+	req.Header.Set("X-User-Agent", "sing-controller-channel-probe")
+	if secret != "" {
+		req.Header.Set("Authorization", "Bearer "+secret)
+	}
+	resp, err := (&http.Client{Timeout: timeout}).Do(req)
+	if err != nil {
+		return false, err.Error()
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if resp.StatusCode != http.StatusOK {
+		return false, "gRPC-Web 返回 " + resp.Status
+	}
+	if !strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "application/grpc-web") {
+		return false, "上游不是 gRPC-Web 服务"
+	}
+	grpcStatus := resp.Header.Get("Grpc-Status")
+	if grpcStatus == "" {
+		grpcStatus = resp.Trailer.Get("Grpc-Status")
+	}
+	if grpcStatus != "" && grpcStatus != "0" {
+		return false, "gRPC 状态码 " + grpcStatus
+	}
+	if grpcStatus == "" && !bytes.Contains(bytes.ToLower(body), []byte("grpc-status: 0")) {
+		return false, "gRPC-Web 响应缺少成功状态"
+	}
+	return true, ""
 }
 
 // probeCoreHealth 对 upstream sing-box 内核进行实际探活

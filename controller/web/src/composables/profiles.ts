@@ -10,7 +10,8 @@ import { ref } from 'vue'
 
 export const isProfileModalOpen = ref(false)
 
-export const openProfileModal = () => {
+export const openProfileModal = (tab?: 'profiles' | 'providers') => {
+  if (tab) activeProfilesTab.value = tab
   isProfileModalOpen.value = true
 }
 

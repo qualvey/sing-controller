@@ -174,6 +174,42 @@ func TestWebhookResponseChecksFeishuApplicationCode(t *testing.T) {
 	}
 }
 
+func TestScheduledFailureDoesNotNotifyBeforeThreshold(t *testing.T) {
+	runner := newTestRunner(t)
+	options := settings.DefaultNodeHealthOptions()
+	options.FailureThreshold = 2
+	options.WebhookURL = "http://127.0.0.1:1"
+	target := proxyTarget{Tag: "edge-1", Type: "vless"}
+
+	runner.record(options, target, 0, context.DeadlineExceeded, "scheduled")
+	runner.webhookMu.Lock()
+	queued := runner.webhook != nil
+	runner.webhookMu.Unlock()
+	if queued {
+		t.Fatal("scheduled failure before threshold should not queue a webhook")
+	}
+}
+
+func TestWebhookBatchPayloadCombinesEvents(t *testing.T) {
+	options := settings.DefaultNodeHealthOptions()
+	options.WebhookURL = "https://open.feishu.cn/open-apis/bot/v2/hook/test"
+	events := []Event{
+		{Event: "node.unavailable", Node: Status{Tag: "edge-1", Type: "vless", State: "unavailable"}},
+		{Event: "node.available", Node: Status{Tag: "edge-2", Type: "ss", State: "available", LatencyMS: 20}},
+	}
+	body, bearer, err := buildWebhookBatchPayload(options, events)
+	if err != nil || bearer {
+		t.Fatalf("batch payload = %q, bearer=%t, err=%v", body, bearer, err)
+	}
+	var payload feishuMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(payload.Content.Text, "edge-1") || !strings.Contains(payload.Content.Text, "edge-2") || !strings.Contains(payload.Content.Text, "---") {
+		t.Fatalf("events were not combined: %q", payload.Content.Text)
+	}
+}
+
 func TestWebhookOnlySendsAvailabilityTransitions(t *testing.T) {
 	events := make(chan Event, 4)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +244,7 @@ func TestWebhookOnlySendsAvailabilityTransitions(t *testing.T) {
 			if event.Event != want || event.Node.Tag != target.Tag {
 				t.Fatalf("event = %#v, want %s for %s", event, want, target.Tag)
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(5 * time.Second):
 			t.Fatalf("timed out waiting for %s webhook", want)
 		}
 	}

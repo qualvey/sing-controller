@@ -30,42 +30,31 @@
           </svg>
         </div>
         <div class="text-base sm:text-lg font-bold text-base-content tracking-tight">
-          {{ t('coreControl.title') || 'sing-box 控制台' }}
+          {{ t('coreControl.title') }}
         </div>
-      </div>
-
-      <!-- 运行状态胶囊 -->
-      <div
-        class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border select-none transition-colors"
-        :class="statusCapsuleClass"
-      >
-        <span
-          class="size-2 rounded-full"
-          :class="statusDotClass"
-        />
-        <span>{{ statusText }}</span>
       </div>
     </div>
 
-    <!-- 核心操作面板（卡片列表） -->
-    <div class="bg-base-200/60 rounded-2xl border border-base-content/5 overflow-hidden shadow-sm">
-      <!-- 动作 1: 重载配置 -->
-      <div
-        class="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-base-content/[0.04] active:bg-base-content/[0.08] transition-colors select-none group"
-        :class="{ 'opacity-70 pointer-events-none': isReloading }"
-        @click="handleReloadConfig"
-      >
-        <span class="text-[15px] sm:text-base font-semibold text-base-content/90 group-hover:text-base-content transition-colors">
-          {{ t('coreControl.reloadConfig') || '重载配置' }}
-        </span>
-        <div class="text-sky-400 p-1 flex items-center justify-center">
+    <div class="core-control-grid grid grid-cols-2 gap-3">
+      <section class="core-control-actions bg-base-200/30 col-span-2 flex flex-col gap-3 rounded-xl p-4">
+        <div class="text-base-content/60 text-xs font-semibold tracking-wider uppercase">
+          {{ t('coreControl.actions') }}
+        </div>
+
+        <button
+          type="button"
+          class="group flex w-full items-center justify-between gap-3 rounded-xl border border-base-content/5 bg-base-100/40 px-3.5 py-3 text-left text-sm font-semibold text-base-content/90 transition-colors hover:bg-base-content/[0.05] active:bg-base-content/[0.08] disabled:pointer-events-none disabled:opacity-60"
+          :disabled="isReloading"
+          @click="handleReloadConfig"
+        >
+          <span>{{ t('coreControl.reloadConfig') }}</span>
           <svg
-            class="size-6 transition-transform"
+            class="size-5 text-sky-400 transition-transform"
             :class="{ 'animate-spin': isReloading }"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            stroke-width="2.2"
+            stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
           >
@@ -74,29 +63,22 @@
             <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
             <path d="M21 21v-5h-5" />
           </svg>
-        </div>
-      </div>
+        </button>
 
-      <!-- 分隔线 -->
-      <div class="h-px bg-base-content/[0.06] mx-5" />
-
-      <!-- 动作 2: 重启核心 -->
-      <div
-        class="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-base-content/[0.04] active:bg-base-content/[0.08] transition-colors select-none group"
-        :class="{ 'opacity-70 pointer-events-none': isRestarting }"
-        @click="handleRestartCore"
-      >
-        <span class="text-[15px] sm:text-base font-semibold text-base-content/90 group-hover:text-base-content transition-colors">
-          {{ t('coreControl.restartCore') || '重启核心' }}
-        </span>
-        <div class="text-orange-400 p-1 flex items-center justify-center">
+        <button
+          type="button"
+          class="group flex w-full items-center justify-between gap-3 rounded-xl border border-base-content/5 bg-base-100/40 px-3.5 py-3 text-left text-sm font-semibold text-base-content/90 transition-colors hover:bg-base-content/[0.05] active:bg-base-content/[0.08] disabled:pointer-events-none disabled:opacity-60"
+          :disabled="isRestarting"
+          @click="handleRestartCore"
+        >
+          <span>{{ t('coreControl.restartCore') }}</span>
           <svg
-            class="size-6 transition-transform"
+            class="size-5 text-orange-400 transition-transform"
             :class="{ 'animate-spin': isRestarting }"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            stroke-width="2.2"
+            stroke-width="2"
             stroke-linecap="round"
             stroke-linejoin="round"
           >
@@ -105,23 +87,16 @@
             <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
             <path d="M21 21v-5h-5" />
           </svg>
-        </div>
-      </div>
+        </button>
 
-      <!-- 分隔线 -->
-      <div class="h-px bg-base-content/[0.06] mx-5" />
-
-      <!-- 动作 3: 配置管理 -->
-      <div
-        class="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-base-content/[0.04] active:bg-base-content/[0.08] transition-colors select-none group"
-        @click="openProfileModal"
-      >
-        <span class="text-[15px] sm:text-base font-semibold text-base-content/90 group-hover:text-base-content transition-colors">
-          {{ t('coreControl.profileManager') || '配置管理' }}
-        </span>
-        <div class="text-base-content/75 group-hover:text-base-content p-1 flex items-center justify-center transition-colors">
+        <button
+          type="button"
+          class="group flex w-full items-center justify-between gap-3 rounded-xl border border-base-content/5 bg-base-100/40 px-3.5 py-3 text-left text-sm font-semibold text-base-content/90 transition-colors hover:bg-base-content/[0.05] active:bg-base-content/[0.08]"
+          @click="openProfileModal('providers')"
+        >
+          <span>{{ t('coreControl.providerManager') }}</span>
           <svg
-            class="size-6"
+            class="size-5 text-base-content/60 transition-colors group-hover:text-base-content"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -129,48 +104,73 @@
             stroke-linecap="round"
             stroke-linejoin="round"
           >
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-            <circle
-              cx="12"
-              cy="12"
-              r="3"
-            />
+            <path d="M12 3v12" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M5 20h14" />
           </svg>
-        </div>
-      </div>
+        </button>
+      </section>
 
-      <!-- 动作 4: 系统代理 (Desktop 原生环境扩展) -->
-      <template v-if="isDesktop">
-        <div class="h-px bg-base-content/[0.06] mx-5" />
-        <div
-          class="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-base-content/[0.04] active:bg-base-content/[0.08] transition-colors select-none group"
-          :class="{ 'opacity-70 pointer-events-none': isTogglingProxy }"
-          @click="handleToggleSysProxy"
-        >
-          <div class="flex items-center gap-2.5">
-            <span class="text-[15px] sm:text-base font-semibold text-base-content/90 group-hover:text-base-content transition-colors">
-              系统代理
-            </span>
-            <span
-              class="badge badge-xs font-normal"
-              :class="isSysProxyOn ? 'badge-success text-white' : 'badge-ghost text-base-content/50'"
-            >
-              {{ isSysProxyOn ? '已开启' : '未设置' }}
-            </span>
+      <section class="bg-base-200/30 flex min-w-0 flex-col gap-3 rounded-xl p-4">
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-base-content/60 text-xs font-semibold tracking-wider uppercase">
+            {{ t('coreControl.runtime') }}
           </div>
-          <div class="p-1 flex items-center justify-center">
-            <span
-              v-if="isTogglingProxy"
-              class="loading loading-spinner loading-xs text-primary"
-            />
-            <GlobeAltIcon
-              v-else
-              class="size-6 transition-colors"
-              :class="isSysProxyOn ? 'text-success' : 'text-base-content/50'"
-            />
+          <div
+            class="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold transition-colors"
+            :class="statusCapsuleClass"
+          >
+            <span class="size-1.5 rounded-full" :class="statusDotClass" />
+            <span>{{ statusText }}</span>
           </div>
         </div>
-      </template>
+        <div class="flex flex-col gap-1">
+          <div class="text-base-content/50 text-xs">{{ t('coreControl.uptime') }}</div>
+          <div class="text-2xl font-extralight tabular-nums sm:text-3xl">
+            {{ formattedUptime }}
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-base-200/30 flex min-w-0 flex-col gap-3 rounded-xl p-4">
+        <div class="text-base-content/60 text-xs font-semibold tracking-wider uppercase">
+          {{ t('coreControl.configurationOverview') }}
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="min-w-0">
+            <div class="text-2xl font-extralight tabular-nums">{{ statusStore.status?.inbounds ?? '—' }}</div>
+            <div class="text-base-content/50 truncate text-xs">{{ t('inbounds') }}</div>
+          </div>
+          <div class="min-w-0">
+            <div class="text-2xl font-extralight tabular-nums">{{ statusStore.status?.outbounds ?? '—' }}</div>
+            <div class="text-base-content/50 truncate text-xs">{{ t('outbound') }}</div>
+          </div>
+          <div class="min-w-0">
+            <div class="text-2xl font-extralight tabular-nums">{{ statusStore.status?.rules ?? '—' }}</div>
+            <div class="text-base-content/50 truncate text-xs">{{ t('rules') }}</div>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="group mt-auto flex w-full items-center justify-between gap-3 rounded-xl border border-base-content/5 bg-base-100/40 px-3.5 py-3 text-left text-sm font-semibold text-base-content/90 transition-colors hover:bg-base-content/[0.05] active:bg-base-content/[0.08]"
+          @click="openProfileModal('profiles')"
+        >
+          <span>{{ t('coreControl.profileManager') }}</span>
+          <svg
+            class="size-5 text-base-content/60 transition-colors group-hover:text-base-content"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M9 5h10v14H9z" />
+            <path d="M5 8v13h10" />
+            <path d="M12 9h4M12 13h4" />
+          </svg>
+        </button>
+      </section>
     </div>
   </div>
 </template>
@@ -178,8 +178,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { GlobeAltIcon } from '@heroicons/vue/24/outline'
-import { desktopApi } from '@/api/desktop'
+import { controllerApi, type CoreSupervisorStatus } from '@/api/controller'
 import { reloadConfigsAPI } from '@/assembly/config'
 import { restartCoreAPI } from '@/assembly/version'
 import { reloadAll } from '@/composables/backendActions'
@@ -196,10 +195,20 @@ const statusStore = useStatusStore()
 
 const isReloading = ref(false)
 const isRestarting = ref(false)
-const isDesktop = ref(desktopApi.isDesktop())
-const isSysProxyOn = ref(false)
-const isTogglingProxy = ref(false)
-let unsubscribeProxyChange: (() => void) | null = null
+const coreSupervisorStatus = ref<CoreSupervisorStatus | null>(null)
+const coreStatusReceivedAt = ref(0)
+const now = ref(Date.now())
+let clockTimer: ReturnType<typeof setInterval> | null = null
+let coreStatusTimer: ReturnType<typeof setInterval> | null = null
+
+const refreshCoreStatus = async () => {
+  try {
+    coreSupervisorStatus.value = await controllerApi.coreStatus()
+    coreStatusReceivedAt.value = Date.now()
+  } catch {
+    // The overview remains usable when the supervisor endpoint is unavailable.
+  }
+}
 
 // 核心状态计算
 const statusState = computed<'running' | 'reloading' | 'stopped'>(() => {
@@ -217,7 +226,7 @@ const statusText = computed(() => {
     case 'reloading':
       return t('coreControl.reloading') || '正在重载'
     case 'stopped':
-      return '运行异常'
+      return t('coreControl.stopped')
     case 'running':
     default:
       return t('coreControl.running') || '正常运行'
@@ -248,6 +257,29 @@ const statusDotClass = computed(() => {
   }
 })
 
+const uptimeSeconds = computed(() => {
+  const uptime = coreSupervisorStatus.value?.uptime_sec
+  if (uptime === undefined || statusState.value !== 'running') return null
+  return uptime + Math.max(0, Math.floor((now.value - coreStatusReceivedAt.value) / 1000))
+})
+
+const formattedUptime = computed(() => {
+  if (uptimeSeconds.value === null) return '—'
+
+  let seconds = uptimeSeconds.value
+  const days = Math.floor(seconds / 86_400)
+  seconds %= 86_400
+  const hours = Math.floor(seconds / 3_600)
+  seconds %= 3_600
+  const minutes = Math.floor(seconds / 60)
+  seconds %= 60
+
+  if (days > 0) return `${days}${t('coreControl.dayShort')} ${hours}${t('coreControl.hourShort')}`
+  if (hours > 0) return `${hours}${t('coreControl.hourShort')} ${minutes}${t('coreControl.minuteShort')}`
+  if (minutes > 0) return `${minutes}${t('coreControl.minuteShort')} ${seconds}${t('coreControl.secondShort')}`
+  return `${seconds}${t('coreControl.secondShort')}`
+})
+
 const handleReloadConfig = async () => {
   if (isReloading.value) return
   isReloading.value = true
@@ -255,6 +287,7 @@ const handleReloadConfig = async () => {
     await reloadConfigsAPI()
     await reloadAll()
     await statusStore.refresh()
+    await refreshCoreStatus()
     showNotification({
       content: t('coreControl.reloadSuccess') || '重载配置成功',
       type: 'alert-success',
@@ -273,6 +306,7 @@ const handleRestartCore = async () => {
     await restartCoreAPI()
     await reloadAll()
     await statusStore.refresh()
+    await refreshCoreStatus()
     showNotification({
       content: t('coreControl.restartSuccess') || '重启核心成功',
       type: 'alert-success',
@@ -284,44 +318,36 @@ const handleRestartCore = async () => {
   }
 }
 
-const handleToggleSysProxy = async () => {
-  if (isTogglingProxy.value) return
-  isTogglingProxy.value = true
-  const target = !isSysProxyOn.value
-  try {
-    await desktopApi.setSystemProxy(target)
-    isSysProxyOn.value = target
-    showNotification({
-      content: target ? '系统代理已开启' : '系统代理已关闭',
-      type: 'alert-success',
-    })
-  } catch (err: unknown) {
-    notifyRequestError(err)
-  } finally {
-    isTogglingProxy.value = false
-  }
-}
-
-onMounted(async () => {
+onMounted(() => {
   loadProfilesData()
-  if (isDesktop.value) {
-    isSysProxyOn.value = await desktopApi.getSystemProxy()
-    unsubscribeProxyChange = desktopApi.onSystemProxyChanged((enabled) => {
-      isSysProxyOn.value = enabled
-    })
-  }
+  void refreshCoreStatus()
+  clockTimer = setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+  coreStatusTimer = setInterval(() => {
+    void refreshCoreStatus()
+  }, 30_000)
 })
 
 onUnmounted(() => {
-  if (unsubscribeProxyChange) {
-    unsubscribeProxyChange()
-    unsubscribeProxyChange = null
-  }
+  if (clockTimer) clearInterval(clockTimer)
+  if (coreStatusTimer) clearInterval(coreStatusTimer)
 })
 </script>
 
 <style scoped>
 .core-control-card {
+  container-type: inline-size;
   user-select: none;
+}
+
+@container (min-width: 768px) {
+  .core-control-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .core-control-actions {
+    grid-column: span 1 / span 1;
+  }
 }
 </style>

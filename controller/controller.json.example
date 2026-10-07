@@ -1,0 +1,48 @@
+{
+  "$schema": "https://github.com/qualvey/sing-controller/schema.json",
+  "server": {
+    "listen": "::",
+    "listen_port": 8080,
+    "secret": ""
+  },
+  "log": {
+    "level": "info",
+    "output": "stderr",
+    "outfile": ""
+  },
+  "core": {
+    "config_path": "/etc/sing-box/config.json",
+    "managed": false,
+    "binary_path": "",
+    "reload": {
+      "mode": "auto",
+      "service": "sing-box",
+      "pid_file": "/var/run/sing-box.pid",
+      "hook": "/usr/local/bin/reload-sing-box.sh",
+      "after_save": false
+    }
+  },
+  "api": {
+    "clash": {
+      "address": "http://127.0.0.1:9090",
+      "secret": ""
+    },
+    "service": {
+      "address": "http://127.0.0.1:9900",
+      "secret": ""
+    },
+    "v2ray": {
+      "address": "127.0.0.1:10085"
+    }
+  },
+  "stats": {
+    "poll_interval": "10s",
+    "pattern": "",
+    "reset_on_query": false,
+    "real_time": {
+      "enabled": false,
+      "interval_ms": 1000,
+      "online_threshold_sec": 60
+    }
+  }
+}

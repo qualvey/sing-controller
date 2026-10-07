@@ -61,6 +61,17 @@ export interface ControllerSettings {
   }
 }
 
+export interface ChannelProbeInfo {
+  configured: boolean
+  available: boolean
+  error?: string
+}
+
+export interface ChannelAvailability {
+  grpc: ChannelProbeInfo
+  clash: ChannelProbeInfo
+}
+
 export interface NodeHealthConfig {
   enabled: boolean
   interval: string
@@ -213,6 +224,7 @@ export const api = {
     return http.get<{ status: string }>('/healthz', { baseURL: base }).then((r) => r.data)
   },
   status: () => http.get<StatusInfo>('/status').then((r) => r.data),
+  channels: () => http.get<ChannelAvailability>('/channels').then((r) => r.data),
   config: () => http.get<unknown>('/config').then((r) => r.data),
   saveConfig: (config: unknown) => http.put('/config', config).then((r) => r.data),
   configRaw: () =>

@@ -203,7 +203,6 @@ export const subscribeTraffic = () => createClashStream<TrafficSnapshot>('traffi
 //
 // 新增端点时请放进对应分区。是否向用户暴露由 assembly/backend.ts 的能力表决定,
 // 本层不做任何后端判断。
-import { getUrlFromBackend } from '@/helper/utils'
 import { activeBackend } from '@/store/setup'
 import type {
   Backend,
@@ -226,15 +225,15 @@ import { debug } from 'three/tsl'
 // export const fetchClashVersion = () => axios.get<{ version: string }>('/version')
 
 export const fetchProxiesAPI = () => {
-  return axios.get<{ proxies: Record<string, Proxy> }>('/proxies')
+  return http.get<{ proxies: Record<string, Proxy> }>('/proxies')
 }
 
 export const selectProxyAPI = (proxyGroup: string, name: string) => {
-  return axios.put(`/proxies/${encodeURIComponent(proxyGroup)}`, { name })
+  return http.put(`/proxies/${encodeURIComponent(proxyGroup)}`, { name })
 }
 
 export const deleteFixedProxyAPI = (proxyGroup: string) => {
-  return axios.delete(`/proxies/${encodeURIComponent(proxyGroup)}`)
+  return http.delete(`/proxies/${encodeURIComponent(proxyGroup)}`)
 }
 
 // export const fetchProxyLatencyAPI = (proxyName: string, url: string, timeout: number) => {
@@ -262,7 +261,7 @@ export const fetchProxyProviderLatencyAPI = (
   timeout: number,
 ) => {
 
-  return axios.get<{ delay: number }>(
+  return http.get<{ delay: number }>(
     `/proxies/${encodeURIComponent(proxyName)}/delay`,
     {
       params: {
@@ -274,7 +273,7 @@ export const fetchProxyProviderLatencyAPI = (
 }
 
 export const fetchProxyGroupLatencyAPI = (proxyName: string, url: string, timeout: number) => {
-  return axios.get<Record<string, number>>(`/group/${encodeURIComponent(proxyName)}/delay`, {
+  return http.get<Record<string, number>>(`/group/${encodeURIComponent(proxyName)}/delay`, {
     params: {
       url,
       timeout,
@@ -283,15 +282,15 @@ export const fetchProxyGroupLatencyAPI = (proxyName: string, url: string, timeou
 }
 
 export const fetchProxyProviderAPI = () => {
-  return axios.get<{ providers: Record<string, ProxyProvider> }>('/providers/proxies')
+  return http.get<{ providers: Record<string, ProxyProvider> }>('/providers/proxies')
 }
 
 export const updateProxyProviderAPI = (name: string) => {
-  return axios.put(`/providers/proxies/${encodeURIComponent(name)}`)
+  return http.put(`/providers/proxies/${encodeURIComponent(name)}`)
 }
 
 export const proxyProviderHealthCheckAPI = (name: string) => {
-  return axios.get<Record<string, number>>(
+  return http.get<Record<string, number>>(
     `/providers/proxies/${encodeURIComponent(name)}/healthcheck`,
     {
       timeout: 15000,
@@ -300,39 +299,39 @@ export const proxyProviderHealthCheckAPI = (name: string) => {
 }
 
 export const fetchRulesAPI = () => {
-  return axios.get<{ rules: Rule[] }>('/rules')
+  return http.get<{ rules: Rule[] }>('/rules')
 }
 
 export const fetchRuleProvidersAPI = () => {
-  return axios.get<{ providers: Record<string, RuleProvider> }>('/providers/rules')
+  return http.get<{ providers: Record<string, RuleProvider> }>('/providers/rules')
 }
 
 export const updateRuleProviderAPI = (name: string) => {
-  return axios.put(`/providers/rules/${encodeURIComponent(name)}`)
+  return http.put(`/providers/rules/${encodeURIComponent(name)}`)
 }
 
 export const disconnectClashByIdAPI = (id: string) => {
-  return axios.delete(`/connections/${id}`)
+  return http.delete(`/connections/${id}`)
 }
 
 export const disconnectAllClashAPI = () => {
-  return axios.delete('/connections')
+  return http.delete('/connections')
 }
 
 export const getConfigsAPI = () => {
-  return axios.get<Config>('/configs')
+  return http.get<Config>('/configs')
 }
 
 export const patchConfigsAPI = (configs: Record<string, string | boolean | object | number>) => {
-  return axios.patch('/configs', configs)
+  return http.patch('/configs', configs)
 }
 
 export const flushFakeIPAPI = () => {
-  return axios.post('/cache/fakeip/flush')
+  return http.post('/cache/fakeip/flush')
 }
 
 export const flushDNSCacheAPI = () => {
-  return axios.post('/cache/dns/flush')
+  return http.post('/cache/dns/flush')
 }
 
 export const queryDNSAPI = (params: { name: string; type: string }) => {
@@ -343,7 +342,7 @@ export const queryDNSAPI = (params: { name: string; type: string }) => {
 
 // 面板自升级。mihomo 与 sing-box 的 Clash 兼容 API 都提供,honk 没有(见 dashboardUpgrade)。
 export const upgradeUIAPI = () => {
-  return axios.post('/upgrade/ui')
+  return http.post('/upgrade/ui')
 }
 
 export const getClashWsUrl = (backend?: Omit<Backend, 'uuid'>, endpoint: string = 'traffic') => {
@@ -420,22 +419,7 @@ export const probeClashChannel = async (
   const latency = () => Date.now() - startAt
 
   try {
-    const res = await fetch(`${getUrlFromBackend(backend)}/version`, {
-      method: 'GET',
-      // headers: {
-      //   Authorization: `Bearer ${backend.password}`,
-      // },
-      signal: controller.signal,
-    })
-
-    if (!res.ok) {
-      return {
-        ok: false,
-        latency: latency(),
-        kind: res.status === 401 ? 'unauthorized' : 'http',
-        message: `HTTP ${res.status}`,
-      }
-    }
+    await http.get('/version', { signal: controller.signal })
 
     // 2. HTTP 探测通过后，进一步探测 WebSocket 连通性
     const wsUrl = getClashWsUrl(backend, 'traffic')
@@ -471,7 +455,7 @@ export const probeClashChannel = async (
 
 // smart 内核的节点权重。是否暴露由数据决定(proxy.type === 'smart'),不走能力表。
 export const fetchSmartWeightsAPI = () => {
-  return axios.get<{
+  return http.get<{
     message: string
     weights: Record<string, NodeRank[]>
   }>(`/group/weights`)
@@ -479,64 +463,64 @@ export const fetchSmartWeightsAPI = () => {
 
 // deprecated
 export const fetchSmartGroupWeightsAPI = (proxyName: string) => {
-  return axios.get<{
+  return http.get<{
     message: string
     weights: NodeRank[]
   }>(`/group/${encodeURIComponent(proxyName)}/weights`)
 }
 
 export const flushSmartGroupWeightsAPI = () => {
-  return axios.post(`/cache/smart/flush`)
+  return http.post(`/cache/smart/flush`)
 }
 
 // 按索引批量切换规则启用状态;sing-box 侧走 toggleRuleDisabledSingBoxAPI。
 export const toggleRuleDisabledAPI = (data: Record<number, boolean>) => {
-  return axios.patch(`/rules/disable`, data)
+  return http.patch(`/rules/disable`, data)
 }
 
 export const blockConnectionByIdAPI = (id: string) => {
-  return axios.delete(`/connections/smart/${id}`)
+  return http.delete(`/connections/smart/${id}`)
 }
 
 export const reloadConfigsAPI = () => {
-  return axios.put('/configs?reload=true', { path: '', payload: '' })
+  return http.put('/configs?reload=true', { path: '', payload: '' })
 }
 
 export const updateConfigsAPI = (
   config: { path?: string; payload?: string },
   force: boolean = false,
 ) => {
-  return axios.put(`/configs${force ? '?force=true' : ''}`, {
+  return http.put(`/configs${force ? '?force=true' : ''}`, {
     path: config.path || '',
     payload: config.payload || '',
   })
 }
 
 export const updateGeoDataAPI = () => {
-  return axios.post('/configs/geo')
+  return http.post('/configs/geo')
 }
 
 export const upgradeCoreAPI = (type: 'release' | 'alpha' | 'auto') => {
   const url = type === 'auto' ? '/upgrade' : `/upgrade?channel=${type}`
 
-  return axios.post(url)
+  return http.post(url)
 }
 
 export const restartCoreAPI = () => {
-  return axios.post('/restart')
+  return http.post('/restart')
 }
 
 // 面板设置同步。/storage/zashboard 是 mihomo 扩展。
 export const getStorageAPI = () => {
-  return axios.get<Record<string, unknown>>(`/storage/zashboard`)
+  return http.get<Record<string, unknown>>(`/storage/zashboard`)
 }
 
 export const setStorageAPI = (value: Record<string, string>) => {
-  return axios.put(`/storage/zashboard`, value)
+  return http.put(`/storage/zashboard`, value)
 }
 
 export const deleteStorageAPI = () => {
-  return axios.delete(`/storage/zashboard`)
+  return http.delete(`/storage/zashboard`)
 }
 
 // ==========================================================================
@@ -546,5 +530,5 @@ export const deleteStorageAPI = () => {
 // sing-box 的规则带稳定 uuid,按 uuid 切换启用状态;mihomo 走 PATCH /rules/disable。
 // 两者的选择由响应数据(rule.uuid 是否存在)决定,见 assembly/rules。
 export const toggleRuleDisabledSingBoxAPI = (uuid: string) => {
-  return axios.put(`/rules/${encodeURIComponent(uuid)}`)
+  return http.put(`/rules/${encodeURIComponent(uuid)}`)
 }

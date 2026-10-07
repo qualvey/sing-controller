@@ -84,14 +84,12 @@ import { disableProxiesPageTextSelect, twoColumnProxyGroup } from '@/store/setti
 import { folderManagerOpen, isProxyFolderModeActive } from '@/store/proxyFolders'
 import { useSessionStorage } from '@vueuse/core'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useUngroupedProxies } from '@/composables/ungroupedProxies'
 import { refreshNodeHealth } from '@/store/nodeHealth'
 
 const { padding } = usePaddingForViews({
   offsetTop: 0,
   offsetBottom: 0,
 })
-const { ungroupedNodeNames } = useUngroupedProxies()
 const renderPageItems = renderProxiesPageItems
 const proxiesRef = ref()
 let healthTimer: number | undefined

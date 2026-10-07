@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -136,6 +137,49 @@ func TestLoadModularAndLegacyCompatibility(t *testing.T) {
 	}
 	if v2.NodeHealth.Interval != "5m" || v2.NodeHealth.FailureThreshold != 2 || v2.NodeHealth.Enabled {
 		t.Errorf("node health defaults mismatch: %+v", v2.NodeHealth)
+	}
+}
+
+func TestLoadJSONCAndDetectCommentedSingBoxConfig(t *testing.T) {
+	dir := t.TempDir()
+	corePath := filepath.Join(dir, "sing-box.json")
+	coreConfig := `{
+		// Service API used by the local controller
+		"services": [{
+			"type": "api",
+			"listen": "127.0.0.1",
+			"listen_port": 9901
+		}],
+		"outbounds": [{"type": "direct", "tag": "direct"}]
+	}`
+	if err := os.WriteFile(corePath, []byte(coreConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	configPathJSON, err := json.Marshal(corePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settingsJSON := `{
+		// Comments are allowed in controller config too.
+		"core": {"config_path": ` + string(configPathJSON) + `},
+		"api": {"clash": {"address": "http://127.0.0.1:9090"}}
+	}`
+	settingsPath := filepath.Join(dir, "controller.json")
+	if err := os.WriteFile(settingsPath, []byte(settingsJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := New(settingsPath)
+	if err := manager.Load(); err != nil {
+		t.Fatalf("Load() JSONC settings: %v", err)
+	}
+	values := manager.Values()
+	if values.Core.ConfigPath != corePath {
+		t.Fatalf("Core.ConfigPath = %q, want %q", values.Core.ConfigPath, corePath)
+	}
+	if values.API.Service.Address != "http://127.0.0.1:9901" {
+		t.Fatalf("auto-detected service API = %+v, want port 9901", values.API.Service)
 	}
 }
 

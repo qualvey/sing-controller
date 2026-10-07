@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qualvey/sing-controller/internal/jsonc"
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
@@ -109,7 +110,11 @@ func (s *Store) OutboundsPath() string {
 // （启动加载、API 请求）都能解码 inbounds/outbounds/endpoints/services 等多态类型。
 func Parse(ctx context.Context, content []byte) (option.Options, error) {
 	ctx = include.Context(ctx)
-	return sjson.UnmarshalExtendedContext[option.Options](ctx, content)
+	cleanContent, err := jsonc.StripComments(content)
+	if err != nil {
+		return option.Options{}, err
+	}
+	return sjson.UnmarshalExtendedContext[option.Options](ctx, cleanContent)
 }
 
 // BinaryPath 允许主程序注入定位到的 sing-box 二进制路径
@@ -160,6 +165,10 @@ func Validate(ctx context.Context, content []byte) error {
 	if err != nil {
 		return err
 	}
+	cleanContent, err := jsonc.StripComments(content)
+	if err != nil {
+		return err
+	}
 
 	// 1. 优先使用宿主机原生内核进行实际 check -c 校验（100% 匹配宿主内核编译 tags）
 	bin := FindSingBoxBinary()
@@ -168,7 +177,7 @@ func Validate(ctx context.Context, content []byte) error {
 		if err == nil {
 			defer os.RemoveAll(tmpDir)
 			tmpFile := filepath.Join(tmpDir, "config.json")
-			if err := os.WriteFile(tmpFile, content, 0600); err == nil {
+			if err := os.WriteFile(tmpFile, cleanContent, 0600); err == nil {
 				cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				defer cancel()
 				cmd := exec.CommandContext(cctx, bin, "check", "-c", tmpFile)

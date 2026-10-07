@@ -33,6 +33,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qualvey/sing-controller/internal/jsonc"
 	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/qualvey/sing-controller/internal/nodehealth"
 	"github.com/qualvey/sing-controller/internal/provider"
@@ -113,6 +114,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 
 	// 状态 / 配置 / 设置
 	mux.HandleFunc("GET /api/status", h.handleStatus)
+	mux.HandleFunc("GET /api/channels", h.handleChannelAvailability)
 	mux.HandleFunc("GET /api/config", h.handleGetConfig)
 	mux.HandleFunc("PUT /api/config", h.handlePutConfig)
 	mux.HandleFunc("GET /api/config/raw", h.handleGetConfigRaw)
@@ -617,6 +619,11 @@ func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 // @Router /api/settings [put]
 func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	body, err := readRawBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	body, err = jsonc.StripComments(body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
