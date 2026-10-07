@@ -12,8 +12,13 @@ import (
 
 // GetStats 历史统计：traffic_totals 全量（对齐原系统 StatsView）
 func GetStats(c *gin.Context) {
+	database, err := db.Get()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
 	var totals []models.TrafficTotal
-	if err := db.DB.Order("total_bytes desc").Find(&totals).Error; err != nil {
+	if err := database.Order("total_bytes desc").Find(&totals).Error; err != nil {
 		logger.Error("查询全量流量统计失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -35,8 +40,13 @@ type PeriodSummary struct {
 
 // GetStatsUsers 概览大盘：每个用户当前周期窗口内的流量（新功能核心）
 func GetStatsUsers(c *gin.Context) {
+	database, err := db.Get()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
 	var users []models.User
-	if err := db.DB.Find(&users).Error; err != nil {
+	if err := database.Find(&users).Error; err != nil {
 		logger.Error("查询用户周期流量统计失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -49,7 +59,7 @@ func GetStatsUsers(c *gin.Context) {
 			UpSum   int64
 			DownSum int64
 		}
-		db.DB.Model(&models.TrafficLog{}).
+		database.Model(&models.TrafficLog{}).
 			Select("COALESCE(SUM(uplink_delta),0) AS up_sum, COALESCE(SUM(downlink_delta),0) AS down_sum").
 			Where("category = ? AND target_name = ? AND timestamp >= ? AND timestamp < ?",
 				"user", u.Email, start, end).

@@ -79,11 +79,12 @@ import {
 import { PROXY_TAB_TYPE } from '@/constant'
 import { isMiddleScreen } from '@/helper/utils'
 import { fetchProxies } from '@/assembly/proxies'
+import { startNodeStatusPolling, stopNodeStatusPolling } from '@/assembly/nodeStatus'
 import { proxiesTabShow } from '@/assembly/proxies'
 import { disableProxiesPageTextSelect, twoColumnProxyGroup } from '@/store/settings'
 import { folderManagerOpen, isProxyFolderModeActive } from '@/store/proxyFolders'
 import { useSessionStorage } from '@vueuse/core'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUngroupedProxies } from '@/composables/ungroupedProxies'
 
 const { padding } = usePaddingForViews({
@@ -132,6 +133,9 @@ watch(proxiesTabShow, () =>
 isProxiesPageMounted.value = false
 
 onMounted(() => {
+  // 节点在线状态由 controller 后台探测落库,前端只轮询只读结果。
+  // 未配置 database.dsn 时接口返回 503,模块内部静默降级,这里不影响代理页。
+  startNodeStatusPolling()
   setTimeout(() => {
     isProxiesPageMounted.value = true
     nextTick(() => {
@@ -139,6 +143,10 @@ onMounted(() => {
       fetchProxies()
     })
   })
+})
+
+onBeforeUnmount(() => {
+  stopNodeStatusPolling()
 })
 
 const renderComponent = computed(() => {

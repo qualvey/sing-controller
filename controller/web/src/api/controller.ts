@@ -34,27 +34,126 @@ export interface StatusInfo {
   tun_access_denied?: boolean
 }
 
+export interface WebhookOptions {
+  url: string
+  secret?: string
+}
+
+export interface NodeProbeOptions {
+  enabled: boolean
+  interval?: string
+  test_url?: string
+  timeout?: string
+  history_retention_days?: number
+  webhooks?: WebhookOptions[]
+}
+
 export interface ControllerSettings {
-  config: string
-  listen: string
+  server?: {
+    listen?: string
+    listen_port?: number
+    secret?: string
+  }
   log?: {
     level: string
+    output?: string
+    outfile?: string
   }
-  min_port: number
-  reload?: {
-    mode: string
-    service?: string
-    pid_file?: string
-    hook?: string
-    after_save?: boolean
+  core?: {
+    config_path: string
+    managed?: boolean
+    binary_path?: string
+    reload?: {
+      mode: string
+      service?: string
+      pid_file?: string
+      hook?: string
+      after_save?: boolean
+    }
   }
-  defaults: {
+  api?: {
+    clash?: { address: string; secret?: string }
+    service?: { address: string; secret?: string }
+    v2ray?: { address: string; secret?: string }
+  }
+  stats?: {
+    poll_interval?: string
+    pattern?: string
+    reset_on_query?: boolean
+    real_time?: {
+      enabled: boolean
+      interval_ms: number
+      online_threshold_sec: number
+    }
+  }
+  /** 空字符串表示未配置数据库（GET 响应中的 DSN 始终被脱敏） */
+  database?: {
+    dsn?: string
+  }
+  node_probe?: NodeProbeOptions
+  /** @deprecated 旧版扁平字段，仅用于兼容旧后端 */
+  config?: string
+  listen?: string
+  min_port?: number
+  defaults?: {
     inbound_type: string
     outbound_type: string
     listen: string
     listen_port: number
     attach_to_selector?: boolean
     proxy_selector?: string
+  }
+}
+
+export type NodeHealthStatus = 'online' | 'offline' | 'degraded' | 'unknown'
+
+export interface NodeProbeState {
+  node_tag: string
+  node_type: string
+  status: NodeHealthStatus
+  latency_ms: number
+  last_error?: string
+  last_checked_at?: string
+  last_success_at?: string
+  consecutive_failures: number
+}
+
+export interface NodeProbeResult {
+  node_tag: string
+  node_type: string
+  status: NodeHealthStatus
+  latency_ms: number
+  error?: string
+  trigger: 'scheduler' | 'manual'
+  checked_at: string
+}
+
+export interface NodeProbeHistoryPoint {
+  id: number
+  node_tag: string
+  node_type: string
+  status: NodeHealthStatus
+  latency_ms: number
+  error?: string
+  trigger: 'scheduler' | 'manual'
+  checked_at: string
+}
+
+export interface NodeProbeTriggerResult {
+  results: NodeProbeResult[]
+  count: number
+  /** 后端在部分节点探测失败时仍返回结果，并在这里附带原因 */
+  error?: string
+}
+
+const nodeProbeUnavailableHint = '节点状态接口不可用（未配置 database.dsn？）'
+
+// 手动触发可能返回 502（部分结果 + error），也可能是拦截器「以错误对象 resolve」的失败响应。
+function normalizeNodeProbeTrigger(data?: NodeProbeTriggerResult): NodeProbeTriggerResult {
+  return {
+    results: Array.isArray(data?.results) ? data.results : [],
+    count: data?.count ?? 0,
+    error: data?.error,
   }
 }
 
@@ -289,6 +388,35 @@ export const api = {
     http
       .post<{ results: Record<string, string> }>('/dns/lookup', { domains })
       .then((r) => r.data.results),
+
+  // 节点在线状态与延迟探测（需要后端配置 database.dsn）
+  // 注意：http 拦截器对 ignoreNotificationUrls 中的失败请求会「以错误对象 resolve」，
+  // 所以这里必须校验响应体形状，否则会把 AxiosError 当成正常数据用。
+  nodeProbes: () =>
+    http.get<{ nodes?: NodeProbeState[] }>('/node-probes').then((r) => {
+      if (!Array.isArray(r?.data?.nodes)) {
+        throw new Error(nodeProbeUnavailableHint)
+      }
+
+      return r.data.nodes as NodeProbeState[]
+    }),
+  nodeProbe: (tag: string) =>
+    http.get<NodeProbeState>(`/node-probes/${encodeURIComponent(tag)}`).then((r) => r.data),
+  nodeProbeHistory: (tag: string, limit = 100) =>
+    http
+      .get<{ node_tag: string; history?: NodeProbeHistoryPoint[] }>(
+        `/node-probes/${encodeURIComponent(tag)}/history`,
+        { params: { limit } },
+      )
+      .then((r) => r.data?.history ?? []),
+  triggerNodeProbe: () =>
+    http
+      .post<NodeProbeTriggerResult>('/node-probes')
+      .then((r) => normalizeNodeProbeTrigger(r.data)),
+  triggerSingleNodeProbe: (tag: string) =>
+    http
+      .post<NodeProbeTriggerResult>(`/node-probes/${encodeURIComponent(tag)}`)
+      .then((r) => normalizeNodeProbeTrigger(r.data)),
 
   // 配置诊断
   diagnostics: () =>

@@ -27,7 +27,15 @@ axios.interceptors.request.use((config) => {
   return config
 })
 
-const ignoreNotificationUrls = ['/delay', '/healthcheck', '/weights', '/storage/zashboard']
+// 这些接口失败属于「功能未启用/预期内的探测失败」，不弹全局错误提示。
+// /node-probes 在未配置 database.dsn 时返回 503，属于配置状态而非错误。
+const ignoreNotificationUrls = [
+  '/delay',
+  '/healthcheck',
+  '/weights',
+  '/storage/zashboard',
+  '/node-probes',
+]
 
 axios.interceptors.response.use(
   null,

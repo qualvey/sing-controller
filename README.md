@@ -82,6 +82,7 @@ pnpm run dev     # http://localhost:5173
 - **配置诊断页**：静态分析（重复 tag、route/dns 悬空引用、组引用、监听冲突、未使用 outbound），补 sing-box 校验盲区（悬空引用 box.New 不拦）
 - **完整校验管线**：所有写操作 = 严格解码（未知字段/多态/重复 tag 检查）→ `box.New` 干跑预检 → 原子写盘（.bak 备份）；失败不落盘、内存回滚
 - **sing-box 重载（SIGHUP）**:`POST /api/reload`，默认 **auto 自动适配**——systemd（Debian/Ubuntu 等）→ openrc `rc-service`（Alpine）→ OpenWrt `service`/procd → SysV service，有什么用什么；也可显式 systemd / pidfile / hook / none；保存配置后自动重载（after_save）；全页面左下角悬浮重载按钮；配套 Alpine/OpenWrt 参考 init 脚本见 `packaging/openrc`、`packaging/openwrt`
+- **节点在线状态与延迟探测**（可选，需配置 `database.dsn`）：按 `node_probe.interval`（默认 `120s`）周期探测叶子出站，结果落库（当前状态 + 历史），状态变化经 Webhook 通知（指数退避重试）；探测走 sing-box `services[type=api]` 的 `URLTest`，回退 Clash `/proxies/{tag}/delay`；代理卡片显示状态点。详见 `docs/config.md` 第 6/7 节与 `API.md`
 - **日/夜主题切换**:右上角 ☀️/🌙 切换,localStorage 持久化（默认暗色）;Element Plus dark css-vars 全组件适配;CodeMirror 用 Compartment 动态切换 oneDark/亮色（含编辑器 UI 外壳）
 - **移动端响应式**:<768px 侧边栏自动折叠为 64px 图标栏,汉堡按钮自身伸展为完整菜单（遮罩点击收起）,选中路由自动收起
 - **后端单元测试**:`go test ./...`（internal/api 36.0% 覆盖,36 个测试函数/111 个用例:配置往返/引用保护/删除回写/端口分配/诊断计数/shadowsocks 入站 CRUD/密码工具;httptest 全链路 config/raw JSONC 注释保留）
@@ -178,6 +179,10 @@ GET/PUT/DELETE  /api/outbounds/{tag}    /api/inbounds/{tag}    /api/routes/{id} 
 GET/POST        /api/dns/servers       /api/dns/rules        /api/rule-sets        /api/certificate/providers
 PUT/DELETE      /api/dns/servers/{tag}  /api/dns/rules/{id}   /api/rule-sets/{id}   /api/certificate/providers/{id}
 GET/PUT         /api/certificate       PUT /api/dns/options
+GET             /api/node-probes        节点在线状态列表（需 database.dsn，否则 503）
+POST            /api/node-probes        立即探测全部节点
+GET/POST        /api/node-probes/{tag}
+GET             /api/node-probes/{tag}/history
 ```
 
 ## 已知限制
@@ -195,9 +200,11 @@ controller/              # sing-box-controller（Go module，嵌入 webui）
 ├── web/                 # webui 前端（Vue3 + Vite + TS + Element Plus）
 │   └── dist/            # 构建产物（被 embed，gitignore；未构建时 API-only）
 └── internal/
-    ├── settings/        # controller 自身配置（config/listen/log/min_port/defaults）
+    ├── settings/        # controller 自身配置（config/listen/log/min_port/defaults、database、node_probe）
     ├── store/           # sing-box 主配置：加载 / 校验管线 / 原子写 / 回滚 / meta
-    └── api/             # REST handlers（web 页面 / outbound / inbound / route / config / settings / ports / tools）
+    ├── probe/           # 节点在线状态与延迟探测：周期调度 / sing-box·clash 双后端 / 落库 / Webhook 重试
+    ├── db/              # PostgreSQL 连接与 AutoMigrate（可选依赖，未配置 DSN 时全部停用）
+    └── api/             # REST handlers（web 页面 / outbound / inbound / route / config / settings / ports / tools / node-probes）
 API.md                   # API 契约
 .github/workflows/       # release.yml：tag 触发 CI/CD
 packaging/               # 部署资源（systemd unit + postinstall/postremove；openrc/OpenWrt 参考 init 脚本）

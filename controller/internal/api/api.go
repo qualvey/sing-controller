@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/qualvey/sing-controller/internal/logger"
+	"github.com/qualvey/sing-controller/internal/probe"
 	"github.com/qualvey/sing-controller/internal/provider"
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
@@ -36,6 +37,7 @@ type HandlerOptions struct {
 	Settings    *settings.Manager
 	Supervisor  *supervisor.Manager
 	ProviderMgr *provider.Manager
+	Probe       *probe.Manager
 	Secret      string
 	Version     string
 	// Static 嵌入的 webui 静态资源（SPA）；nil 时根路径返回服务信息 JSON（API-only 模式）
@@ -47,6 +49,7 @@ type Handler struct {
 	settings    *settings.Manager
 	supervisor  *supervisor.Manager
 	providerMgr *provider.Manager
+	probe       *probe.Manager
 	secret      string
 	version     string
 	static      http.Handler
@@ -77,6 +80,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 		settings:    opts.Settings,
 		supervisor:  opts.Supervisor,
 		providerMgr: opts.ProviderMgr,
+		probe:       opts.Probe,
 		secret:      opts.Secret,
 		version:     opts.Version,
 		static:      opts.Static,
@@ -103,6 +107,13 @@ func NewHandler(opts HandlerOptions) *Handler {
 	mux.HandleFunc("GET /api/settings", h.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", h.handlePutSettings)
 	mux.HandleFunc("GET /api/ports/available", h.handlePortAvailable)
+
+	// 节点在线状态 / 延迟探测
+	mux.HandleFunc("GET /api/node-probes", h.handleListNodeProbes)
+	mux.HandleFunc("POST /api/node-probes", h.handleTriggerNodeProbes)
+	mux.HandleFunc("GET /api/node-probes/{tag}", h.handleGetNodeProbe)
+	mux.HandleFunc("POST /api/node-probes/{tag}", h.handleTriggerNodeProbe)
+	mux.HandleFunc("GET /api/node-probes/{tag}/history", h.handleNodeProbeHistory)
 
 	// core supervisor 控制器（进程启停 / 状态 / 日志）
 	mux.HandleFunc("GET /api/core/status", h.handleCoreStatus)
@@ -441,20 +452,20 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"config_path":        configPath,
-		"config_exists":      configExists,
-		"controller_config":  h.settings.Path(),
-		"listen":             values.Server.Addr(),
-		"log_level":          logLevel,
-		"inbounds":           inboundsCount,
-		"outbounds":          outboundsCount,
-		"rules":              ruleCount,
-		"core":               coreStatus,
-		"core_alive":         coreStatus.Alive,
-		"core_version":       coreStatus.Version,
-		"core_type":          coreStatus.Type,
-		"core_error":         coreStatus.Error,
-		"tun_access_denied":  tunDenied,
+		"config_path":       configPath,
+		"config_exists":     configExists,
+		"controller_config": h.settings.Path(),
+		"listen":            values.Server.Addr(),
+		"log_level":         logLevel,
+		"inbounds":          inboundsCount,
+		"outbounds":         outboundsCount,
+		"rules":             ruleCount,
+		"core":              coreStatus,
+		"core_alive":        coreStatus.Alive,
+		"core_version":      coreStatus.Version,
+		"core_type":         coreStatus.Type,
+		"core_error":        coreStatus.Error,
+		"tun_access_denied": tunDenied,
 	})
 }
 
@@ -533,7 +544,18 @@ func (h *Handler) handleSchema(w http.ResponseWriter, r *http.Request) {
 // ---------- settings ----------
 
 func (h *Handler) handleGetSettings(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.settings.Values())
+	values := h.settings.Values()
+	// Never expose database credentials or outbound webhook secrets through
+	// the settings endpoint. Clients can still submit real values on PUT; an
+	// empty value is treated as "keep the existing secret" below.
+	values.Database.DSN = ""
+	webhooks := make([]settings.WebhookOptions, len(values.NodeProbe.Webhooks))
+	copy(webhooks, values.NodeProbe.Webhooks)
+	for i := range webhooks {
+		webhooks[i].Secret = ""
+	}
+	values.NodeProbe.Webhooks = webhooks
+	writeJSON(w, http.StatusOK, values)
 }
 
 func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
@@ -546,6 +568,57 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &newValues); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	// PUT /api/settings historically replaces the complete object. Preserve
+	// fields introduced by newer Controller versions when an older client
+	// submits a payload that does not contain them yet.
+	var rawSettings map[string]json.RawMessage
+	// clearDSN 表示客户端显式要求清空数据库配置。
+	// 空字符串无法表达「关闭」——脱敏后的 GET 也会返回空串，
+	// 因此约定用显式的 JSON null 表示清除。
+	clearDSN := false
+	if err := json.Unmarshal(body, &rawSettings); err == nil {
+		current := h.settings.Values()
+		if _, ok := rawSettings["node_probe"]; !ok {
+			newValues.NodeProbe = current.NodeProbe
+		} else {
+			var rawNodeProbe map[string]json.RawMessage
+			if json.Unmarshal(rawSettings["node_probe"], &rawNodeProbe) == nil {
+				if _, ok := rawNodeProbe["enabled"]; !ok {
+					newValues.NodeProbe.Enabled = current.NodeProbe.Enabled
+				}
+			}
+		}
+		if _, ok := rawSettings["database"]; !ok {
+			newValues.Database = current.Database
+		} else {
+			var rawDatabase map[string]json.RawMessage
+			if json.Unmarshal(rawSettings["database"], &rawDatabase) == nil {
+				if raw, ok := rawDatabase["dsn"]; ok && strings.TrimSpace(string(raw)) == "null" {
+					clearDSN = true
+				}
+			}
+		}
+	}
+	// Redacted GET responses must not erase existing credentials when an
+	// operator saves settings from the UI.
+	currentSettings := h.settings.Values()
+	switch {
+	case clearDSN:
+		newValues.Database.DSN = ""
+	case strings.TrimSpace(newValues.Database.DSN) == "":
+		newValues.Database.DSN = currentSettings.Database.DSN
+	}
+	for i := range newValues.NodeProbe.Webhooks {
+		if newValues.NodeProbe.Webhooks[i].Secret != "" {
+			continue
+		}
+		for _, existing := range currentSettings.NodeProbe.Webhooks {
+			if existing.URL == newValues.NodeProbe.Webhooks[i].URL {
+				newValues.NodeProbe.Webhooks[i].Secret = existing.Secret
+				break
+			}
+		}
 	}
 	var privilegedPortWarning string
 	if newValues.Core.ConfigPath == "" {
@@ -572,6 +645,12 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	// 节点探测配置错误属于客户端输入问题，返回 400 而不是 500。
+	newValues.NodeProbe.Normalize()
+	if err := newValues.NodeProbe.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 	ctx := h.ctx(r)
 	if err := h.settings.Update(func(s *settings.Settings) error {
 		*s = newValues
@@ -583,6 +662,19 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Info("Controller 设置已成功更新 (listen=%s, log_level=%s, config_path=%s)",
 		newValues.Server.Addr(), logger.GetLevel().String(), newValues.Core.ConfigPath)
+	// The database connection (and therefore the probe subsystem) is bound at
+	// startup. Report the need for a restart instead of silently pretending the
+	// new DSN took effect.
+	response := map[string]any{"saved": true}
+	if strings.TrimSpace(newValues.Database.DSN) != strings.TrimSpace(currentSettings.Database.DSN) {
+		response["restart_required"] = true
+		if clearDSN {
+			response["restart_reason"] = "database.dsn 已清空，需要重启 controller 后关闭节点探测持久化与流量统计"
+		} else {
+			response["restart_reason"] = "database.dsn 已变更，需要重启 controller 后生效"
+		}
+		logger.Warn("database.dsn 已变更，需重启 controller 才会应用新的数据库连接")
+	}
 	// config 路径变更 → 切换主配置存储
 	if h.store.Path() != newValues.Core.ConfigPath {
 		logger.Info("切换 sing-box 配置文件路径: %s -> %s", h.store.Path(), newValues.Core.ConfigPath)
@@ -593,19 +685,16 @@ func (h *Handler) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			ListenPort:  2080,
 		}); err != nil {
 			logger.Error("加载新 sing-box 主配置失败: %v", err)
-			writeJSON(w, http.StatusOK, map[string]any{
-				"saved":      true,
-				"load_error": err.Error(),
-				"message":    "controller 配置已保存，但新主配置路径加载失败",
-			})
+			response["load_error"] = err.Error()
+			response["message"] = "controller 配置已保存，但新主配置路径加载失败"
+			writeJSON(w, http.StatusOK, response)
 			return
 		}
 	}
 	if privilegedPortWarning != "" {
-		writeJSON(w, http.StatusOK, map[string]any{"saved": true, "warning": privilegedPortWarning})
-		return
+		response["warning"] = privilegedPortWarning
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"saved": true})
+	writeJSON(w, http.StatusOK, response)
 }
 
 // ---------- config ----------

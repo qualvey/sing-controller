@@ -39,13 +39,21 @@
       >
         {{ typeDescription }}
       </span>
-      <LatencyTag
-        :class="[isSmallCard && 'h-4! w-8! rounded-md!', 'shrink-0']"
-        :name="node.name"
-        :loading="isLatencyTesting"
-        :group-name="groupName"
-        @click.stop="handlerLatencyTest"
-      />
+      <div class="flex shrink-0 items-center gap-1">
+        <span
+          v-if="showNodeHealth"
+          class="h-1.5 w-1.5 shrink-0 rounded-full"
+          :class="nodeHealthClass"
+          :title="nodeHealthTitle"
+        ></span>
+        <LatencyTag
+          :class="[isSmallCard && 'h-4! w-8! rounded-md!', 'shrink-0']"
+          :name="node.name"
+          :loading="isLatencyTesting"
+          :group-name="groupName"
+          @click.stop="handlerLatencyTest"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -55,6 +63,7 @@ import { PROXY_CARD_SIZE, PROXY_SORT_TYPE } from '@/constant'
 import { checkTruncation } from '@/helper/tooltip'
 import { scrollIntoCenter } from '@/helper/utils'
 import { getIPv6ByName, getTestUrl, isTestingNode, proxyLatencyTest, proxyMap } from '@/assembly/proxies'
+import { getNodeStatusByName, nodeStatusAvailable } from '@/assembly/nodeStatus'
 import { openProxyContextMenu } from '@/composables/proxyContextMenu'
 import { IPv6test, proxyCardSize, proxySortType, truncateProxyName } from '@/store/settings'
 import { smartWeightsMap } from '@/store/smart'
@@ -90,6 +99,26 @@ const typeFormatter = (type: string) => {
   return type
 }
 const isSmallCard = computed(() => proxyCardSize.value === PROXY_CARD_SIZE.SMALL)
+// 节点在线状态由 controller 后台探测提供;未配置数据库时不渲染任何标记,
+// 避免把「功能未启用」误报成「节点离线」。
+const nodeStatus = computed(() => getNodeStatusByName(node.value.name))
+const showNodeHealth = computed(
+  () =>
+    nodeStatusAvailable.value &&
+    (nodeStatus.value?.status === 'online' || nodeStatus.value?.status === 'offline'),
+)
+const nodeHealthClass = computed(() =>
+  nodeStatus.value?.status === 'online' ? 'bg-backend-online' : 'bg-error',
+)
+const nodeHealthTitle = computed(() => {
+  const state = nodeStatus.value
+  if (!state) return ''
+
+  const label = state.status === 'online' ? t('online') : t('offline')
+  const latency = state.status === 'online' ? ` · ${state.latency_ms} ms` : ''
+
+  return `${label}${latency}`
+})
 const typeDescription = computed(() => {
   const type = typeFormatter(node.value.type)
   const smartUsage = smartWeightsMap.value[props.groupName ?? '']?.[props.name]

@@ -62,6 +62,24 @@
       "interval_ms": 1000,
       "online_threshold_sec": 60
     }
+  },
+
+  "database": {
+    "dsn": "postgres://sing:secret@127.0.0.1:5432/sing_controller?sslmode=disable"
+  },
+
+  "node_probe": {
+    "enabled": true,
+    "interval": "120s",
+    "test_url": "https://www.gstatic.com/generate_204",
+    "timeout": "10s",
+    "history_retention_days": 30,
+    "webhooks": [
+      {
+        "url": "https://example.com/hooks/sing-node",
+        "secret": "change-me"
+      }
+    ]
   }
 }
 ```
@@ -135,4 +153,63 @@ WebUI 页面及 Controller 内部反向代理到 sing-box 的通信端点。
 | `real_time.interval_ms`　　　　　| int　　| `1000`　| 实时广播频率（毫秒）　　　　　　　　　　　　　　　　　　　　　 |
 | `real_time.online_threshold_sec` | int　　| `60`　　| 判定用户/节点在线的活跃超时时间（秒）　　　　　　　　　　　　　|
 
-|
+---
+
+### 6. `database`（PostgreSQL 持久化，可选）
+
+节点在线状态、探测历史与 Webhook 投递记录都落库。**该段留空时 Controller 不会初始化数据库**，
+流量统计（Collector）与节点探测一并保持停用，其余功能不受影响。
+
+| 字段 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `dsn` | string | `""` | PostgreSQL DSN。留空表示禁用数据库；也可用环境变量 `SING_CONTROLLER_DATABASE_DSN` 提供 |
+
+> 启动时会自动迁移（`AutoMigrate`）`node_probe_statuses`、`node_probe_records`、`webhook_deliveries` 等表。
+> `GET /api/settings` 不会返回 DSN（响应中该字段为空），以免泄露数据库口令。
+
+---
+
+### 7. `node_probe`（节点在线状态与延迟探测）
+
+周期性对 sing-box 的叶子出站节点做连通性/延迟探测，结果写入数据库，并在状态发生变化时通过 Webhook 通知。
+仅在 `database.dsn` 非空时生效；`node_probe.enabled` 可单独关闭探测而不影响历史查询。
+
+| 字段 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `enabled` | bool | `true` | 是否启用周期性探测 |
+| `interval` | string | `"120s"` | 探测周期（Go duration）。非法值回退为 `120s` |
+| `test_url` | string | `"https://www.gstatic.com/generate_204"` | 探测使用的 URL |
+| `timeout` | string | `"10s"` | 单次探测超时（Go duration），同时作为 Clash 侧 `timeout` 参数 |
+| `history_retention_days` | int | `30` | 探测历史保留天数，`<= 0` 视为 `30`；历史清理按小时节流并分批删除 |
+| `webhooks` | array | `[]` | 状态变化通知端点列表 |
+| `webhooks[].url` | string | `""` | 接收端 URL，仅接受 `http` / `https` |
+| `webhooks[].secret` | string | `""` | 可选密钥，以 `X-Secret` 请求头发送 |
+
+> **探测后端优先级**：`api.service`（sing-box `services[type=api]` gRPC-Web `URLTest`）→ `api.clash`
+> （`GET /proxies/{tag}/delay`）。两者都未配置时本轮结果为 `unknown`，并不会把节点误判为离线。
+> Clash 侧采用 16 并发，整轮时间上限 = `timeout × 波次数`（封顶 5 分钟），
+> 因此单节点超时不会线性拉长一轮探测，也不会让后续波次的健康节点被误判离线。
+> 超出整轮预算、没轮到探测的节点记为 `unknown`（本轮没测到），而不是 `offline`。
+> Clash API 有响应但所有节点都拿不到延迟（地址指向别的内核、tag 失配、不提供 `/delay`）时，
+> 本轮判为后端故障并回退到 gRPC 结果，而不是把全部节点写成离线。
+> gRPC 侧以首帧 URLTest 历史为基线做差分，避免把上一轮遗留的延迟当成本轮结果；
+> sing-box 的 `URLTest` 是 fire-and-forget 并发执行，整轮上限 = `timeout` + 广播余量。
+> 整轮超时只会把「本轮确实没跑完」的节点判为 `offline`，已知结果仍会正常落库并返回（HTTP 502 + 部分结果）。
+>
+> **探测范围**：只探测叶子节点，自动跳过 `direct` / `block` / `dns` / `selector` / `urltest` / `fallback` /
+> `loadbalance` 等组类型，避免后台 `URLTest` 触发组内选择变化。
+>
+> **状态集合**：`online`（探测成功，带 `latency_ms`）、`offline`（探测失败或超时）、`degraded`、`unknown`。
+>
+> **Webhook 载荷**（状态变化时才发送，失败按指数退避重试，最多 5 次）：
+> ```json
+> {
+>   "event": "node.status_changed",
+>   "source": "sing-controller",
+>   "occurred_at": "2026-03-01T10:00:00Z",
+>   "node":     { "node_tag": "jp-01", "node_type": "vless" },
+>   "previous": { "node_tag": "jp-01", "node_type": "vless", "status": "online", "latency_ms": 128 },
+>   "current":  { "node_tag": "jp-01", "node_type": "vless", "status": "offline", "error": "..." }
+> }
+> ```
+> 请求头包含 `X-Sing-Controller-Event`、`X-Sing-Controller-Event-ID` 与可选的 `X-Secret`。
