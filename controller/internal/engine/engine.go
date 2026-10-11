@@ -295,6 +295,11 @@ func (e *Engine) Start(parentCtx context.Context) error {
 	if err := e.store.Load(ctx, defaults); err != nil {
 		slog.Error("load sing-box config", "path", e.cfg.Values().Core.ConfigPath, "error", err)
 	}
+	if e.provMgr != nil {
+		if err := e.provMgr.PrepareActiveProfile(ctx); err != nil {
+			slog.Warn("prepare active profile failed", "error", err)
+		}
+	}
 
 	// 2. 启动实时状态广播、节点探测与后台采集
 	e.rt.Start()
@@ -325,18 +330,7 @@ func (e *Engine) Start(parentCtx context.Context) error {
 		}
 	}
 
-	// 4. 冷启动方案自愈恢复
-	if e.provMgr != nil && !e.store.Exists() {
-		if activeID := e.provMgr.ActiveProfileID(); activeID != "" {
-			if err := e.provMgr.ApplyProfile(ctx, activeID); err != nil {
-				slog.Debug("auto apply profile on startup", "error", err)
-			} else {
-				slog.Info("auto-applied active profile on startup", "profile", activeID)
-			}
-		}
-	}
-
-	// 5. 若配置了直接启动 HTTP 服务器
+	// 4. 若配置了直接启动 HTTP 服务器
 	if e.opts.StartServer {
 		e.server = &http.Server{
 			Addr:    e.listenAddr,

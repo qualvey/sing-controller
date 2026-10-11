@@ -78,6 +78,19 @@
           {{ displayErrorDetail }}
         </div>
 
+        <!-- 远程配置错误应回到其来源修复，不能编辑最终生成配置。 -->
+        <button
+          v-if="remoteProvider || remoteConfigUrl"
+          type="button"
+          class="btn btn-outline btn-sm border-warning/40 text-warning hover:bg-warning/10 w-full justify-between"
+          @click="editRemoteProvider"
+        >
+          <span class="truncate">
+            {{ remoteProvider ? `编辑配置源：${remoteProvider.name || remoteProvider.tag}` : '打开远程配置源管理' }}
+          </span>
+          <span class="text-xs opacity-70">订阅 URL ↗</span>
+        </button>
+
         <!-- 核心离线时的配置修复快捷引导 -->
         <div
           v-if="isCoreOffline"
@@ -287,6 +300,8 @@ import {
   backendManagerView,
   openBackendManager,
 } from '@/store/setup'
+import { controllerApi, type NodeProvider } from '@/api/controller'
+import { openProfileModal, openProviderEditor, providersList } from '@/composables/profiles'
 import { isCoreReloading, useStatusStore } from '@/store/status'
 import {
   ArrowPathIcon,
@@ -313,6 +328,8 @@ const copiedNginx = ref(false)
 const showLogs = ref(false)
 const loadingLogs = ref(false)
 const coreLogs = ref<CoreLogLine[]>([])
+const supervisorStatus = ref<Awaited<ReturnType<typeof api.coreStatus>> | null>(null)
+const remoteProvidersLoaded = ref(false)
 
 const formatLogTime = (ts: string) => {
   if (!ts) return ''
@@ -322,8 +339,19 @@ const formatLogTime = (ts: string) => {
 const fetchCoreLogs = async () => {
   loadingLogs.value = true
   try {
+    supervisorStatus.value = await api.coreStatus()
     const res = await api.coreLogs(60)
     coreLogs.value = res.logs || []
+    if (!remoteProvidersLoaded.value) {
+      try {
+        const providers = await controllerApi.providers()
+        providersList.value = providers || []
+      } catch {
+        // The diagnostic panel must still work if provider metadata is unavailable.
+      } finally {
+        remoteProvidersLoaded.value = true
+      }
+    }
   } catch (e) {
     console.warn('获取核心日志失败:', e)
   } finally {
@@ -351,7 +379,10 @@ const isCoreOffline = computed(() => {
     msg.includes('核心未运行') ||
     msg.includes('core offline') ||
     statusStore.status?.core_alive === false ||
-    (statusStore.status?.core && !statusStore.status.core.alive)
+    (statusStore.status?.core && !statusStore.status.core.alive) ||
+    supervisorStatus.value?.state === 'crashed' ||
+    supervisorStatus.value?.state === 'error' ||
+    supervisorStatus.value?.state === 'stopped'
   )
 })
 
@@ -372,6 +403,8 @@ const isWsError = computed(() => {
 const displayErrorDetail = computed(() => {
   if (isCoreOffline.value) {
     return (
+      supervisorStatus.value?.fatal_error ||
+      supervisorStatus.value?.last_error ||
       statusStore.status?.core_error ||
       statusStore.status?.core?.error ||
       detail.value ||
@@ -383,6 +416,41 @@ const displayErrorDetail = computed(() => {
   }
   return detail.value || '无法连接到控制服务'
 })
+
+const errorSourceText = computed(() =>
+  [supervisorStatus.value?.fatal_error, supervisorStatus.value?.last_error, detail.value]
+    .filter(Boolean)
+    .join('\n'),
+)
+
+const remoteProvider = computed<NodeProvider | undefined>(() => {
+  const source = errorSourceText.value
+  if (!source) return undefined
+  return providersList.value.find((provider) => {
+    if (provider.type !== 'remote' || !provider.url) return false
+    return source.includes(provider.url)
+  })
+})
+
+const remoteConfigUrl = computed(() => errorSourceText.value.match(/https?:\/\/[^\s"'<>]+/i)?.[0] || '')
+
+const editRemoteProvider = () => {
+  if (remoteProvider.value) {
+    openProviderEditor(remoteProvider.value)
+  } else {
+    // URL 未能和已登记 provider 精确匹配时，仍打开远程配置源管理，
+    // 避免把最终生成配置误当成修复入口。
+    openProfileModal('providers')
+  }
+}
+
+watch(
+  () => probe.value?.status,
+  (status) => {
+    if (status === 'failed') void fetchCoreLogs()
+  },
+  { immediate: true },
+)
 
 const copyNginxConfig = async () => {
   const config = `proxy_http_version 1.1;\nproxy_set_header Upgrade $http_upgrade;\nproxy_set_header Connection "upgrade";`

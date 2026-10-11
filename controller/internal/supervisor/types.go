@@ -32,6 +32,7 @@ type StatusInfo struct {
 	StoppedAt       *time.Time `json:"stopped_at,omitempty"`
 	ExitCode        int        `json:"exit_code"`
 	LastError       string     `json:"last_error,omitempty"`
+	FatalError      string     `json:"fatal_error,omitempty"`
 	BinaryPath      string     `json:"binary_path"`
 	ConfigPath      string     `json:"config_path"`
 	Restarts        int        `json:"restarts"`

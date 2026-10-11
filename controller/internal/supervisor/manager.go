@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/qualvey/sing-controller/internal/logger"
+	"github.com/qualvey/sing-controller/internal/store"
 )
 
 type Config struct {
@@ -25,15 +26,16 @@ type Config struct {
 }
 
 type Manager struct {
-	mu          sync.RWMutex
-	cfg         Config
-	state       State
-	cmd         *exec.Cmd
-	waitDone    chan struct{}
-	startedAt   *time.Time
-	stoppedAt   *time.Time
-	exitCode    int
-	lastError   string
+	mu              sync.RWMutex
+	cfg             Config
+	state           State
+	cmd             *exec.Cmd
+	waitDone        chan struct{}
+	startedAt       *time.Time
+	stoppedAt       *time.Time
+	exitCode        int
+	lastError       string
+	lastFatal       string
 	restarts        int
 	recentExits     []time.Time
 	tunAccessDenied bool
@@ -44,8 +46,8 @@ type Manager struct {
 	subMu       sync.RWMutex
 	subscribers map[chan LogLine]struct{}
 
-	restartMu   sync.Mutex
-	cancelFn context.CancelFunc
+	restartMu sync.Mutex
+	cancelFn  context.CancelFunc
 }
 
 func New(cfg Config) (*Manager, error) {
@@ -84,13 +86,14 @@ func (m *Manager) Status() StatusInfo {
 	}
 
 	return StatusInfo{
-		State:      m.state,
-		Pid:        pid,
-		UptimeSec:  uptime,
-		StartedAt:  m.startedAt,
-		StoppedAt:  m.stoppedAt,
+		State:           m.state,
+		Pid:             pid,
+		UptimeSec:       uptime,
+		StartedAt:       m.startedAt,
+		StoppedAt:       m.stoppedAt,
 		ExitCode:        m.exitCode,
 		LastError:       m.lastError,
+		FatalError:      m.lastFatal,
 		BinaryPath:      m.cfg.BinaryPath,
 		ConfigPath:      m.cfg.ConfigPath,
 		Restarts:        m.restarts,
@@ -153,22 +156,83 @@ func (m *Manager) Start(ctx context.Context) error {
 func (m *Manager) startLocked(ctx context.Context) error {
 	m.state = StateStarting
 
+	var runtimeConfigPath string
+	started := false
+	defer func() {
+		if !started && runtimeConfigPath != "" {
+			_ = os.Remove(runtimeConfigPath)
+		}
+	}()
+
 	var args []string
 	if m.cfg.WorkingDir != "" {
 		args = append(args, "-D", m.cfg.WorkingDir)
 	}
 	if m.cfg.ConfigPath != "" {
-		fi, err := os.Stat(m.cfg.ConfigPath)
-		if err == nil && fi.IsDir() {
-			// 目录模式：直接使用 -C <ConfigDir>
-			args = append(args, "-C", m.cfg.ConfigPath)
+		fullConfigPath := filepath.Join(m.cfg.ConfigPath, "10-provider-config.json")
+		if configInfo, err := os.Stat(m.cfg.ConfigPath); err == nil && !configInfo.IsDir() {
+			fullConfigPath = filepath.Join(filepath.Dir(m.cfg.ConfigPath), "10-provider-config.json")
+		}
+		if fullConfigInfo, err := os.Stat(fullConfigPath); err == nil && !fullConfigInfo.IsDir() {
+			// 完整订阅配置模式：只加载订阅配置，不与 WebUI 基础配置合并。
+			args = append(args, "-c", fullConfigPath)
 		} else {
-			// 文件模式：添加主配置
-			args = append(args, "-c", m.cfg.ConfigPath)
-			// 若同目录下存在动态生成的 10-outbounds.json，自动双挂载
-			outboundsPath := filepath.Join(filepath.Dir(m.cfg.ConfigPath), "10-outbounds.json")
-			if ofi, err := os.Stat(outboundsPath); err == nil && !ofi.IsDir() {
-				args = append(args, "-c", outboundsPath)
+			fi, err := os.Stat(m.cfg.ConfigPath)
+			if err == nil && fi.IsDir() {
+				// 目录模式：直接使用 -C <ConfigDir>
+				args = append(args, "-C", m.cfg.ConfigPath)
+			} else {
+				// 文件模式：添加主配置
+				// 若同目录下存在动态生成的 10-outbounds.json，自动双挂载
+				outboundsPath := filepath.Join(filepath.Dir(m.cfg.ConfigPath), "10-outbounds.json")
+				if ofi, err := os.Stat(outboundsPath); err == nil && !ofi.IsDir() {
+					baseContent, err := os.ReadFile(m.cfg.ConfigPath)
+					if err != nil {
+						m.state = StateError
+						return fmt.Errorf("读取 sing-box 主配置失败: %w", err)
+					}
+					overrideContent, err := os.ReadFile(outboundsPath)
+					if err != nil {
+						m.state = StateError
+						return fmt.Errorf("读取动态出站配置失败: %w", err)
+					}
+					filteredBase, changed, err := store.FilterOverriddenTags(baseContent, overrideContent)
+					if err != nil {
+						m.state = StateError
+						return fmt.Errorf("处理默认配置与外部出站冲突失败: %w", err)
+					}
+					baseConfigPath := m.cfg.ConfigPath
+					if changed {
+						tmpFile, err := os.CreateTemp("", "sing-box-runtime-*.json")
+						if err != nil {
+							m.state = StateError
+							return fmt.Errorf("创建去重后的运行时配置失败: %w", err)
+						}
+						runtimeConfigPath = tmpFile.Name()
+						if _, err := tmpFile.Write(filteredBase); err != nil {
+							_ = tmpFile.Close()
+							m.state = StateError
+							return fmt.Errorf("写入去重后的运行时配置失败: %w", err)
+						}
+						if err := tmpFile.Close(); err != nil {
+							m.state = StateError
+							return fmt.Errorf("关闭去重后的运行时配置失败: %w", err)
+						}
+						baseConfigPath = runtimeConfigPath
+					}
+					args = append(args, "-c", baseConfigPath)
+					if changed {
+						absOutboundsPath, err := filepath.Abs(outboundsPath)
+						if err != nil {
+							m.state = StateError
+							return fmt.Errorf("解析动态出站配置路径失败: %w", err)
+						}
+						outboundsPath = absOutboundsPath
+					}
+					args = append(args, "-c", outboundsPath)
+				} else {
+					args = append(args, "-c", m.cfg.ConfigPath)
+				}
 			}
 		}
 	}
@@ -204,6 +268,7 @@ func (m *Manager) startLocked(ctx context.Context) error {
 		})
 		return err
 	}
+	started = true
 
 	if m.platform != nil {
 		if err := m.platform.bind(cmd); err != nil {
@@ -218,6 +283,7 @@ func (m *Manager) startLocked(ctx context.Context) error {
 	m.startedAt = &now
 	m.state = StateRunning
 	m.lastError = ""
+	m.lastFatal = ""
 	m.tunAccessDenied = false
 
 	m.broadcast(LogLine{
@@ -228,7 +294,7 @@ func (m *Manager) startLocked(ctx context.Context) error {
 
 	go m.streamLogs(stdout, "stdout")
 	go m.streamLogs(stderr, "stderr")
-	go m.waitProcess(cmd, waitDone)
+	go m.waitProcess(cmd, waitDone, runtimeConfigPath)
 
 	return nil
 }
@@ -239,6 +305,16 @@ func (m *Manager) streamLogs(r io.Reader, source string) {
 		text := scanner.Text()
 		logger.Info("[Core/%s] %s", source, text)
 		lower := strings.ToLower(text)
+		// sing-box reports startup failures (notably remote rule-set download
+		// failures) on stderr before exiting. Preserve the complete fatal line
+		// separately from the ring buffer so the status API can expose it even
+		// after the gRPC service has disappeared.
+		if strings.Contains(lower, "fatal") || strings.Contains(lower, "panic") {
+			m.mu.Lock()
+			m.lastFatal = text
+			m.lastError = text
+			m.mu.Unlock()
+		}
 		if (strings.Contains(lower, "access is denied") || strings.Contains(lower, "operation not permitted")) && strings.Contains(lower, "tun") {
 			m.mu.Lock()
 			m.tunAccessDenied = true
@@ -252,8 +328,13 @@ func (m *Manager) streamLogs(r io.Reader, source string) {
 	}
 }
 
-func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
+func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}, runtimeConfigPath string) {
 	err := cmd.Wait()
+	if runtimeConfigPath != "" {
+		if removeErr := os.Remove(runtimeConfigPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			logger.Warn("[Supervisor] 清理运行时配置失败 (%s): %v", runtimeConfigPath, removeErr)
+		}
+	}
 	close(waitDone)
 
 	m.mu.Lock()
@@ -291,7 +372,9 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}) {
 
 	// 异常退出 / Crash 诊断
 	m.state = StateCrashed
-	m.lastError = fmt.Sprintf("内核异常退出 (ExitCode: %d)", exitCode)
+	if m.lastError == "" {
+		m.lastError = fmt.Sprintf("内核异常退出 (ExitCode: %d)", exitCode)
+	}
 	logger.Error("[Supervisor] ⚠️ 警告: sing-box 内核异常退出! (ExitCode: %d)", exitCode)
 	m.broadcast(LogLine{
 		Timestamp: now,

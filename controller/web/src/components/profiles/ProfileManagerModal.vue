@@ -56,6 +56,8 @@
         v-if="activeProfilesTab === 'profiles'"
         :profiles="profilesList"
         :is-applying="isApplyingProfileId"
+        :allow-reapply="statusStore.status?.config_exists === false || statusStore.status?.core_alive === false"
+        :initializing="statusStore.status?.config_exists === false"
         @create="handleOpenCreateProfile"
         @edit="handleOpenEditProfile"
         @delete="handleDeleteProfileConfirm"
@@ -119,6 +121,7 @@ import {
   deleteProfile,
   refreshProvider,
   deleteProvider,
+  providerEditRequest,
 } from '@/composables/profiles'
 import { useStatusStore } from '@/store/status'
 import { startBackendSession } from '@/assembly/session'
@@ -159,6 +162,14 @@ watch(
     }
   },
 )
+
+watch(providerEditRequest, (provider) => {
+  if (!provider) return
+  activeProfilesTab.value = 'providers'
+  selectedProvider.value = provider
+  isProviderDialogVisible.value = true
+  providerEditRequest.value = null
+})
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 

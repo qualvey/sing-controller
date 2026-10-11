@@ -40,6 +40,7 @@ func (h *Handler) handleCoreStatus(w http.ResponseWriter, r *http.Request) {
 		"stopped_at":  status.StoppedAt,
 		"exit_code":   status.ExitCode,
 		"last_error":  status.LastError,
+		"fatal_error": status.FatalError,
 		"binary_path": status.BinaryPath,
 		"config_path": status.ConfigPath,
 		"restarts":    status.Restarts,

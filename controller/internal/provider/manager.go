@@ -59,20 +59,6 @@ func NewManager(dir string, st *store.Store, sup SupervisorInterface) (*Manager,
 	m.loadProfiles()
 	m.cleanBaseConfig()
 
-	// 确保磁盘上存在最新的 10-outbounds.json
-	activeID := m.activeProfID
-	if activeID == "" && len(m.profiles) > 0 {
-		for id := range m.profiles {
-			activeID = id
-			break
-		}
-	}
-	if activeID != "" {
-		if _, err := os.Stat(st.OutboundsPath()); os.IsNotExist(err) {
-			_ = m.ApplyProfile(context.Background(), activeID)
-		}
-	}
-
 	go m.startCronLoop()
 	return m, nil
 }
@@ -168,6 +154,56 @@ func (m *Manager) providerFullPath(tag string) string {
 	return filepath.Join(m.dir, fmt.Sprintf("full-%s.json", tag))
 }
 
+func (m *Manager) providerRuntimePath() string {
+	return filepath.Join(filepath.Dir(m.store.Path()), "10-provider-config.json")
+}
+
+// withControllerAPIService 保留控制器所需的 API service。
+// 完整订阅通常不包含该 service，而控制器的 gRPC/Clash 代理依赖它。
+func (m *Manager) withControllerAPIService(fullConfig []byte) ([]byte, error) {
+	var full map[string]json.RawMessage
+	if err := json.Unmarshal(fullConfig, &full); err != nil {
+		return nil, err
+	}
+	baseContent := m.store.RawContent()
+	var base map[string]json.RawMessage
+	if len(baseContent) > 0 {
+		_ = json.Unmarshal(baseContent, &base)
+	}
+
+	var baseServices []json.RawMessage
+	_ = json.Unmarshal(base["services"], &baseServices)
+	var controllerService json.RawMessage
+	for _, raw := range baseServices {
+		var service struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &service) == nil && service.Type == "api" {
+			controllerService = raw
+			break
+		}
+	}
+	if len(controllerService) == 0 {
+		controllerService = json.RawMessage(`{"type":"api","listen":"127.0.0.1","listen_port":9900}`)
+	}
+
+	var fullServices []json.RawMessage
+	_ = json.Unmarshal(full["services"], &fullServices)
+	filtered := make([]json.RawMessage, 0, len(fullServices)+1)
+	for _, raw := range fullServices {
+		var service struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &service) == nil && service.Type == "api" {
+			continue
+		}
+		filtered = append(filtered, raw)
+	}
+	filtered = append(filtered, controllerService)
+	full["services"], _ = json.Marshal(filtered)
+	return json.MarshalIndent(full, "", "  ")
+}
+
 func (m *Manager) loadProviders() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -180,6 +216,9 @@ func (m *Manager) loadProviders() {
 	var list []*Provider
 	if err := json.Unmarshal(data, &list); err == nil {
 		for _, p := range list {
+			if p.UseFullConfig {
+				p.UseProviderRules = false
+			}
 			m.providers[p.ID] = p
 		}
 	}
@@ -293,6 +332,9 @@ func (m *Manager) AddProvider(ctx context.Context, p Provider) (*Provider, error
 	if p.ID == "" {
 		p.ID = store.NewUUID()
 	}
+	if p.UseFullConfig {
+		p.UseProviderRules = false
+	}
 	now := time.Now()
 	p.CreatedAt = now
 	p.UpdatedAt = now
@@ -345,11 +387,16 @@ func (m *Manager) UpdateProvider(ctx context.Context, p Provider) error {
 
 	urlChanged := existing.URL != p.URL
 	formatChanged := existing.Format != p.Format
+	fullConfigChanged := existing.UseFullConfig != p.UseFullConfig
+	rulesChanged := existing.UseProviderRules != p.UseProviderRules
 	enabledChanged := existing.Enabled != p.Enabled
+	providerType := existing.Type
 
 	existing.Name = p.Name
 	existing.URL = p.URL
 	existing.Format = p.Format
+	existing.UseFullConfig = p.UseFullConfig
+	existing.UseProviderRules = p.UseProviderRules && !p.UseFullConfig
 	existing.UpdateIntervalMin = p.UpdateIntervalMin
 	existing.Enabled = p.Enabled
 	existing.UpdatedAt = time.Now()
@@ -357,10 +404,10 @@ func (m *Manager) UpdateProvider(ctx context.Context, p Provider) error {
 	m.mu.Unlock()
 
 	// 如果 URL、格式或启用状态发生变化且处于启用状态，立即自动重新拉取
-	if (urlChanged || formatChanged || enabledChanged) && p.Enabled && p.Type == ProviderTypeRemote && p.URL != "" {
-		go func() {
-			_, _ = m.RefreshProvider(context.Background(), p.ID)
-		}()
+	if (urlChanged || formatChanged || fullConfigChanged || rulesChanged || enabledChanged) && p.Enabled && providerType == ProviderTypeRemote && p.URL != "" {
+		if _, err := m.RefreshProvider(ctx, p.ID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -406,6 +453,8 @@ func (m *Manager) DeleteProvider(id string) error {
 
 	// 删除磁盘上的独立片段
 	_ = os.Remove(m.providerOutboundPath(tag))
+	_ = os.Remove(m.providerFullPath(tag))
+	_ = os.Remove(m.providerRuntimePath())
 
 	// 重新应用活动方案，彻底将已删除订阅的节点从内核和主配置中清除
 	if activeID != "" {
@@ -428,6 +477,8 @@ func (m *Manager) RefreshProvider(ctx context.Context, id string) ([]option.Outb
 	etag := p.LastETag
 	format := p.Format
 	tag := p.Tag
+	useFullConfig := p.UseFullConfig
+	useProviderRules := p.UseProviderRules
 	m.mu.RUnlock()
 
 	if urlStr == "" {
@@ -442,6 +493,41 @@ func (m *Manager) RefreshProvider(ctx context.Context, id string) ([]option.Outb
 		}
 		m.updateProviderError(id, err.Error())
 		return nil, err
+	}
+
+	if useFullConfig && format != FormatSingBox && format != FormatAuto {
+		err := fmt.Errorf("完整配置模式仅支持 sing-box JSON 格式")
+		m.updateProviderError(id, err.Error())
+		return nil, err
+	}
+
+	var fullConfig []byte
+	var fullOptions option.Options
+	var hasFullConfig bool
+	if useFullConfig {
+		parsed, err := store.Parse(ctx, body)
+		if err != nil {
+			m.updateProviderError(id, fmt.Sprintf("完整 sing-box 配置无效: %v", err))
+			return nil, fmt.Errorf("完整 sing-box 配置无效: %w", err)
+		}
+		fullOptions = parsed
+		hasFullConfig = true
+		fullConfig = append([]byte(nil), body...)
+	}
+	if useProviderRules && !hasFullConfig {
+		parsed, err := store.Parse(ctx, body)
+		if err != nil || (parsed.Route == nil && parsed.DNS == nil) {
+			if err == nil {
+				err = fmt.Errorf("订阅中未找到 route 或 dns 配置")
+			}
+			m.updateProviderError(id, fmt.Sprintf("订阅规则配置无效: %v", err))
+			return nil, fmt.Errorf("订阅规则配置无效: %w", err)
+		}
+		fullOptions = parsed
+		hasFullConfig = true
+	}
+	if hasFullConfig && (fullOptions.Route != nil || fullOptions.DNS != nil) {
+		fullConfig = append([]byte(nil), body...)
 	}
 
 	outbounds, err := AutoParse(body, format)
@@ -479,10 +565,12 @@ func (m *Manager) RefreshProvider(ctx context.Context, id string) ([]option.Outb
 	if err := os.WriteFile(m.providerOutboundPath(tag), buf.Bytes(), 0o644); err != nil {
 		return nil, fmt.Errorf("写入节点片段文件失败: %w", err)
 	}
-
-	// 若为全量 sing-box 配置，额外持久化为 full-<tag>.json 供全量使用
-	if fullOpts, err := store.Parse(ctx, body); err == nil && (len(fullOpts.Inbounds) > 0 || fullOpts.Route != nil || fullOpts.DNS != nil) {
-		_ = os.WriteFile(m.providerFullPath(tag), body, 0o644)
+	if hasFullConfig {
+		if err := os.WriteFile(m.providerFullPath(tag), fullConfig, 0o644); err != nil {
+			return nil, fmt.Errorf("写入完整配置失败: %w", err)
+		}
+	} else {
+		_ = os.Remove(m.providerFullPath(tag))
 	}
 
 	// 更新元数据
@@ -515,7 +603,7 @@ func (m *Manager) RefreshProvider(ctx context.Context, id string) ([]option.Outb
 	}
 	m.mu.RUnlock()
 
-	if shouldReapply {
+	if shouldReapply && m.store.Exists() {
 		go func() {
 			if err := m.ApplyProfile(context.Background(), activeID); err != nil {
 				logger.Warn("[Provider] 订阅 %s 更新后自动应用方案失败: %v", tag, err)
@@ -649,6 +737,47 @@ func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, e
 		return nil, errors.New("store 未初始化")
 	}
 
+	// 完整配置模式以订阅配置为唯一主体，不与本地配置或其他 Provider 合并。
+	var fullConfigTag string
+	var rulesConfigTag string
+	for _, pTag := range prof.ProviderTags {
+		m.mu.RLock()
+		var selected *Provider
+		for _, p := range m.providers {
+			if p.Tag == pTag {
+				copy := *p
+				selected = &copy
+				break
+			}
+		}
+		m.mu.RUnlock()
+		if selected != nil && selected.UseFullConfig {
+			if fullConfigTag != "" {
+				return nil, errors.New("一个配置方案最多只能使用一个完整配置订阅")
+			}
+			fullConfigTag = selected.Tag
+		}
+		if selected != nil && selected.UseProviderRules {
+			if rulesConfigTag != "" {
+				return nil, errors.New("一个配置方案最多只能使用一个订阅规则配置")
+			}
+			rulesConfigTag = selected.Tag
+		}
+	}
+	if fullConfigTag != "" {
+		if len(prof.ProviderTags) != 1 {
+			return nil, errors.New("完整配置订阅不能与其他订阅源同时加入同一配置方案")
+		}
+		content, err := os.ReadFile(m.providerFullPath(fullConfigTag))
+		if err != nil {
+			return nil, fmt.Errorf("读取完整配置订阅 %s 失败，请先刷新订阅: %w", fullConfigTag, err)
+		}
+		if _, err := store.Parse(ctx, content); err != nil {
+			return nil, fmt.Errorf("完整配置订阅 %s 无效: %w", fullConfigTag, err)
+		}
+		return content, nil
+	}
+
 	// 1. 收集当前 Profile 所选 Provider 的所有节点片段
 	var providerOutbounds []option.Outbound
 	providerNodeTags := make([]string, 0)
@@ -721,8 +850,18 @@ func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, e
 	}
 
 	// 4. 序列化为独立出站 JSON
-	outboundOpts := option.Options{
-		Outbounds: outbounds,
+	outboundOpts := option.Options{Outbounds: outbounds}
+	if rulesConfigTag != "" {
+		rulesContent, err := os.ReadFile(m.providerFullPath(rulesConfigTag))
+		if err != nil {
+			return nil, fmt.Errorf("读取订阅规则配置 %s 失败，请先刷新订阅: %w", rulesConfigTag, err)
+		}
+		rulesOptions, err := store.Parse(ctx, rulesContent)
+		if err != nil {
+			return nil, fmt.Errorf("订阅规则配置 %s 无效: %w", rulesConfigTag, err)
+		}
+		outboundOpts.Route = rulesOptions.Route
+		outboundOpts.DNS = rulesOptions.DNS
 	}
 	finalJSON, err := store.MarshalOptions(ctx, outboundOpts)
 	if err != nil {
@@ -732,8 +871,12 @@ func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, e
 	// 5. 联合预检：与当前主配置一起提交 sing-box check 验证
 	baseContent := m.store.RawContent()
 	if len(baseContent) > 0 {
+		validationBase, _, err := store.FilterOverriddenTags(baseContent, finalJSON)
+		if err != nil {
+			return nil, fmt.Errorf("处理默认配置与外部出站冲突失败: %w", err)
+		}
 		if err := store.ValidateMulti(ctx, map[string][]byte{
-			"00-base.json":      baseContent,
+			"00-base.json":      validationBase,
 			"10-outbounds.json": finalJSON,
 		}); err != nil {
 			logger.Warn("[CompileOutbounds] 联合校验预警: %v", err)
@@ -778,30 +921,50 @@ func setGroupOutbounds(ob *option.Outbound, tags []string) {
 	}
 }
 
-// ApplyProfile 应用指定方案：合成独立的 10-outbounds.json、联合预检、原子落盘并重载内核
-func (m *Manager) ApplyProfile(ctx context.Context, id string) error {
+// prepareProfile 编译指定方案并写出动态出站配置，不触发内核重启。
+func (m *Manager) prepareProfile(ctx context.Context, id string) (*Profile, error) {
 	m.mu.RLock()
 	prof, ok := m.profiles[id]
+	if ok {
+		profileCopy := *prof
+		prof = &profileCopy
+	}
 	m.mu.RUnlock()
 	if !ok {
-		return errors.New("profile not found")
+		return nil, errors.New("profile not found")
 	}
 
-	logger.Info("[Profile] 正在编译并应用方案 %s (%s)...", prof.Name, id)
+	logger.Info("[Profile] 正在编译方案 %s (%s)...", prof.Name, id)
 	outboundsJSON, err := m.CompileOutbounds(ctx, *prof)
 	if err != nil {
 		logger.Error("[Profile] 方案 %s 出站合成失败: %v", prof.Name, err)
-		return err
+		return nil, err
 	}
 
 	// 原子写入独立的 10-outbounds.json
 	outboundsPath := m.store.OutboundsPath()
 	tmpPath := outboundsPath + ".tmp"
 	if err := os.WriteFile(tmpPath, outboundsJSON, 0o644); err != nil {
-		return fmt.Errorf("写入独立出站配置文件失败: %w", err)
+		return nil, fmt.Errorf("写入独立出站配置文件失败: %w", err)
 	}
 	if err := os.Rename(tmpPath, outboundsPath); err != nil {
-		return fmt.Errorf("生效独立出站配置文件失败: %w", err)
+		return nil, fmt.Errorf("生效独立出站配置文件失败: %w", err)
+	}
+	_ = os.Remove(m.providerRuntimePath())
+
+	if fullConfigTag := m.profileFullConfigTag(*prof); fullConfigTag != "" {
+		fullConfig, err := os.ReadFile(m.providerFullPath(fullConfigTag))
+		if err != nil {
+			return nil, fmt.Errorf("读取完整配置订阅失败: %w", err)
+		}
+		fullConfig, err = m.withControllerAPIService(fullConfig)
+		if err != nil {
+			return nil, fmt.Errorf("补充控制器 API service 失败: %w", err)
+		}
+		if err := os.WriteFile(m.providerRuntimePath(), fullConfig, 0o644); err != nil {
+			return nil, fmt.Errorf("写入完整配置运行文件失败: %w", err)
+		}
+		_ = os.Remove(outboundsPath)
 	}
 	logger.Info("[Profile] 独立出站配置 %s 已成功写入 (大小: %d 字节)", outboundsPath, len(outboundsJSON))
 
@@ -813,12 +976,54 @@ func (m *Manager) ApplyProfile(ctx context.Context, id string) error {
 	m.activeProfID = id
 	_ = m.saveProfilesLocked()
 	m.mu.Unlock()
+	return prof, nil
+}
+
+func (m *Manager) profileFullConfigTag(prof Profile) string {
+	for _, pTag := range prof.ProviderTags {
+		m.mu.RLock()
+		for _, p := range m.providers {
+			if p.Tag == pTag && p.UseFullConfig {
+				m.mu.RUnlock()
+				return p.Tag
+			}
+		}
+		m.mu.RUnlock()
+	}
+	return ""
+}
+
+// PrepareActiveProfile 在启动核心前生成当前方案的动态出站配置。
+func (m *Manager) PrepareActiveProfile(ctx context.Context) error {
+	id := m.ActiveProfileID()
+	if id == "" {
+		return nil
+	}
+	_, err := m.prepareProfile(ctx, id)
+	return err
+}
+
+// ApplyProfile 应用指定方案：写入动态出站配置，首次应用时创建基础配置，然后重启内核。
+func (m *Manager) ApplyProfile(ctx context.Context, id string) error {
+	prof, err := m.prepareProfile(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// 首次初始化时 Store.Load 只在内存中准备默认配置骨架；用户明确应用方案后再落盘。
+	if !m.store.Exists() {
+		if err := m.store.Save(ctx); err != nil {
+			return fmt.Errorf("创建 sing-box 主配置失败: %w", err)
+		}
+		logger.Info("[Profile] 首次初始化已生成 sing-box 主配置: %s", m.store.Path())
+	}
 
 	// 若启用了自动重载且 Supervisor 存在，通知重载或重启内核
 	if prof.AutoReload && m.supervisor != nil {
 		logger.Info("[Profile] 正在通知 Supervisor 启动/重载 sing-box 内核...")
 		if err := m.supervisor.Restart(ctx); err != nil {
 			logger.Warn("[Profile] 内核重启失败: %v", err)
+			return fmt.Errorf("配置方案已写入，但 sing-box 内核启动失败: %w", err)
 		}
 	}
 
@@ -895,7 +1100,7 @@ func (m *Manager) startCronLoop() {
 			m.mu.RLock()
 			activeProf := m.profiles[activeID]
 			m.mu.RUnlock()
-			if activeProf != nil && activeProf.AutoReload {
+			if activeProf != nil && activeProf.AutoReload && m.store.Exists() {
 				_ = m.ApplyProfile(context.Background(), activeID)
 			}
 		}

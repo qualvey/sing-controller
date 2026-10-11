@@ -96,7 +96,7 @@ func (o *ReloadOptions) Validate() error {
 type CoreOptions struct {
 	ConfigPath string         `json:"config_path,omitempty"`
 	Managed    *bool          `json:"managed,omitempty"`
-	BinaryPath string         `json:"binary_path,omitempty"`
+	BinaryPath string         `json:"path,omitempty"`
 	WorkingDir string         `json:"working_dir,omitempty"`
 	Reload     *ReloadOptions `json:"reload,omitempty"`
 }

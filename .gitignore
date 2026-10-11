@@ -35,3 +35,5 @@ sing-box.exe
 zashboard/
 controller/__debug*
 *.md5
+docs/.vitepress/cache/
+docs/node_modules/

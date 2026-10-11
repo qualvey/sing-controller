@@ -35,7 +35,7 @@
           class="absolute top-0 right-0 bg-primary text-primary-content px-3 py-0.5 text-[11px] font-semibold rounded-bl-lg flex items-center gap-1 shadow-sm"
         >
           <CheckCircleIcon class="size-3.5" />
-          <span>{{ t('profiles.activeRunning', '运行中') }}</span>
+          <span>{{ t('profiles.activeRunning', '当前方案') }}</span>
         </div>
 
         <div class="flex flex-col gap-2">
@@ -74,7 +74,7 @@
 
           <div class="flex items-center gap-1.5">
             <button
-              v-if="!prof.is_active"
+              v-if="!prof.is_active || allowReapply"
               class="btn btn-xs btn-primary gap-1"
               :disabled="isApplying === prof.id"
               @click="emit('apply', prof.id)"
@@ -87,7 +87,7 @@
                 v-else
                 class="size-3.5"
               />
-              <span>{{ t('profiles.applyThisProfile', '应用此方案') }}</span>
+              <span>{{ allowReapply ? t(initializing ? 'profiles.initializeAndStart' : 'profiles.applyAndStart', initializing ? '初始化并启动' : '应用并启动') : t('profiles.applyThisProfile', '应用此方案') }}</span>
             </button>
             <button
               class="btn btn-xs btn-ghost btn-square"
@@ -126,6 +126,8 @@ import {
 defineProps<{
   profiles: ConfigProfile[]
   isApplying?: string | null
+  allowReapply?: boolean
+  initializing?: boolean
 }>()
 
 const emit = defineEmits<{

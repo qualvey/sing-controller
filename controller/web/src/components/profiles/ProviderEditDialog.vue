@@ -63,6 +63,38 @@
           />
         </div>
       </div>
+      <div class="form-control rounded-md border border-base-300 px-3 py-2">
+        <label class="label cursor-pointer justify-start gap-2 p-0">
+          <input
+            v-model="form.use_full_config"
+            @change="form.use_full_config && (form.use_provider_rules = false)"
+            type="checkbox"
+            class="checkbox checkbox-sm checkbox-primary"
+          />
+          <span class="label-text">
+            {{ t('profiles.useFullConfig', '使用订阅提供的完整 sing-box 配置') }}
+          </span>
+        </label>
+        <span class="mt-1 text-base-content/60">
+          {{ t('profiles.useFullConfigTip', '启用后，该方案将仅使用此订阅配置，不合并本地配置或其他订阅源') }}
+        </span>
+      </div>
+      <div class="form-control rounded-md border border-base-300 px-3 py-2">
+        <label class="label cursor-pointer justify-start gap-2 p-0">
+          <input
+            v-model="form.use_provider_rules"
+            @change="form.use_provider_rules && (form.use_full_config = false)"
+            type="checkbox"
+            class="checkbox checkbox-sm checkbox-primary"
+          />
+          <span class="label-text">
+            {{ t('profiles.useProviderRules', '使用该订阅配置中的规则') }}
+          </span>
+        </label>
+        <span class="mt-1 text-base-content/60">
+          {{ t('profiles.useProviderRulesTip', '保存后将重新拉取，并把订阅中的 route / dns 规则合并到当前方案') }}
+        </span>
+      </div>
       <div class="form-control">
         <label class="label cursor-pointer justify-start gap-2">
           <input
@@ -153,6 +185,8 @@ const form = reactive<Partial<NodeProvider>>({
   format: 'auto',
   update_interval_min: 720,
   enabled: true,
+  use_full_config: false,
+  use_provider_rules: false,
 })
 
 const resetForm = () => {
@@ -166,6 +200,8 @@ const resetForm = () => {
       format: props.provider.format || 'auto',
       update_interval_min: props.provider.update_interval_min ?? 720,
       enabled: props.provider.enabled ?? true,
+      use_full_config: props.provider.use_full_config ?? false,
+      use_provider_rules: props.provider.use_provider_rules ?? false,
     })
   } else {
     Object.assign(form, {
@@ -177,6 +213,8 @@ const resetForm = () => {
       format: 'auto',
       update_interval_min: 720,
       enabled: true,
+      use_full_config: false,
+      use_provider_rules: false,
     })
   }
 }

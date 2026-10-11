@@ -130,6 +130,13 @@
             {{ formattedUptime }}
           </div>
         </div>
+        <div
+          v-if="coreFailureMessage"
+          class="bg-error/10 text-error rounded-lg p-2 text-xs leading-relaxed break-all"
+        >
+          <div class="font-semibold">核心启动失败</div>
+          <div class="mt-1 font-mono">{{ coreFailureMessage }}</div>
+        </div>
       </section>
 
       <section class="bg-base-200/30 flex min-w-0 flex-col gap-3 rounded-xl p-4">
@@ -211,9 +218,15 @@ const refreshCoreStatus = async () => {
 }
 
 // 核心状态计算
-const statusState = computed<'running' | 'reloading' | 'stopped'>(() => {
+const statusState = computed<'running' | 'reloading' | 'stopped' | 'error'>(() => {
   if (isReloading.value || isRestarting.value || statusStore.isReloading) {
     return 'reloading'
+  }
+  if (coreSupervisorStatus.value?.state === 'crashed' || coreSupervisorStatus.value?.state === 'error') {
+    return 'error'
+  }
+  if (coreSupervisorStatus.value?.state === 'stopped') {
+    return 'stopped'
   }
   if (statusStore.status?.core_alive !== undefined) {
     return statusStore.status.core_alive ? 'running' : 'stopped'
@@ -227,6 +240,8 @@ const statusText = computed(() => {
       return t('coreControl.reloading') || '正在重载'
     case 'stopped':
       return t('coreControl.stopped')
+    case 'error':
+      return '启动失败'
     case 'running':
     default:
       return t('coreControl.running') || '正常运行'
@@ -239,6 +254,8 @@ const statusCapsuleClass = computed(() => {
       return 'bg-amber-950/40 text-amber-400 border-amber-500/20'
     case 'stopped':
       return 'bg-rose-950/40 text-rose-400 border-rose-500/20'
+    case 'error':
+      return 'bg-red-950/50 text-red-400 border-red-500/30'
     case 'running':
     default:
       return 'bg-[#132a1c] text-[#22c55e] border-emerald-500/20'
@@ -251,10 +268,19 @@ const statusDotClass = computed(() => {
       return 'bg-amber-400 animate-ping'
     case 'stopped':
       return 'bg-rose-500'
+    case 'error':
+      return 'bg-red-500'
     case 'running':
     default:
       return 'bg-[#22c55e]'
   }
+})
+
+const coreFailureMessage = computed(() => {
+  if (coreSupervisorStatus.value?.state !== 'crashed' && coreSupervisorStatus.value?.state !== 'error') {
+    return ''
+  }
+  return coreSupervisorStatus.value.fatal_error || coreSupervisorStatus.value.last_error || '核心异常退出'
 })
 
 const uptimeSeconds = computed(() => {

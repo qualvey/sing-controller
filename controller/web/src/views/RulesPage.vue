@@ -28,6 +28,7 @@
             :delay="1000"
             :delay-on-touch-only="true"
             :touch-start-threshold="5"
+            handle=".rule-drag-handle"
             ghost-class="opacity-30"
             drag-class="cursor-grabbing"
             filter="input, button, a, .collapse-content, .proxy-chain-node"

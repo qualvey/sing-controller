@@ -568,6 +568,8 @@ export interface NodeProvider {
   type: 'remote' | 'file' | 'inline'
   url?: string
   format: 'auto' | 'sing-box' | 'clash' | 'base64'
+  use_full_config: boolean
+  use_provider_rules: boolean
   update_interval_min: number
   last_updated?: string
   last_etag?: string
@@ -600,6 +602,7 @@ export interface CoreSupervisorStatus {
   stopped_at?: string
   exit_code?: number
   last_error?: string
+  fatal_error?: string
   binary_path?: string
   config_path?: string
   restarts?: number

@@ -10,6 +10,7 @@ export interface RuleContextMenuTarget {
 export const isRuleContextMenuVisible = ref(false)
 export const ruleContextMenuPos = ref({ x: 0, y: 0 })
 export const ruleContextMenuTarget = ref<RuleContextMenuTarget | null>(null)
+export const isRuleActionsSheet = ref(false)
 
 export const isRouteEditModalOpen = ref(false)
 export const isRouteEditMode = ref(false)
@@ -19,6 +20,7 @@ export const openRuleContextMenu = (e: MouseEvent, target: RuleContextMenuTarget
   e.preventDefault()
   e.stopPropagation()
 
+  isRuleActionsSheet.value = false
   ruleContextMenuTarget.value = target
 
   const menuWidth = 160
@@ -39,9 +41,16 @@ export const openRuleContextMenu = (e: MouseEvent, target: RuleContextMenuTarget
   isRuleContextMenuVisible.value = true
 }
 
+export const openRuleActions = (target: RuleContextMenuTarget) => {
+  isRuleActionsSheet.value = true
+  ruleContextMenuTarget.value = target
+  isRuleContextMenuVisible.value = true
+}
+
 export const closeRuleContextMenu = () => {
   isRuleContextMenuVisible.value = false
   ruleContextMenuTarget.value = null
+  isRuleActionsSheet.value = false
 }
 
 export const openCreateRouteModal = () => {

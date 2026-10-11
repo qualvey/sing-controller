@@ -714,7 +714,9 @@ const zhTW: LANG_MESSAGE = {
   specialNodeTip: '內置節點不可編輯',
 
   createRule: '新建規則',
+  ruleActions: '規則操作',
   editRule: '編輯規則',
+  specifyRule: '指定節點',
   deleteRule: '刪除規則',
   copyRule: '複製規則內容',
   enableRule: '啟用規則',

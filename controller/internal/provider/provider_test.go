@@ -263,3 +263,96 @@ proxies:
 		}
 	}
 }
+
+func TestApplyProfileCreatesMissingBaseConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "sing-box.json")
+	st := store.New(configPath)
+	if err := st.Load(context.Background(), store.DefaultConfig{
+		InboundType: "mixed",
+		Listen:      "127.0.0.1",
+		ListenPort:  2080,
+	}); err != nil {
+		t.Fatalf("load store defaults: %v", err)
+	}
+
+	mgr, err := NewManager(filepath.Join(tmpDir, "providers"), st, nil)
+	if err != nil {
+		t.Fatalf("NewManager failed: %v", err)
+	}
+	if st.Exists() {
+		t.Fatal("manager initialization should not persist a base config before a profile is applied")
+	}
+
+	if err := mgr.ApplyProfile(context.Background(), "default"); err != nil {
+		t.Fatalf("ApplyProfile failed: %v", err)
+	}
+	if !st.Exists() {
+		t.Fatal("applying the initial profile should create the base config")
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read generated base config: %v", err)
+	}
+	if _, err := store.Parse(context.Background(), content); err != nil {
+		t.Fatalf("generated base config is invalid: %v", err)
+	}
+	if _, err := os.Stat(st.OutboundsPath()); err != nil {
+		t.Fatalf("expected generated outbounds config: %v", err)
+	}
+}
+
+func TestFullConfigProviderIsUsedAsSoleProfileConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "sing-box.json")
+	baseConfig := `{"inbounds":[{"type":"mixed","tag":"local-in","listen":"127.0.0.1","listen_port":2080}],"outbounds":[{"type":"direct","tag":"direct"}]}`
+	if err := os.WriteFile(configPath, []byte(baseConfig), 0o644); err != nil {
+		t.Fatalf("write base config: %v", err)
+	}
+	st := store.New(configPath)
+	if err := st.Load(context.Background(), store.DefaultConfig{}); err != nil {
+		t.Fatalf("load store: %v", err)
+	}
+	mgr, err := NewManager(filepath.Join(tmpDir, "providers"), st, nil)
+	if err != nil {
+		t.Fatalf("NewManager failed: %v", err)
+	}
+
+	p, err := mgr.AddProvider(context.Background(), Provider{
+		Tag:           "full-source",
+		Name:          "完整配置源",
+		Type:          ProviderTypeFile,
+		Format:        FormatSingBox,
+		UseFullConfig: true,
+		Enabled:       true,
+	})
+	if err != nil {
+		t.Fatalf("AddProvider failed: %v", err)
+	}
+	fullConfig := `{"log":{"level":"debug"},"inbounds":[{"type":"mixed","tag":"remote-in","listen":"0.0.0.0","listen_port":1080}],"outbounds":[{"type":"direct","tag":"remote-direct"}],"route":{"final":"remote-direct"}}`
+	if err := os.WriteFile(mgr.providerFullPath(p.Tag), []byte(fullConfig), 0o644); err != nil {
+		t.Fatalf("write full config: %v", err)
+	}
+
+	prof, err := mgr.AddProfile(Profile{Tag: "full-profile", Name: "完整配置方案", ProviderTags: []string{p.Tag}})
+	if err != nil {
+		t.Fatalf("AddProfile failed: %v", err)
+	}
+	compiled, err := mgr.CompileOutbounds(context.Background(), *prof)
+	if err != nil {
+		t.Fatalf("CompileOutbounds failed: %v", err)
+	}
+	if string(compiled) != fullConfig {
+		t.Fatalf("expected the original full config, got %s", compiled)
+	}
+	if err := mgr.ApplyProfile(context.Background(), prof.ID); err != nil {
+		t.Fatalf("ApplyProfile failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "10-provider-config.json")); err != nil {
+		t.Fatalf("expected full config runtime file: %v", err)
+	}
+	if _, err := os.Stat(st.OutboundsPath()); !os.IsNotExist(err) {
+		t.Fatalf("expected node-only runtime file to be absent, err=%v", err)
+	}
+}

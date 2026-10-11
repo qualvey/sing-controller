@@ -3,7 +3,6 @@
     :class="{
       'opacity-50': isDisabled,
       'scroller-item': 1,
-      'cursor-grab active:cursor-grabbing select-none': canDrag,
     }"
     @contextmenu.prevent="handleContextMenu"
   >
@@ -21,7 +20,7 @@
         <div class="flex items-center min-h-5 leading-5">
           <Bars2Icon
             v-if="canDrag"
-            class="text-base-content/35 hover:text-base-content/80 -ml-0.5 mr-1.5 h-4 w-4 shrink-0 transition-colors"
+            class="rule-drag-handle text-base-content/35 hover:text-base-content/80 -ml-0.5 mr-1.5 h-5 w-5 shrink-0 cursor-grab touch-none transition-colors active:cursor-grabbing"
             :title="$t('dragToReorder') || '拖拽调整顺序'"
           />
           <span class="text-base-content/50 text-xs tabular-nums">
@@ -72,6 +71,15 @@
             @mouseenter="showRuleHitInfoTip"
             @click.stop
           />
+          <button
+            type="button"
+            class="rule-actions-trigger btn btn-circle btn-ghost btn-xs ml-auto shrink-0"
+            :aria-label="$t('ruleActions')"
+            :title="$t('ruleActions')"
+            @click.stop="openMobileActions"
+          >
+            <EllipsisVerticalIcon class="h-4 w-4" />
+          </button>
         </div>
         <div class="flex items-center gap-2">
           <input
@@ -135,6 +143,7 @@ import type { Rule } from '@/types'
 import {
   ArrowPathIcon,
   Bars2Icon,
+  EllipsisVerticalIcon,
   InformationCircleIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/vue/24/outline'
@@ -146,7 +155,7 @@ import { useI18n } from 'vue-i18n'
 import HighlightText from '../common/HighlightText.vue'
 import ProxyChainPath from '../common/ProxyChainPath.vue'
 import ProxyGroup from '../proxies/ProxyGroup.vue'
-import { openRuleContextMenu } from '@/composables/ruleContextMenu'
+import { openRuleActions, openRuleContextMenu } from '@/composables/ruleContextMenu'
 
 const props = withDefaults(
   defineProps<{
@@ -160,10 +169,20 @@ const props = withDefaults(
 )
 
 const handleContextMenu = (e: MouseEvent) => {
+  e.preventDefault()
+  e.stopPropagation()
+
+  // Touch long-press is reserved for dragging; mobile actions have an explicit button.
+  if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) return
+
   openRuleContextMenu(e, {
     rule: props.rule,
     index: props.index
   })
+}
+
+const openMobileActions = () => {
+  openRuleActions({ rule: props.rule, index: props.index })
 }
 
 const expandedRule = inject<Ref<string | null>>('expandedRule', ref(null))
@@ -177,6 +196,7 @@ const showExpandedContent = ref(isExpanded.value)
 
 watch(isExpanded, (value) => {
   if (value) {
+    selected.value = props.rule.proxy
     showExpandedContent.value = true
   }
 })
@@ -312,3 +332,15 @@ const clickHandler = () => {
 
 useBounceOnVisible()
 </script>
+
+<style scoped>
+.rule-actions-trigger {
+  display: inline-flex;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rule-actions-trigger {
+    display: none;
+  }
+}
+</style>

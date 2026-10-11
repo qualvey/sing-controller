@@ -704,7 +704,9 @@ const ru: LANG_MESSAGE = {
   specialNodeTip: 'Встроенные узлы нельзя редактировать',
 
   createRule: 'Создать правило',
+  ruleActions: 'Действия с правилом',
   editRule: 'Редактировать правило',
+  specifyRule: 'Выбрать выход',
   deleteRule: 'Удалить правило',
   copyRule: 'Копировать правило',
   enableRule: 'Включить правило',

@@ -2,12 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
@@ -131,4 +133,63 @@ func TestChannelAvailabilityUsesClashWhenGRPCIsNotConfigured(t *testing.T) {
 	if !got.Clash.Configured || !got.Clash.Available {
 		t.Fatalf("Clash channel = %+v, want configured and available", got.Clash)
 	}
+}
+
+func TestCoreHealthFallsBackToServiceAPIWhenClashAPIIsUnavailable(t *testing.T) {
+	clashListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for unavailable Clash endpoint: %v", err)
+	}
+	clashAddress := clashListener.Addr().String()
+	if err := clashListener.Close(); err != nil {
+		t.Fatalf("close Clash endpoint: %v", err)
+	}
+
+	serviceListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for service API endpoint: %v", err)
+	}
+	defer serviceListener.Close()
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.json")
+	config := `{
+		"services": [{"type":"api","listen":"127.0.0.1","listen_port":` + portFromAddress(t, serviceListener.Addr().String()) + `}]
+	}`
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	coreStore := store.New(configPath)
+	if err := coreStore.Load(t.Context(), store.DefaultConfig{}); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	controllerSettings := settings.New(filepath.Join(dir, "settings.json"))
+	if err := controllerSettings.Load(); err != nil {
+		t.Fatalf("load settings: %v", err)
+	}
+	if err := controllerSettings.Update(func(s *settings.Settings) error {
+		s.API.Clash = &settings.EndpointAPI{Address: "http://" + clashAddress}
+		return nil
+	}); err != nil {
+		t.Fatalf("set unavailable Clash API: %v", err)
+	}
+
+	h := NewHandler(HandlerOptions{Store: coreStore, Settings: controllerSettings})
+	status := h.probeCoreHealth(time.Second)
+	if !status.Alive {
+		t.Fatalf("core should be alive through service API fallback, got %+v", status)
+	}
+	if status.Version != "sing-box" {
+		t.Fatalf("version = %q, want sing-box", status.Version)
+	}
+}
+
+func portFromAddress(t *testing.T, address string) string {
+	t.Helper()
+	_, port, err := net.SplitHostPort(address)
+	if err != nil {
+		t.Fatalf("split listener address %q: %v", address, err)
+	}
+	return port
 }

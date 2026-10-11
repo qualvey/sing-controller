@@ -30,7 +30,9 @@ type Provider struct {
 	Name              string             `json:"name"`                // 可读名称
 	Type              ProviderType       `json:"type"`                // 节点源类型
 	URL               string             `json:"url,omitempty"`       // 远程订阅地址
-	Format            SubscriptionFormat `json:"format"`             // 订阅格式
+	Format            SubscriptionFormat `json:"format"`              // 订阅格式
+	UseFullConfig     bool               `json:"use_full_config"`     // 使用订阅提供的完整 sing-box 配置，而不是仅提取节点
+	UseProviderRules  bool               `json:"use_provider_rules"`  // 使用订阅完整配置中的 route/dns 规则
 	UpdateIntervalMin int                `json:"update_interval_min"` // 自动更新间隔（分钟，0 表示不自动更新）
 	LastUpdated       *time.Time         `json:"last_updated,omitempty"`
 	LastETag          string             `json:"last_etag,omitempty"`

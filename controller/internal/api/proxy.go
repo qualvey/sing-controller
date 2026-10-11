@@ -332,6 +332,7 @@ func probeGRPCWeb(target *url.URL, secret string, timeout time.Duration) (bool, 
 // probeCoreHealth 对 upstream sing-box 内核进行实际探活
 func (h *Handler) probeCoreHealth(timeout time.Duration) CoreStatus {
 	// 1. 优先尝试 Clash API /version 探活（最精确，能取到具体版本与内核类型）
+	var clashProbeError string
 	if target, secret, _ := h.clashTarget(); target != nil {
 		start := time.Now()
 		client := &http.Client{
@@ -339,16 +340,18 @@ func (h *Handler) probeCoreHealth(timeout time.Duration) CoreStatus {
 		}
 		reqURL := strings.TrimRight(target.String(), "/") + "/version"
 		req, err := http.NewRequest(http.MethodGet, reqURL, nil)
-		if err == nil {
+		if err != nil {
+			clashProbeError = err.Error()
+		} else {
 			if secret != "" {
 				req.Header.Set("Authorization", "Bearer "+secret)
 			}
 			resp, reqErr := client.Do(req)
 			if reqErr == nil {
-				defer resp.Body.Close()
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+				_ = resp.Body.Close()
 				latency := time.Since(start).Milliseconds()
 				if resp.StatusCode == http.StatusOK {
-					body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 					var verResp struct {
 						Version string `json:"version"`
 					}
@@ -374,18 +377,9 @@ func (h *Handler) probeCoreHealth(timeout time.Duration) CoreStatus {
 						LatencyMS: latency,
 					}
 				}
-				return CoreStatus{
-					Alive:     false,
-					Type:      "sing-box",
-					Error:     "clash API 返回 HTTP " + resp.Status,
-					LatencyMS: latency,
-				}
-			}
-			return CoreStatus{
-				Alive:     false,
-				Type:      "sing-box",
-				Error:     reqErr.Error(),
-				LatencyMS: time.Since(start).Milliseconds(),
+				clashProbeError = "clash API 返回 HTTP " + resp.Status
+			} else {
+				clashProbeError = reqErr.Error()
 			}
 		}
 	}
@@ -394,10 +388,14 @@ func (h *Handler) probeCoreHealth(timeout time.Duration) CoreStatus {
 	if target, _, _ := h.serviceAPITarget(); target != nil {
 		start := time.Now()
 		if err := checkUpstreamReachable(target.String(), timeout); err != nil {
+			serviceError := "service API 探活失败: " + err.Error()
+			if clashProbeError != "" {
+				serviceError = "Clash API 探活失败: " + clashProbeError + "; " + serviceError
+			}
 			return CoreStatus{
 				Alive:     false,
 				Type:      "sing-box",
-				Error:     err.Error(),
+				Error:     serviceError,
 				LatencyMS: time.Since(start).Milliseconds(),
 			}
 		}
@@ -406,6 +404,13 @@ func (h *Handler) probeCoreHealth(timeout time.Duration) CoreStatus {
 			Type:      "sing-box",
 			Version:   "sing-box",
 			LatencyMS: time.Since(start).Milliseconds(),
+		}
+	}
+	if clashProbeError != "" {
+		return CoreStatus{
+			Alive: false,
+			Type:  "sing-box",
+			Error: clashProbeError,
 		}
 	}
 

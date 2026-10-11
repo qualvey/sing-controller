@@ -9,6 +9,8 @@ import { useStatusStore } from '@/store/status'
 import { ref } from 'vue'
 
 export const isProfileModalOpen = ref(false)
+// 由错误/诊断界面请求直接打开某个远程配置源的编辑器。
+export const providerEditRequest = ref<NodeProvider | null>(null)
 
 export const openProfileModal = (tab?: 'profiles' | 'providers') => {
   if (tab) activeProfilesTab.value = tab
@@ -17,6 +19,12 @@ export const openProfileModal = (tab?: 'profiles' | 'providers') => {
 
 export const closeProfileModal = () => {
   isProfileModalOpen.value = false
+}
+
+export const openProviderEditor = (provider: NodeProvider) => {
+  activeProfilesTab.value = 'providers'
+  providerEditRequest.value = provider
+  isProfileModalOpen.value = true
 }
 
 export const activeProfilesTab = ref<'profiles' | 'providers'>('profiles')
@@ -82,18 +90,11 @@ export const refreshProvider = async (id: string) => {
     const statusStore = useStatusStore()
     await statusStore.refresh()
 
-    // 若当前处于冷启动待初始化状态（尚未生成主配置），自动应用默认方案
-    if (statusStore.status?.config_exists === false) {
-      const activeProf = profilesList.value.find(p => p.is_active) || profilesList.value[0]
-      if (activeProf) {
-        await applyProfile(activeProf.id)
-        return
-      }
+    if (statusStore.status?.core_alive) {
+      setTimeout(() => {
+        startBackendSession()
+      }, 600)
     }
-
-    setTimeout(() => {
-      startBackendSession()
-    }, 600)
   } catch (err: unknown) {
     const msg = (err as any)?.response?.data?.message || (err as Error)?.message || '刷新订阅失败'
     showNotification({ content: msg, type: 'alert-error' })
