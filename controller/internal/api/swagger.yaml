@@ -62,6 +62,13 @@ definitions:
       service:
         type: string
     type: object
+  settings.TProxyOptions:
+    properties:
+      enabled:
+        type: boolean
+      script:
+        type: string
+    type: object
   settings.ServerOptions:
     properties:
       listen:
@@ -79,6 +86,8 @@ definitions:
         $ref: '#/definitions/settings.CoreOptions'
       log:
         $ref: '#/definitions/settings.LogOptions'
+      tproxy:
+        $ref: '#/definitions/settings.TProxyOptions'
       server:
         $ref: '#/definitions/settings.ServerOptions'
       stats:

@@ -16,6 +16,10 @@
       "after_save": false
     }
   },
+  "tproxy": {
+    "enabled": false,
+    "script": "/usr/local/bin/tproxy.sh"
+  },
   "api": {
     "clash": {
       "address": ""

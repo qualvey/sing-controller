@@ -101,6 +101,13 @@ type CoreOptions struct {
 	Reload     *ReloadOptions `json:"reload,omitempty"`
 }
 
+// TProxyOptions configures an optional host-level TProxy lifecycle script.
+// It is disabled by default because many installations do not use TProxy.
+type TProxyOptions struct {
+	Enabled bool   `json:"enabled"`
+	Script  string `json:"script,omitempty"`
+}
+
 // EndpointAPI 通用的上游 API 地址与密钥配置
 type EndpointAPI struct {
 	Address string `json:"address,omitempty"`
@@ -330,6 +337,7 @@ type Settings struct {
 	Server     ServerOptions     `json:"server"`
 	Log        *LogOptions       `json:"log,omitempty"`
 	Core       CoreOptions       `json:"core"`
+	TProxy     TProxyOptions     `json:"tproxy"`
 	API        APIOptions        `json:"api"`
 	Stats      StatsOptions      `json:"stats"`
 	NodeHealth NodeHealthOptions `json:"node_health"`

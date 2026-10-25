@@ -25,6 +25,7 @@ import (
 	"github.com/qualvey/sing-controller/internal/settings"
 	"github.com/qualvey/sing-controller/internal/store"
 	"github.com/qualvey/sing-controller/internal/supervisor"
+	"github.com/qualvey/sing-controller/internal/tproxy"
 	"gorm.io/gorm"
 )
 
@@ -96,6 +97,7 @@ type Engine struct {
 	cfg        *settings.Manager
 	store      *store.Store
 	supervisor *supervisor.Manager
+	tproxy     *tproxy.Manager
 	provMgr    *provider.Manager
 	rt         *realtime.Broadcaster
 	handler    http.Handler
@@ -172,6 +174,10 @@ func New(opts Config) (*Engine, error) {
 	cfgStore := store.New(values.Core.ConfigPath)
 	e.store = cfgStore
 	e.probeMgr = probe.NewManager(cfg, cfgStore, database)
+	e.tproxy = tproxy.New(tproxy.Config{
+		Enabled: values.TProxy.Enabled,
+		Script:  values.TProxy.Script,
+	})
 
 	// 二进制定位
 	binPath := opts.BinaryPath
@@ -299,6 +305,18 @@ func (e *Engine) Start(parentCtx context.Context) error {
 	e.cancel = cancel
 	e.running = true
 
+	// TProxy is a host-level setting and therefore follows the controller
+	// service lifecycle, even when sing-box itself is managed externally.
+	if e.tproxy != nil {
+		if err := e.tproxy.Start(ctx); err != nil {
+			e.cancel()
+			e.cancel = nil
+			e.ctx = nil
+			e.running = false
+			return err
+		}
+	}
+
 	// 1. 加载默认配置
 	defaults := store.DefaultConfig{
 		InboundType: "mixed",
@@ -372,6 +390,18 @@ func (e *Engine) Stop() error {
 	if e.cancel != nil {
 		e.cancel()
 	}
+
+	// Clean up TProxy first. On OpenWrt/procd the stop timeout can be short;
+	// doing this before HTTP/core shutdown prevents a forced SIGKILL from
+	// leaving firewall rules and routes behind.
+	var tproxyErr error
+	if e.tproxy != nil {
+		if err := e.tproxy.Stop(context.Background()); err != nil {
+			tproxyErr = err
+			slog.Error("stop TProxy lifecycle script failed", "error", err)
+		}
+	}
+
 	// 先停止节点探测，确保不会在 Supervisor 关闭 sing-box 后继续等待 gRPC。
 	if e.probeMgr != nil {
 		e.probeMgr.Stop()
@@ -408,7 +438,7 @@ func (e *Engine) Stop() error {
 
 	e.running = false
 	slog.Info("engine stopped cleanly")
-	return nil
+	return tproxyErr
 }
 
 // Handler 返回 API http.Handler

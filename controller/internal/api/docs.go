@@ -431,6 +431,17 @@ const docTemplate = `{
                 }
             }
         },
+        "settings.TProxyOptions": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "script": {
+                    "type": "string"
+                }
+            }
+        },
         "settings.ServerOptions": {
             "type": "object",
             "properties": {
@@ -456,6 +467,9 @@ const docTemplate = `{
                 },
                 "log": {
                     "$ref": "#/definitions/settings.LogOptions"
+                },
+                "tproxy": {
+                    "$ref": "#/definitions/settings.TProxyOptions"
                 },
                 "server": {
                     "$ref": "#/definitions/settings.ServerOptions"

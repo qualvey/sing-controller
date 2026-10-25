@@ -38,6 +38,11 @@
     }
   },
 
+  "tproxy": {
+    "enabled": false,
+    "script": "/usr/local/bin/tproxy.sh"
+  },
+
   "api": {
     "service": {
       "address": "http://127.0.0.1:9900",
@@ -105,16 +110,31 @@
 - **`binary_path`**: 指定 sing-box 可执行文件路径，为空时自动在 PATH 与常见系统目录探测。
 - **`reload`**: 重载行为配置。`mode: "auto"` 支持自动适配平台环境；`after_save: true` 可以在每次保存新配置后立即无感重载内核。
 
-### 3. `api` (上游代理内核连接)
+### 3. `tproxy` (可选的 TProxy 生命周期脚本)
+- **`enabled`**: 是否在 `sing-controller` 启动时执行脚本的 `start`，并在服务停止时执行 `stop`。默认关闭，不会强制所有用户使用 TProxy。
+- **`script`**: 脚本绝对路径，默认 `/usr/local/bin/tproxy.sh`。Controller 会直接执行该文件，不会通过 shell 查找 `tproxy` 命令。
+
+例如软路由使用 `/usr/local/bin/tproxy.sh` 时：
+
+```json
+"tproxy": {
+  "enabled": true,
+  "script": "/usr/local/bin/tproxy.sh"
+}
+```
+
+脚本执行失败会阻止 Controller 启动；停止时会先停止由 Controller 托管的 sing-box，再执行 TProxy `stop` 清理路由和 nft 表。
+
+### 4. `api` (上游代理内核连接)
 - **`service`**: sing-box 原生服务 API 地址（如 `services[type=api]`），作为优先核心通道。
 - **`clash`**: Clash External Controller 地址，作为兼容补充。
 - **`v2ray`**: V2Ray Stats API 端点。
 
-### 4. `stats` (流量与统计采集)
+### 5. `stats` (流量与统计采集)
 - **`poll_interval`**: 轮询流量聚合统计时间间隔（如 `"10s"`、`"5s"`）。
 - **`real_time`**: 实时统计 WebSocket 广播器参数，支持配置推送毫秒频率与在线判定阈值。
 
-### 5. `node_health` (节点可用性自动探测)
+### 6. `node_health` (节点可用性自动探测)
 - **`enabled`**: 是否启用后台周期探测；关闭 WebUI 后仍由 Controller 执行。
 - **`interval`**: 探测周期，例如 `"5m"`；最小值为 `30s`。
 - **`test_url`**: Clash API 通道使用的 HTTP/HTTPS 探测地址。
@@ -162,7 +182,7 @@ Webhook 请求体示例：
 
 ---
 
-### 6. `database`（PostgreSQL 持久化，可选）
+### 7. `database`（PostgreSQL 持久化，可选）
 
 | 字段 | 类型 | 默认值 | 说明 |
 | :--- | :--- | :--- | :--- |
@@ -172,7 +192,7 @@ Webhook 请求体示例：
 
 ---
 
-### 7. `node_probe`（持久化节点状态与延迟探测）
+### 8. `node_probe`（持久化节点状态与延迟探测）
 
 此探测器按周期查询 sing-box 的叶子出站节点，并将状态与历史写入数据库。它与上面的 `node_health` 兼容并存：`node_health` 提供轻量内存探测，`node_probe` 提供数据库持久化及历史查询；`node_probe` 需要配置数据库。
 
