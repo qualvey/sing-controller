@@ -19,19 +19,14 @@
         ref="swiperRef"
       >
         <div class="absolute flex h-full w-full flex-col overflow-y-auto">
-          <Transition
-            :name="(route.meta.transition as string) || 'fade'"
-            v-if="isMiddleScreen"
-          >
-            <Component :is="Component" />
-          </Transition>
-          <Transition
-            v-else
-            name="page"
-            mode="out-in"
-          >
-            <Component :is="Component" />
-          </Transition>
+          <!--
+            Do not put the top-level view behind an out-in transition.
+            ProxiesPage contains a large, asynchronous node tree; waiting for
+            its leave transition can leave the old page visible while the URL
+            has already changed. The route key still guarantees that each
+            top-level page is mounted independently.
+          -->
+          <Component :is="Component" :key="route.name" />
         </div>
 
         <template v-if="isMiddleScreen">

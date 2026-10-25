@@ -3,7 +3,7 @@
     v-model="isOpen"
     :title="t('tunModal.title')"
     :closable="false"
-    max-width="max-w-lg"
+    box-class="max-w-lg"
   >
     <div class="p-6 space-y-6">
       <!-- 警示卡片 -->
@@ -97,13 +97,39 @@ import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { useStatusStore } from '@/store/status'
 import { controllerApi } from '@/api/controller'
 import { showToast } from '@/helper/toast'
-import { startBackendSession } from '@/assembly/session'
+import { startBackendSession, stopBackendSession } from '@/assembly/session'
+import { getRequestErrorMessage } from '@/helper/requestError'
 
 const { t } = useI18n()
 const statusStore = useStatusStore()
 
 const isElevating = ref(false)
 const isDisabling = ref(false)
+
+const waitForElevatedController = async () => {
+  const deadline = Date.now() + 20_000
+
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    try {
+      // The old controller goes away after returning the elevation response.
+      // Keep probing the same endpoint until the elevated replacement is up.
+      const status = await controllerApi.status()
+      statusStore.status = status
+      if (status.tun_access_denied === false) {
+        // 页面资源来自旧 Controller。旧进程退出后虽然新进程已接管端口，
+        // 当前 DOM/长连接仍属于旧会话；重新加载可确保 API、WebSocket 和
+        // 内嵌静态资源全部从管理员进程重新建立。
+        window.location.reload()
+        return true
+      }
+    } catch {
+      // Expected while the old process is shutting down.
+    }
+  }
+
+  return false
+}
 
 const isOpen = computed({
   get: () => Boolean(statusStore.status?.tun_access_denied),
@@ -112,12 +138,18 @@ const isOpen = computed({
 
 const handleElevate = async () => {
   isElevating.value = true
+  stopBackendSession()
   try {
     await controllerApi.elevateProcess()
     showToast(t('tunModal.elevateSuccessNotify'), 'success')
+    if (!(await waitForElevatedController())) {
+      showToast('管理员 controller 未能重新连接，请检查 UAC 是否确认', 'error')
+    }
+    isElevating.value = false
   } catch (err: unknown) {
-    const msg = (err as Error)?.message || '提权请求失败'
+    const msg = getRequestErrorMessage(err) || '提权请求失败'
     showToast(msg, 'error')
+    startBackendSession()
     isElevating.value = false
   }
 }

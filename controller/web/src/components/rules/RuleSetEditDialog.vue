@@ -65,6 +65,15 @@
               <label class="text-base-content/70 pt-2">url <span class="text-destructive">*</span></label>
               <input v-model="form.url" type="text" class="input input-bordered input-sm w-full font-mono"
                 placeholder="https://example.com/rule-set.json（多 tag 时含 {tag}）" />
+              <label class="text-base-content/70 pt-2">http_client</label>
+              <div class="flex flex-col gap-1">
+                <input v-model="form.http_client" list="rule-set-http-clients" type="text"
+                  class="input input-bordered input-sm w-full font-mono" placeholder="可选，例如 Proxy" />
+                <datalist id="rule-set-http-clients">
+                  <option v-for="tag in httpClientTags" :key="tag" :value="tag" />
+                </datalist>
+                <p class="text-base-content/50 text-xs">引用 sing-box 顶层 http_clients[].tag</p>
+              </div>
               <label class="text-base-content/70 pt-2">initial_path</label>
               <input v-model="form.initial_path" type="text" class="input input-bordered input-sm w-full font-mono"
                 placeholder="可选预置缓存文件路径" />
@@ -76,6 +85,9 @@
 
           <p v-if="validateMsg" class="mt-3 text-[0.8rem] font-medium text-destructive">
             {{ validateMsg }}
+          </p>
+          <p v-else-if="repositoryNeedsNewCore" class="mt-3 text-xs text-warning">
+            当前 sing-box 版本（{{ version || '未知' }}）不支持多 tag 远程规则集，请升级到 1.4.0 或更高版本。
           </p>
         </div>
       </TabsContent>
@@ -134,6 +146,8 @@ import { TabsContent, TabsList, TabsRoot, TabsTrigger } from '@/components/ui/ta
 import { showConfirmDialog } from '@/helper/confirmDialog'
 import { showToast } from '@/helper/toast'
 import { useStatusStore } from '@/store/status'
+import { hasRuleSetTemplate, supportsMultiTagRuleSet } from '@/assembly/rules/ruleSetRepository'
+import { version } from '@/assembly/version'
 import { ClipboardPasteIcon } from '@lucide/vue'
 import { useResizeObserver } from '@vueuse/core'
 import { computed, reactive, ref, watch } from 'vue'
@@ -189,11 +203,18 @@ const getDefaultForm = () => ({
   url: '',
   initial_path: '',
   update_interval: '',
+  http_client: '',
   rulesJson: '',
 })
 const form = reactive(getDefaultForm())
 
 const tagInput = ref('')
+const httpClientTags = ref<string[]>([])
+
+const repositoryNeedsNewCore = computed(() => {
+  if (form.type !== 'remote') return false
+  return (form.tag.length > 1 || hasRuleSetTemplate(form.url)) && !supportsMultiTagRuleSet(version.value)
+})
 
 const addTag = () => {
   const parts = tagInput.value
@@ -232,6 +253,7 @@ function fillRuleSetForm(rs: Record<string, any>) {
   form.url = typeof rs.url === 'string' ? rs.url : ''
   form.initial_path = typeof rs.initial_path === 'string' ? rs.initial_path : ''
   form.update_interval = rs.update_interval ? String(rs.update_interval) : ''
+  form.http_client = typeof rs.http_client === 'string' ? rs.http_client : ''
   if (Array.isArray(rs.rules)) {
     form.rulesJson = JSON.stringify(rs.rules, null, 2)
   }
@@ -258,6 +280,7 @@ function buildRuleSet(): Record<string, any> {
       if (form.path.trim()) rs.path = form.path.trim()
     } else {
       if (form.url.trim()) rs.url = form.url.trim()
+      if (form.http_client.trim()) rs.http_client = form.http_client.trim()
       if (form.initial_path.trim()) rs.initial_path = form.initial_path.trim()
       if (form.update_interval.trim()) rs.update_interval = form.update_interval.trim()
     }
@@ -290,6 +313,17 @@ const doFillFromJson = async () => {
   }
 }
 
+const loadHttpClientTags = async () => {
+  try {
+    const config = (await api.config()) as { http_clients?: Array<{ tag?: unknown }> } | null
+    httpClientTags.value = Array.isArray(config?.http_clients)
+      ? config.http_clients.map((item) => String(item?.tag ?? '')).filter(Boolean)
+      : []
+  } catch {
+    httpClientTags.value = []
+  }
+}
+
 watch(
   [() => props.modelValue, () => props.isEdit, () => props.ruleSetData],
   ([visible, isEdit, data]) => {
@@ -304,6 +338,7 @@ watch(
     } else {
       sourceJson.value = '{}'
     }
+    loadHttpClientTags()
   },
   { immediate: true },
 )
@@ -335,11 +370,36 @@ const save = async () => {
     showToast('remote 规则集需要 url', 'warning')
     return
   }
+  if (form.type === 'remote' && form.tag.length > 1 && !hasRuleSetTemplate(form.url)) {
+    validateMsg.value = '多个 tag 的远程规则集 URL 必须包含 {tag}'
+    showToast(validateMsg.value, 'warning')
+    return
+  }
+  if (repositoryNeedsNewCore.value) {
+    validateMsg.value = '多 tag 远程规则集需要 sing-box 1.4.0 或更高版本'
+    showToast(validateMsg.value, 'warning')
+    return
+  }
   saving.value = true
   try {
     const payload = srcTab.value?.isDirty()
       ? JSON.parse(srcTab.value.getText())
       : buildRuleSet()
+    const payloadTags = Array.isArray(payload?.tag) ? payload.tag : payload?.tag ? [payload.tag] : []
+    if (
+      payload?.type === 'remote' &&
+      payloadTags.length > 1 &&
+      !hasRuleSetTemplate(payload?.url)
+    ) {
+      throw new Error('多个 tag 的远程规则集 URL 必须包含 {tag}')
+    }
+    if (
+      payload?.type === 'remote' &&
+      (payloadTags.length > 1 || hasRuleSetTemplate(payload?.url)) &&
+      !supportsMultiTagRuleSet(version.value)
+    ) {
+      throw new Error('多 tag 远程规则集需要 sing-box 1.4.0 或更高版本')
+    }
     if (props.isEdit && props.ruleSetData?.id) {
       await api.updateRuleSet(props.ruleSetData.id, payload)
     } else {

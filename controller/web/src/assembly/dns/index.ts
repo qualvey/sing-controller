@@ -213,6 +213,16 @@ export const saveDnsRule = async (id: string, payload: Record<string, any>, isEd
   }
 }
 
+export const reorderDnsRules = async (newRules: Array<{ id: string; rule: Record<string, any> }>) => {
+  const ids = newRules.map((item) => item.id).filter(Boolean)
+  if (ids.length !== newRules.length) {
+    throw new Error('部分 DNS 规则缺少有效 ID，无法完成排序')
+  }
+  const result = await api.reorderDnsRules(ids)
+  rules.value = newRules
+  return result
+}
+
 export const deleteDnsRule = async (id: string) => {
   const statusStore = useStatusStore()
   const { confirmed } = await showConfirmDialog({

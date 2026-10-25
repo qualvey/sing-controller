@@ -1,0 +1,46 @@
+{
+  "server": {
+    "listen": "::",
+    "listen_port": 8080
+  },
+  "log": {
+    "level": "info",
+    "output": "stderr"
+  },
+  "core": {
+    "config_path": "sing-box.json",
+    "managed": true,
+    "reload": {
+      "mode": "auto"
+    }
+  },
+  "api": {
+    "clash": {},
+    "service": {},
+    "v2ray": {}
+  },
+  "stats": {
+    "poll_interval": "10s",
+    "real_time": {
+      "enabled": false,
+      "interval_ms": 1000,
+      "online_threshold_sec": 60
+    }
+  },
+  "node_health": {
+    "enabled": false,
+    "interval": "5m",
+    "test_url": "https://www.gstatic.com/generate_204",
+    "timeout_ms": 5000,
+    "failure_threshold": 2,
+    "concurrency": 5
+  },
+  "database": {},
+  "node_probe": {
+    "enabled": true,
+    "interval": "120s",
+    "test_url": "https://www.gstatic.com/generate_204",
+    "timeout": "10s",
+    "history_retention_days": 30
+  }
+}

@@ -361,6 +361,58 @@ func (h *Handler) handleUpdateDNSRule(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleReorderDNSRules 按传入的 ID 数组调整 DNS 规则执行顺序。
+func (h *Handler) handleReorderDNSRules(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs []string `json:"ids"`
+	}
+	body, err := readRawBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
+		if options.DNS == nil || len(options.DNS.Rules) == 0 {
+			if len(req.IDs) == 0 {
+				return nil
+			}
+			return errors.New("DNS 规则列表为空")
+		}
+		count := len(options.DNS.Rules)
+		if len(req.IDs) != count {
+			return fmt.Errorf("规则数量不匹配: 期望 %d, 收到 %d", count, len(req.IDs))
+		}
+		for i := range options.DNS.Rules {
+			_ = newDNSRuleID(meta, i)
+		}
+		ruleMap := make(map[string]option.DNSRule, count)
+		for i, id := range meta.DNSRuleIDs {
+			ruleMap[id] = options.DNS.Rules[i]
+		}
+		seen := make(map[string]struct{}, count)
+		newRules := make([]option.DNSRule, count)
+		for i, id := range req.IDs {
+			if _, exists := seen[id]; exists {
+				return fmt.Errorf("重复的 DNS 规则 ID: %s", id)
+			}
+			seen[id] = struct{}{}
+			rule, ok := ruleMap[id]
+			if !ok {
+				return fmt.Errorf("未知的 DNS 规则 ID: %s", id)
+			}
+			newRules[i] = rule
+		}
+		options.DNS.Rules = newRules
+		meta.DNSRuleIDs = req.IDs
+		return nil
+	})
+}
+
 func (h *Handler) handleDeleteDNSRule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	h.commit(w, r, func(options *option.Options, meta *store.Meta) error {
@@ -619,31 +671,31 @@ func (h *Handler) resolveDNSQuery(ctx context.Context, name string, qType uint16
 		h.store.RLock()
 		if h.store.Options.DNS != nil {
 			for _, s := range h.store.Options.DNS.Servers {
-			content, err := json.Marshal(&s)
-			if err != nil {
-				continue
-			}
-			var raw map[string]any
-			if err := json.Unmarshal(content, &raw); err != nil {
-				continue
-			}
-			addrVal, ok := raw["address"].(string)
-			if !ok {
-				continue
-			}
-			addr := strings.TrimSpace(addrVal)
-			if addr == "" || addr == "local" {
-				continue
-			}
-			addr = strings.TrimPrefix(addr, "udp://")
-			addr = strings.TrimPrefix(addr, "tcp://")
-			if strings.HasPrefix(addr, "https://") || strings.HasPrefix(addr, "tls://") || strings.HasPrefix(addr, "quic://") || strings.HasPrefix(addr, "h3://") {
-				continue
-			}
-			if !strings.Contains(addr, ":") {
-				addr += ":53"
-			}
-			candidateServers = append(candidateServers, addr)
+				content, err := json.Marshal(&s)
+				if err != nil {
+					continue
+				}
+				var raw map[string]any
+				if err := json.Unmarshal(content, &raw); err != nil {
+					continue
+				}
+				addrVal, ok := raw["address"].(string)
+				if !ok {
+					continue
+				}
+				addr := strings.TrimSpace(addrVal)
+				if addr == "" || addr == "local" {
+					continue
+				}
+				addr = strings.TrimPrefix(addr, "udp://")
+				addr = strings.TrimPrefix(addr, "tcp://")
+				if strings.HasPrefix(addr, "https://") || strings.HasPrefix(addr, "tls://") || strings.HasPrefix(addr, "quic://") || strings.HasPrefix(addr, "h3://") {
+					continue
+				}
+				if !strings.Contains(addr, ":") {
+					addr += ":53"
+				}
+				candidateServers = append(candidateServers, addr)
 			}
 		}
 		h.store.RUnlock()
@@ -797,4 +849,3 @@ func (h *Handler) resolveDNSQuery(ctx context.Context, name string, qType uint16
 		"Server":   usedServer,
 	}, nil
 }
-

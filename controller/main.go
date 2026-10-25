@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/qualvey/sing-controller/internal/engine"
 )
@@ -26,6 +27,7 @@ func main() {
 		secret       string
 		showVersion  bool
 		managedMode  bool
+		restartDelay time.Duration
 	)
 
 	defaultManaged := runtime.GOOS == "windows"
@@ -34,7 +36,11 @@ func main() {
 	flag.StringVar(&secret, "secret", "", "optional API secret (X-Secret header)")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.BoolVar(&managedMode, "managed", defaultManaged, "manage sing-box child process via supervisor (default true on Windows, false on Linux/Unix)")
+	flag.DurationVar(&restartDelay, "elevated-restart-delay", 0, "internal delay before starting after UAC elevation")
 	flag.Parse()
+	if restartDelay > 0 {
+		time.Sleep(restartDelay)
+	}
 
 	// 支持两种形式：-version flag 与 version 子命令（sing-box 风格）
 	if showVersion || (flag.NArg() > 0 && flag.Arg(0) == "version") {

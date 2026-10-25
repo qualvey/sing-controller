@@ -77,6 +77,16 @@ export const resolveAvailableChannel = (
   return selected
 }
 
+// 某些 sing-box 版本只实现了 StartedService 的部分 RPC：GetVersion
+// 能通过并不代表 SubscribeGroups/SubscribeOutbounds 一定存在。流式 RPC
+// 返回 UNIMPLEMENTED 时，直接切到 Clash 通道，避免前端无限重连同一个不存在的方法。
+export const fallbackToClash = (backendUUID: string) => {
+  if (activeBackend.value?.uuid !== backendUUID) return false
+  if (channelByBackend.value[backendUUID] !== Channel.Singbox) return false
+  channelByBackend.value = { ...channelByBackend.value, [backendUUID]: Channel.Clash }
+  return true
+}
+
 // core / apiVersion 由 assembly/version.ts 在探测 /version 后写入,
 // 后端切换时先重置为未知,避免沿用上一个后端的结论。
 export const core = ref<Core>(Core.Unknown)

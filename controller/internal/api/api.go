@@ -216,6 +216,7 @@ func NewHandler(opts HandlerOptions) *Handler {
 	mux.HandleFunc("PUT /api/dns/servers/{tag}", h.handleUpdateDNSServer)
 	mux.HandleFunc("DELETE /api/dns/servers/{tag}", h.handleDeleteDNSServer)
 	mux.HandleFunc("POST /api/dns/rules", h.handleCreateDNSRule)
+	mux.HandleFunc("PUT /api/dns/rules/order", h.handleReorderDNSRules)
 	mux.HandleFunc("PUT /api/dns/rules/{id}", h.handleUpdateDNSRule)
 	mux.HandleFunc("DELETE /api/dns/rules/{id}", h.handleDeleteDNSRule)
 	mux.HandleFunc("PUT /api/dns/options", h.handlePutDNSOptions)
@@ -531,12 +532,24 @@ func (h *Handler) handleSystemElevate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	args := os.Args[1:]
-	argStr := strings.Join(args, " ")
-
-	psCmd := fmt.Sprintf("Start-Process -FilePath '%s' -ArgumentList '%s' -Verb RunAs", exePath, argStr)
+	// Keep the old process alive unless PowerShell has actually completed the
+	// elevation request. Start-Process returns an error when the UAC prompt is
+	// cancelled; cmd.Start alone cannot distinguish that case.
+	args := append([]string(nil), os.Args[1:]...)
+	// The elevated process must wait until this process has released its HTTP
+	// port and stopped the sing-box child. This is the handoff window between
+	// the two supervisors.
+	args = append(args, "-elevated-restart-delay=5s")
+	quotedArgs := make([]string, 0, len(args))
+	for _, arg := range args {
+		quotedArgs = append(quotedArgs, "'"+strings.ReplaceAll(arg, "'", "''")+"'")
+	}
+	psCmd := fmt.Sprintf(
+		"$ErrorActionPreference='Stop'; $p=Start-Process -FilePath '%s' -ArgumentList @(%s) -Verb RunAs -PassThru; if (-not $p) { exit 1 }",
+		strings.ReplaceAll(exePath, "'", "''"), strings.Join(quotedArgs, ","),
+	)
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
-	if err := cmd.Start(); err != nil {
+	if err := cmd.Run(); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Errorf("启动提权进程失败: %w", err))
 		return
 	}
@@ -546,7 +559,14 @@ func (h *Handler) handleSystemElevate(w http.ResponseWriter, r *http.Request) {
 	})
 
 	go func() {
-		time.Sleep(1 * time.Second)
+		// The old controller owns the supervisor state. Stop its child before
+		// exiting, otherwise the elevated controller starts a second sing-box
+		// instance and cannot acquire the TUN device / API ports.
+		if h.supervisor != nil {
+			stopCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			_ = h.supervisor.Stop(stopCtx)
+			cancel()
+		}
 		os.Exit(0)
 	}()
 }

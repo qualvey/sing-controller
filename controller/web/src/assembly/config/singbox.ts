@@ -7,12 +7,19 @@ import { configs, defaultConfig } from './index'
 const fetchSingboxConfigs = async (): Promise<Config> => {
   const client = getSingboxClient()?.client
   if (!client) return { ...defaultConfig }
-  const status = await client.getClashModeStatus({})
-  return {
-    ...defaultConfig,
-    mode: status.currentMode,
-    'mode-list': status.modeList,
-    modes: status.modeList,
+  try {
+    const status = await client.getClashModeStatus({})
+    return {
+      ...defaultConfig,
+      mode: status.currentMode,
+      'mode-list': status.modeList,
+      modes: status.modeList,
+    }
+  } catch {
+    // Clash mode is optional in sing-box (and may be unavailable during
+    // startup). Keep the config facade usable instead of rejecting the
+    // fire-and-forget startup request with an unhandled promise rejection.
+    return { ...defaultConfig }
   }
 }
 

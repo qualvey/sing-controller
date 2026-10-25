@@ -119,6 +119,10 @@ export const startNodeStatusPolling = (interval?: number) => {
 }
 
 export const stopNodeStatusPolling = () => {
-  pollHandle?.stop()
+  // useIntervalFn returns a Pausable with pause/resume controls; it does not
+  // expose stop(). Calling the wrong method here throws during page unmount,
+  // which can leave navigation in a broken state when the initial request is
+  // rejected (for example, with 503 when database.dsn is not configured).
+  pollHandle?.pause()
   pollHandle = null
 }

@@ -239,6 +239,8 @@ const ru: LANG_MESSAGE = {
   outbound: 'Исходящий',
   proxyGroup: 'Группа прокси',
   sortBy: 'Сортировать по',
+  sortAToZ: 'От А до Я',
+  noGrouping: 'Без группировки',
   rule: 'Правило',
   sourceIP: 'Исходный IP',
   activeConnections: 'Активные',

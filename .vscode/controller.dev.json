@@ -1,0 +1,36 @@
+{
+  "$schema": "https://github.com/qualvey/sing-controller/schema.json",
+  "server": {
+    "listen": "127.0.0.1",
+    "listen_port": 8080,
+    "secret": ""
+  },
+  "log": {
+    "level": "debug",
+    "output": "stderr"
+  },
+  "core": {
+    "config_path": "desktop/sing-box.json",
+    "managed": true,
+    "reload": {
+      "mode": "none"
+    }
+  },
+  "api": {
+    "clash": {},
+    "service": {},
+    "v2ray": {}
+  },
+  "stats": {
+    "poll_interval": "10s",
+    "real_time": {
+      "enabled": true,
+      "interval_ms": 1000,
+      "online_threshold_sec": 60
+    }
+  },
+  "database": {},
+  "node_probe": {
+    "enabled": false
+  }
+}

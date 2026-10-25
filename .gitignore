@@ -32,6 +32,11 @@ go.work.sum
 !controller/web/dist/.gitkeep
 sing-box.exe
 .vscode/
+!.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/controller.dev.json
 zashboard/
 controller/__debug*
 *.md5

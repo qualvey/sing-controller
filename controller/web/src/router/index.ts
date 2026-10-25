@@ -58,9 +58,15 @@ const childrenRouter = [
 
 
   {
+    path: 'rules',
+    name: ROUTE_NAME.rules,
+    component: () => import('@/views/RulesPage.vue')
+  },
+  {
+    // Keep the previous route name/path working for notification links and bookmarks.
     path: 'routes',
     name: ROUTE_NAME.routes,
-    component: () => import('@/views/RulesPage.vue')
+    redirect: { name: ROUTE_NAME.rules },
   },
   {
     path: 'dns',

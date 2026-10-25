@@ -22,5 +22,9 @@ const factories: Record<SubscriptionId, (signal: AbortSignal) => AsyncIterable<u
   outbounds: (signal) => serverStream(method.subscribeOutbounds, {}, signal),
 }
 
-export const subscribeStream = <T>(id: SubscriptionId, onMessage: (msg: T) => void): StreamHandle =>
-  runStream(factories[id], onMessage as (msg: unknown) => void)
+export const subscribeStream = <T>(
+  id: SubscriptionId,
+  onMessage: (msg: T) => void,
+  options: { onError?: (err: unknown) => void } = {},
+): StreamHandle =>
+  runStream(factories[id], onMessage as (msg: unknown) => void, options)

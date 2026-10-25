@@ -301,7 +301,12 @@ import {
   openBackendManager,
 } from '@/store/setup'
 import { controllerApi, type NodeProvider } from '@/api/controller'
-import { openProfileModal, openProviderEditor, providersList } from '@/composables/profiles'
+import {
+  isProfileModalOpen,
+  openProfileModal,
+  openProviderEditor,
+  providersList,
+} from '@/composables/profiles'
 import { isCoreReloading, useStatusStore } from '@/store/status'
 import {
   ArrowPathIcon,
@@ -507,6 +512,7 @@ const visible = computed(
     statusStore.status?.config_exists !== false &&
     !statusStore.status?.tun_access_denied &&
     backendManagerView.value === null &&
+    !isProfileModalOpen.value &&
     route.name !== ROUTE_NAME.setup,
 )
 

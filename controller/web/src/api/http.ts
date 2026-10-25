@@ -56,7 +56,7 @@ axios.interceptors.response.use(
         showNotification({ content: 'unauthorizedTip' })
       })
     } else if (!ignoreNotificationUrls.some((url) => error.config?.url?.endsWith(url))) {
-      const errorMessage = error.response?.data?.message || error.message
+	      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message
 
       showNotification({
         key: errorMessage,

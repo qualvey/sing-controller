@@ -7,8 +7,8 @@ import axios from 'axios'
 import { showNotification } from './notification'
 
 export const getRequestErrorMessage = (error: unknown): string => {
-  if (axios.isAxiosError<{ message?: string }>(error)) {
-    return error.response?.data?.message || error.message
+  if (axios.isAxiosError<{ message?: string; error?: string }>(error)) {
+    return error.response?.data?.message || error.response?.data?.error || error.message
   }
 
   if (error instanceof Error) {

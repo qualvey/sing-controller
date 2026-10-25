@@ -131,6 +131,9 @@ export const renderRoutes = computed(() => {
   return Object.values(ROUTE_NAME).filter((r) => {
     if (r === ROUTE_NAME.setup) return false
     if (r === ROUTE_NAME.users) return false
+    // `rules` is the navigation route. `routes` is kept only as a
+    // compatibility target for old deep links and must not be shown twice.
+    if (r === ROUTE_NAME.routes) return false
     if (!splitOverviewPage.value && r === ROUTE_NAME.overview) return false
     if (r in routeCapable && routeCapable[r] === false) return false
     return true

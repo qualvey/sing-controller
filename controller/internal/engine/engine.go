@@ -60,6 +60,12 @@ func FindSingBoxBinary() string {
 
 	for _, c := range candidates {
 		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+			// Supervisor 会为子进程设置 WorkingDir。相对的 binary path
+			// 会因此相对于另一个目录解析，Windows 上尤其容易出现
+			// "The system cannot find the path specified"，即使文件实际存在。
+			if absolute, err := filepath.Abs(c); err == nil {
+				return absolute
+			}
 			return c
 		}
 	}
@@ -174,6 +180,13 @@ func New(opts Config) (*Engine, error) {
 	}
 	if binPath == "" {
 		binPath = FindSingBoxBinary()
+	}
+	// 配置文件中的相对路径同样不能直接交给 Supervisor：Supervisor
+	// 可能使用不同的 WorkingDir 启动 sing-box。
+	if fi, err := os.Stat(binPath); err == nil && !fi.IsDir() {
+		if absolute, err := filepath.Abs(binPath); err == nil {
+			binPath = absolute
+		}
 	}
 	store.BinaryPath = binPath
 

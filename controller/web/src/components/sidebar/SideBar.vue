@@ -26,13 +26,13 @@
             :data-sidebar-route="r"
             @mouseenter="(e) => mouseenterHandler(e, r)"
           >
-            <a
+            <RouterLink
+              :to="{ name: r }"
               :class="[
                 r === route.name ? 'sidebar-tab-active' : 'hover:bg-base-300!',
                 isSidebarCollapsed && 'justify-center',
                 'relative z-10 py-2',
               ]"
-              @click.passive="() => router.push({ name: r })"
             >
               <component
                 :is="ROUTE_ICON_MAP[r]"
@@ -41,7 +41,7 @@
               <template v-if="!isSidebarCollapsed">
                 {{ $t(r) }}
               </template>
-            </a>
+            </RouterLink>
           </li>
         </ul>
       </div>
@@ -67,13 +67,12 @@ import CommonSidebar from '@/components/sidebar/CommonCtrl.vue'
 import { ROUTE_ICON_MAP } from '@/constant'
 import { renderRoutes } from '@/helper'
 import { useTooltip } from '@/helper/tooltip'
-import router from '@/router'
 import { isSidebarCollapsed, showStatisticsWhenSidebarCollapsed } from '@/store/settings'
 import { useResizeObserver } from '@vueuse/core'
 import { twMerge } from 'tailwind-merge'
 import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import OverviewCarousel from './OverviewCarousel.vue'
 import SidebarButtons from './SidebarButtons.vue'
 import VerticalInfos from './VerticalInfos.vue'

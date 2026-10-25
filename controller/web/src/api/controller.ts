@@ -1,4 +1,4 @@
-import axios, { type AxiosError } from 'axios'
+import axios, { type AxiosError, type AxiosRequestConfig } from 'axios'
 
 export interface CoreStatusInfo {
   alive: boolean
@@ -274,8 +274,29 @@ const http = axios.create({
   timeout: 15000,
 })
 
-http.interceptors.request.use((config) => {
+type ControllerRequestConfig = AxiosRequestConfig & { useCurrentController?: boolean }
+
+// Controller 管理 API 必须始终指向当前打开页面的 Controller。
+// activeBackend 是用户选择的 sing-box/Clash 数据通道，不能用于 UAC
+// 交接期间的 status/elevate 请求，否则旧进程退出后页面会一直轮询另一台后端。
+const currentControllerBaseUrl = () => {
   if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'wails.localhost' ||
+      window.location.protocol === 'wails:' ||
+      typeof (window as unknown as { go?: unknown }).go !== 'undefined')
+  ) {
+    return `http://127.0.0.1:${getDesktopPort() || 8080}/api`
+  }
+
+  const base = import.meta.env.BASE_URL || '/'
+  return `${window.location.origin}${base.endsWith('/') ? base : `${base}/`}api`
+}
+
+http.interceptors.request.use((config) => {
+  if ((config as typeof config & ControllerRequestConfig).useCurrentController) {
+    config.baseURL = currentControllerBaseUrl()
+  } else if (
     typeof window !== 'undefined' &&
     (window.location.hostname === 'wails.localhost' ||
       window.location.protocol === 'wails:' ||
@@ -322,8 +343,14 @@ export const api = {
     }
     return http.get<{ status: string }>('/healthz', { baseURL: base }).then((r) => r.data)
   },
-  status: () => http.get<StatusInfo>('/status').then((r) => r.data),
-  channels: () => http.get<ChannelAvailability>('/channels').then((r) => r.data),
+  status: () =>
+    http
+      .get<StatusInfo>('/status', { useCurrentController: true } as ControllerRequestConfig)
+      .then((r) => r.data),
+  channels: () =>
+    http
+      .get<ChannelAvailability>('/channels', { useCurrentController: true } as ControllerRequestConfig)
+      .then((r) => r.data),
   config: () => http.get<unknown>('/config').then((r) => r.data),
   saveConfig: (config: unknown) => http.put('/config', config).then((r) => r.data),
   configRaw: () =>
@@ -381,7 +408,12 @@ export const api = {
       .then((r) => r.data),
 
   // 系统与权限工具
-  elevateProcess: () => http.post<{ message: string }>('/system/elevate').then((r) => r.data),
+  elevateProcess: () =>
+    http
+      .post<{ message: string }>('/system/elevate', undefined, {
+        useCurrentController: true,
+      } as ControllerRequestConfig)
+      .then((r) => r.data),
   disableTun: () => http.post<{ message: string }>('/system/disable-tun').then((r) => r.data),
 
   // 工具
@@ -448,6 +480,8 @@ export const api = {
     http.put(`/dns/rules/${encodeURIComponent(id)}`, rule).then((r) => r.data),
   deleteDnsRule: (id: string) =>
     http.delete(`/dns/rules/${encodeURIComponent(id)}`).then((r) => r.data),
+  reorderDnsRules: (ids: string[]) =>
+    http.put<{ saved: boolean }>('/dns/rules/order', { ids }).then((r) => r.data),
   updateDnsOptions: (opts: Record<string, unknown>) =>
     http.put('/dns/options', opts).then((r) => r.data),
   dnsLookup: (domains: string[]) =>

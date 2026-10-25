@@ -9,12 +9,75 @@
           <th class="w-[130px] text-right">操作</th>
         </tr>
       </thead>
-      <tbody>
-        <tr
-          v-for="(row, idx) in rules"
-          :key="row.id"
-          class="hover:bg-base-200/40 border-base-content/5 transition-colors"
+      <Draggable
+          v-if="canDrag"
+          v-model="draggableRules"
+          tag="tbody"
+          item-key="id"
+          :animation="150"
+          :delay="1000"
+          :delay-on-touch-only="true"
+          :touch-start-threshold="5"
+          handle=".dns-rule-drag-handle"
+          ghost-class="opacity-30"
+          drag-class="cursor-grabbing"
+          filter="button, input, a"
+          :prevent-on-filter="false"
+          @end="emit('reorder-end')"
         >
+          <template #item="{ element: row, index: idx }">
+            <tr
+              :key="row.id"
+              class="hover:bg-base-200/40 border-base-content/5 transition-colors"
+            >
+              <td class="text-base-content/50 text-xs tabular-nums">
+                <div class="flex items-center gap-1">
+                  <Bars2Icon
+                    class="dns-rule-drag-handle text-base-content/35 hover:text-base-content/80 h-4 w-4 cursor-grab touch-none active:cursor-grabbing"
+                    title="拖拽调整顺序"
+                  />
+                  {{ idx + 1 }}
+                </div>
+              </td>
+              <td>
+                <div class="flex flex-col gap-0.5">
+                  <template v-if="ruleSummary(row.rule).items.length">
+                    <span
+                      v-for="it in ruleSummary(row.rule).items"
+                      :key="it.k"
+                      class="text-[13px]"
+                    >
+                      <b class="text-base-content/50 mr-1 font-medium">{{ it.k }}</b>
+                      <span class="text-base-content/90">{{ it.v }}</span>
+                    </span>
+                    <span
+                      v-if="ruleSummary(row.rule).otherCount"
+                      class="text-base-content/40 text-[13px]"
+                    >
+                      +{{ ruleSummary(row.rule).otherCount }} 项
+                    </span>
+                  </template>
+                  <span v-else class="text-base-content/40 text-[13px]">全部（无匹配条件）</span>
+                  <span
+                    v-if="row.rule.invert"
+                    class="badge badge-warning badge-outline w-fit text-xs font-semibold"
+                  >取反</span>
+                </div>
+              </td>
+              <td class="text-xs"><span class="badge badge-sm badge-ghost text-[11px]">{{ ruleActionText(row.rule) }}</span></td>
+              <td class="text-right">
+                <button class="btn btn-ghost btn-xs text-primary" @click="openEditRuleModal(row)">编辑</button>
+                <button class="btn btn-ghost btn-xs text-error" @click="deleteDnsRule(row.id)">删除</button>
+              </td>
+            </tr>
+          </template>
+      </Draggable>
+      <tbody v-else>
+          <tr
+            v-for="(row, idx) in rules"
+            :key="row.id"
+            class="hover:bg-base-200/40 border-base-content/5 transition-colors"
+          >
           <td class="text-base-content/50 text-xs tabular-nums">{{ idx + 1 }}</td>
           <td>
             <div class="flex flex-col gap-0.5">
@@ -67,7 +130,7 @@
               删除
             </button>
           </td>
-        </tr>
+          </tr>
       </tbody>
     </table>
 
@@ -81,13 +144,26 @@
 </template>
 
 <script setup lang="ts">
+import Draggable from 'vuedraggable'
+import { Bars2Icon } from '@heroicons/vue/24/outline'
 import { deleteDnsRule } from '@/assembly/dns'
 import { openEditRuleModal } from '@/composables/dnsManagement'
 import { DNS_RULE_FIELDS, DNS_RULE_SUMMARY_ORDER } from '@/views/dnsRuleFields'
+import { computed } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   rules: Array<{ id: string; rule: Record<string, any> }>
+  canDrag?: boolean
 }>()
+const emit = defineEmits<{
+  reorder: [rules: Array<{ id: string; rule: Record<string, any> }>]
+  'reorder-end': []
+}>()
+const canDrag = computed(() => props.canDrag !== false && props.rules.length > 1)
+const draggableRules = computed({
+  get: () => props.rules,
+  set: (value) => emit('reorder', value),
+})
 
 function fmtList(v: unknown): string {
   if (Array.isArray(v)) return v.join(', ')

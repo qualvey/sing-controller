@@ -13,6 +13,8 @@ import { automaticDisconnection, iconReflectList, speedtestTimeout } from '@/sto
 import { activeBackend } from '@/store/setup'
 import type { Proxy } from '@/types'
 import { proxyGroupList, proxyMap, proxyProviederList } from './index'
+import { fallbackToClash } from '@/assembly/backend'
+import { api } from '@/api/controller'
 
 const getHistoryFromItem = (item: GroupItem): Proxy['history'] =>
   item.urlTestDelay > 0
@@ -168,6 +170,18 @@ const ensureSession = () => {
   let resolved = false
   ready = new Promise<void>((r) => (resolveReady = r))
 
+  let fallbackRequested = false
+  const fallbackIfUnavailable = () => {
+    if (fallbackRequested) return
+    fallbackRequested = true
+    void api.channels().then((availability) => {
+      if (availability.clash.available) fallbackToClash(backend.uuid)
+      else fallbackRequested = false
+    }).catch(() => {
+      fallbackRequested = false
+    })
+  }
+
   handles = [
     subscribeStream<Groups>('groups', (msg) => {
       groups = new Map()
@@ -180,12 +194,12 @@ const ensureSession = () => {
         // URLTest RPC 只负责启动任务；历史记录更新后，结果才会通过此订阅推送。
         resolveURLTestWaiters()
       }
-    }),
+    }, { onError: fallbackIfUnavailable }),
     subscribeStream<OutboundList>('outbounds', (msg) => {
       outbounds = new Map()
       for (const o of msg.outbounds) outbounds.set(o.tag, o)
       rebuild()
-    }),
+    }, { onError: fallbackIfUnavailable }),
   ]
 }
 

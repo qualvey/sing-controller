@@ -30,6 +30,17 @@ const startBackendData = () => {
   initSatistic()
 }
 
+// Stop every long-lived request before a controller process handoff. In
+// particular, an in-flight gRPC-Web request against the old controller must
+// not survive the UAC restart and be mistaken for a response from the new one.
+export const stopBackendSession = () => {
+  sessionGeneration++
+  stopConnections()
+  stopLogs()
+  stopSatistic()
+  void resetProxies()
+}
+
 export const startBackendSession = () => {
   const generation = ++sessionGeneration
   // 探测不 await:连通性提示要的正是「正在连接」这个中间态,数据流也不必等它。

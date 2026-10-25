@@ -240,6 +240,8 @@ const en = {
   outbound: 'Outbound',
   proxyGroup: 'Proxy group',
   sortBy: 'Sort by',
+  sortAToZ: 'A to Z',
+  noGrouping: 'No grouping',
   rule: 'Rule',
   sourceIP: 'Source IP',
   activeConnections: 'Active',

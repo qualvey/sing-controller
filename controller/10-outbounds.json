@@ -1,0 +1,25 @@
+{
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "selector",
+      "tag": "Proxy",
+      "outbounds": [
+        "Auto",
+        "direct"
+      ]
+    },
+    {
+      "type": "urltest",
+      "tag": "Auto",
+      "outbounds": [
+        "direct"
+      ],
+      "url": "http://cp.cloudflare.com/generate_204",
+      "interval": "3m0s"
+    }
+  ]
+}

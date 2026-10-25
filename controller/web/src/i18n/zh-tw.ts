@@ -238,6 +238,8 @@ const zhTW: LANG_MESSAGE = {
   outbound: '出站節點',
   proxyGroup: '策略組',
   sortBy: '排序方式',
+  sortAToZ: '按字母排序',
+  noGrouping: '不分組',
   rule: '規則',
   sourceIP: '源IP',
   activeConnections: '活躍',
