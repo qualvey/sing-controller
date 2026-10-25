@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -295,6 +296,7 @@ func (r *Runner) checkTargets(ctx context.Context, options settings.NodeHealthOp
 		return
 	}
 	semaphore := make(chan struct{}, options.Concurrency)
+	events := make(chan Event, len(proxies))
 	var wg sync.WaitGroup
 	for _, proxy := range proxies {
 		proxy := proxy
@@ -314,10 +316,28 @@ func (r *Runner) checkTargets(ctx context.Context, options settings.NodeHealthOp
 			} else {
 				failed.Add(1)
 			}
-			r.record(options, proxy, latency, err, kind)
+			if event := r.recordEvent(options, proxy, latency, err, kind); event != nil {
+				events <- *event
+			}
 		}()
 	}
 	wg.Wait()
+	close(events)
+
+	// A probe cycle is the notification boundary. Probes run concurrently and
+	// can finish at different times, so a short timer is not sufficient: a
+	// slow cycle could otherwise produce one notification per group of nodes.
+	// Send all transitions from this cycle in one webhook request instead.
+	batched := make([]Event, 0, len(events))
+	for event := range events {
+		batched = append(batched, event)
+	}
+	sort.SliceStable(batched, func(i, j int) bool {
+		return batched[i].Node.Tag < batched[j].Node.Tag
+	})
+	if len(batched) > 0 {
+		go r.sendWebhookBatch(options, batched)
+	}
 }
 
 type proxyTarget struct {
@@ -494,6 +514,15 @@ func (r *Runner) probeService(parent context.Context, options settings.NodeHealt
 }
 
 func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, latency int64, probeErr error, kind ...string) {
+	if event := r.recordEvent(options, target, latency, probeErr, kind...); event != nil {
+		// Keep direct record calls batched for callers outside a probe cycle.
+		// Normal scans use recordEvent from checkTargets and flush exactly once
+		// after the whole cycle completes.
+		r.queueWebhook(options, *event)
+	}
+}
+
+func (r *Runner) recordEvent(options settings.NodeHealthOptions, target proxyTarget, latency int64, probeErr error, kind ...string) *Event {
 	now := time.Now().UTC()
 	r.mu.Lock()
 	status := r.statuses[target.Tag]
@@ -541,13 +570,13 @@ func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, 
 		}
 	}
 	if !shouldNotify {
-		return
+		return nil
 	}
 	logger.Info("[NodeHealth] node status changed (tag=%s, state=%s, consecutive_failures=%d)",
 		status.Tag, status.State, status.ConsecutiveFails)
 	if options.WebhookURL == "" {
 		logger.Info("[NodeHealth] webhook skipped for %s: no webhook URL configured", status.Tag)
-		return
+		return nil
 	}
 	eventName := "node.available"
 	if status.State == "unavailable" {
@@ -561,12 +590,12 @@ func (r *Runner) record(options settings.NodeHealthOptions, target proxyTarget, 
 	}
 	logger.Info("[NodeHealth] dispatching webhook (event=%s, tag=%s, adapter=%s, signed=%t)",
 		eventName, status.Tag, adapter, signed)
-	r.queueWebhook(options, Event{
+	return &Event{
 		Event:            eventName,
 		Node:             status,
 		ConsecutiveFails: status.ConsecutiveFails,
 		CheckedAt:        now,
-	})
+	}
 }
 
 func (r *Runner) queueWebhook(options settings.NodeHealthOptions, event Event) {

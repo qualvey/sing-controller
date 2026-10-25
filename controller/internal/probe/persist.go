@@ -45,6 +45,13 @@ type webhookPayload struct {
 	Current    webhookState `json:"current"`
 }
 
+type webhookBatchPayload struct {
+	Event      string           `json:"event"`
+	Source     string           `json:"source"`
+	OccurredAt time.Time        `json:"occurred_at"`
+	Events     []webhookPayload `json:"events"`
+}
+
 // nextStatusRow 计算探测结果落库后的当前状态行、变化前状态以及是否发生状态
 // 变化（只有变化才派发 Webhook）。existing 为 nil 表示该节点首次入库。
 func nextStatusRow(existing *models.NodeProbeStatus, result Result) (models.NodeProbeStatus, webhookState, bool) {
@@ -98,6 +105,7 @@ func (m *Manager) persistResults(ctx context.Context, results []Result) error {
 	}
 	webhooks := m.webhookTargets()
 	return database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		transitions := make([]webhookPayload, 0, len(results))
 		for _, raw := range results {
 			result := normalizeResult(raw)
 			var existing models.NodeProbeStatus
@@ -133,10 +141,13 @@ func (m *Manager) persistResults(ctx context.Context, results []Result) error {
 			}
 			// 只有状态真正变化才通知；延迟抖动不应打扰用户。
 			if changed {
-				if err := enqueueTransitions(tx, result, previous, webhooks); err != nil {
-					return err
-				}
+				transitions = append(transitions, newWebhookPayload(result, previous))
 			}
+		}
+		// A whole probe cycle is one notification boundary. Keep one delivery
+		// per endpoint and include all node transitions in that delivery.
+		if len(transitions) > 0 {
+			return enqueueTransitionBatch(tx, transitions, webhooks)
 		}
 		return nil
 	})
@@ -178,14 +189,8 @@ func (m *Manager) webhookTargets() []settings.WebhookOptions {
 	return targets
 }
 
-// enqueueTransitions 在事务内为每个端点排入一条投递记录。
-// 任一端点排入失败都不应影响其他端点：记录已经入库，
-// 丢失的只是单个端点的通知，不能因此回滚整轮探测。
-func enqueueTransitions(tx *gorm.DB, result Result, previous webhookState, webhooks []settings.WebhookOptions) error {
-	if len(webhooks) == 0 {
-		return nil
-	}
-	payload := webhookPayload{
+func newWebhookPayload(result Result, previous webhookState) webhookPayload {
+	return webhookPayload{
 		Event:      webhookEventStatusChanged,
 		Source:     "sing-controller",
 		OccurredAt: result.CheckedAt,
@@ -193,22 +198,49 @@ func enqueueTransitions(tx *gorm.DB, result Result, previous webhookState, webho
 		Previous:   previous,
 		Current:    stateFromResult(result),
 	}
+}
+
+// enqueueTransitions 保留单事件调用语义，供兼容调用方使用。
+func enqueueTransitions(tx *gorm.DB, result Result, previous webhookState, webhooks []settings.WebhookOptions) error {
+	return enqueueTransitionBatch(tx, []webhookPayload{newWebhookPayload(result, previous)}, webhooks)
+}
+
+// enqueueTransitionBatch 在事务内为每个端点排入一条投递记录。
+// 任一端点排入失败都不应影响其他端点：记录已经入库，
+// 丢失的只是单个端点的通知，不能因此回滚整轮探测。
+func enqueueTransitionBatch(tx *gorm.DB, transitions []webhookPayload, webhooks []settings.WebhookOptions) error {
+	if len(webhooks) == 0 || len(transitions) == 0 {
+		return nil
+	}
+	var payload any = transitions[0]
+	if len(transitions) > 1 {
+		payload = webhookBatchPayload{
+			Event:      webhookEventStatusChanged,
+			Source:     "sing-controller",
+			OccurredAt: transitions[len(transitions)-1].OccurredAt,
+			Events:     transitions,
+		}
+	}
 	content, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 	for _, webhook := range webhooks {
+		nodeTag := "*"
+		if len(transitions) == 1 {
+			nodeTag = transitions[0].Node.NodeTag
+		}
 		delivery := models.WebhookDelivery{
 			EventID:   uuid.NewString(),
-			EventType: payload.Event,
-			NodeTag:   result.NodeTag,
+			EventType: webhookEventStatusChanged,
+			NodeTag:   nodeTag,
 			URL:       strings.TrimSpace(webhook.URL),
 			Secret:    webhook.Secret,
 			Payload:   datatypes.JSON(content),
 			Status:    deliveryPending,
 		}
 		if err := tx.Create(&delivery).Error; err != nil {
-			logger.Warn("[Probe] enqueue webhook for %s to %s failed: %v", result.NodeTag, delivery.URL, err)
+			logger.Warn("[Probe] enqueue webhook batch (%d nodes) to %s failed: %v", len(transitions), delivery.URL, err)
 		}
 	}
 	return nil

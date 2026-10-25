@@ -608,6 +608,45 @@ func TestWebhookPayloadShape(t *testing.T) {
 	}
 }
 
+func TestWebhookBatchPayloadShape(t *testing.T) {
+	transitions := []webhookPayload{
+		newWebhookPayload(Result{
+			NodeTag:   "jp-01",
+			NodeType:  "vless",
+			Status:    StatusOffline,
+			CheckedAt: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC),
+		}, webhookState{NodeTag: "jp-01", NodeType: "vless", Status: StatusOnline}),
+		newWebhookPayload(Result{
+			NodeTag:   "jp-02",
+			NodeType:  "trojan",
+			Status:    StatusOnline,
+			CheckedAt: time.Date(2026, 3, 1, 10, 0, 1, 0, time.UTC),
+		}, webhookState{NodeTag: "jp-02", NodeType: "trojan", Status: StatusOffline}),
+	}
+	body, err := json.Marshal(webhookBatchPayload{
+		Event:      webhookEventStatusChanged,
+		Source:     "sing-controller",
+		OccurredAt: transitions[1].OccurredAt,
+		Events:     transitions,
+	})
+	if err != nil {
+		t.Fatalf("marshal batch: %v", err)
+	}
+	var decoded struct {
+		Event  string           `json:"event"`
+		Events []webhookPayload `json:"events"`
+	}
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal batch: %v", err)
+	}
+	if decoded.Event != webhookEventStatusChanged || len(decoded.Events) != 2 {
+		t.Fatalf("batch payload = %s", body)
+	}
+	if decoded.Events[0].Node.NodeTag != "jp-01" || decoded.Events[1].Node.NodeTag != "jp-02" {
+		t.Fatalf("batch nodes = %#v", decoded.Events)
+	}
+}
+
 func TestConcurrentTriggerSerialization(t *testing.T) {
 	// 并发触发必须被串行化，避免探测结果交叉写入数据库。
 	m := NewManager(nil, newTestStore(t), nil)

@@ -121,11 +121,13 @@
 - **`timeout_ms`**: 单节点探测超时，允许 `500` 到 `60000` 毫秒。
 - **`failure_threshold`**: 连续失败多少次后将节点标记为不可用；成功探测后立即恢复。
 - **`concurrency`**: 最大并发探测数，范围 `1` 到 `32`。
-- **`webhook_url`**: 状态变化时接收 JSON `POST` 的 HTTP/HTTPS 地址。事件名为 `node.unavailable` / `node.available`。
+- **`webhook_url`**: 状态变化时接收 JSON `POST` 的 HTTP/HTTPS 地址。事件名为 `node.unavailable` / `node.available`；同一轮探测中多个节点的状态变化会合并为一次通知。
 - **`webhook_token`**: 通用 Webhook 的可选 Bearer Token，通过 `Authorization: Bearer <token>` 发送。URL 域名包含 `feishu` 时不发送此 Header。
 - **`webhook_sign_secret`**: URL 域名包含 `feishu` 时，按飞书自定义机器人规则生成 `timestamp` 和 `sign` 字段；WebUI 配置接口不会回传密钥。留空时发送飞书文本消息但不签名。
 
 Webhook 请求体示例：
+单个节点变化时：
+
 ```json
 {
   "event": "node.unavailable",
@@ -141,6 +143,8 @@ Webhook 请求体示例：
   "checked_at": "2026-09-30T12:00:00Z"
 }
 ```
+
+同一轮探测有多个节点变化时，通用 Webhook 会发送一次 `POST`，请求体为 `{"events": [...]}`，其中每个元素结构与上面的单节点事件相同；飞书消息则会将多个节点变化合并到同一条文本消息中。
 
 飞书 URL（域名包含 `feishu`）会自动改用飞书文本消息格式：
 ```json
@@ -179,7 +183,7 @@ Webhook 请求体示例：
 | `test_url` | string | `"https://www.gstatic.com/generate_204"` | 探测 URL |
 | `timeout` | string | `"10s"` | 单次探测超时 |
 | `history_retention_days` | int | `30` | 探测历史保留天数 |
-| `webhooks` | array | `[]` | 节点状态变化时触发的 Webhook 列表 |
+| `webhooks` | array | `[]` | 节点状态变化时触发的 Webhook 列表；同一轮探测中多个节点的变化合并为一次通知。
 | `webhooks[].url` | string | — | HTTP/HTTPS 接收地址 |
 | `webhooks[].secret` | string | — | 可选密钥，通过 `X-Secret` 请求头发送；设置接口会脱敏 |
 
