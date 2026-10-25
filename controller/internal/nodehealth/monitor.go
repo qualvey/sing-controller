@@ -322,6 +322,10 @@ func (r *Runner) checkTargets(ctx context.Context, options settings.NodeHealthOp
 		}()
 	}
 	wg.Wait()
+	// A probe cycle can take long enough that per-node retry deadlines would
+	// be spread across many scheduler ticks. Align all retries created by this
+	// cycle so they are checked together and produce one notification batch.
+	r.alignRetries(proxies, time.Now().UTC().Add(failureRetryDelay))
 	close(events)
 
 	// A probe cycle is the notification boundary. Probes run concurrently and
@@ -337,6 +341,19 @@ func (r *Runner) checkTargets(ctx context.Context, options settings.NodeHealthOp
 	})
 	if len(batched) > 0 {
 		go r.sendWebhookBatch(options, batched)
+	}
+}
+
+func (r *Runner) alignRetries(proxies []proxyTarget, retryAt time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, proxy := range proxies {
+		retry, ok := r.retries[proxy.Tag]
+		if !ok {
+			continue
+		}
+		retry.retryAt = retryAt
+		r.retries[proxy.Tag] = retry
 	}
 }
 
