@@ -226,7 +226,7 @@ builds:
       - with_cloudflared
       - with_usbip
     ldflags:
-      - -s -w -X main.version={{ .Version }}
+      - -s -w -X main.version={{ .Version }} -X main.buildHash={{ .ShortCommit }}
 archives:
   - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

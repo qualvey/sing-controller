@@ -42,3 +42,4 @@ controller/__debug*
 *.md5
 docs/.vitepress/cache/
 docs/node_modules/
+.deploy.env

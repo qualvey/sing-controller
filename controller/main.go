@@ -17,9 +17,6 @@ import (
 	"github.com/qualvey/sing-controller/internal/engine"
 )
 
-// version 由 goreleaser ldflags 注入（-X main.version={{ .Version }}），本地构建为 dev
-var version = "dev"
-
 func main() {
 	var (
 		listenAddr   string

@@ -428,6 +428,7 @@ export enum SETTINGS_MENU_KEY {
   connections = 'connectionSettings',
   overview = 'overviewSettings',
   config = 'configSettings',
+  about = 'aboutSettings',
 }
 
 export enum OVERVIEW_CARD {

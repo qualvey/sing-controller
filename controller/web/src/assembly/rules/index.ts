@@ -1,5 +1,5 @@
 // 组装层 · rules 门面。持有 rules / ruleProviderList 统一状态与渲染派生,
-// 按后端类型路由到 clash / singbox 实现(sing-box 不支持 rules)。
+// 按后端类型路由到 clash / singbox 实现。
 import { toggleRuleDisabledAPI, toggleRuleDisabledSingBoxAPI } from '@/api/clash'
 import { Channel, channel } from '@/assembly/backend'
 import { RULE_TAB_TYPE } from '@/constant'

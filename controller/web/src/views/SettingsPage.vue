@@ -284,6 +284,7 @@
 import { backendProbe } from '@/assembly/version'
 import BackendStatusDot from '@/components/common/BackendStatusDot.vue'
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
+import AboutSettings from '@/components/settings/about/AboutSettings.vue'
 import SelectInput from '@/components/common/SelectInput.vue'
 import BackendSettings from '@/components/settings/backend/BackendSettings.vue'
 import ConfigEditor from '@/components/settings/config/ConfigEditor.vue'
@@ -311,6 +312,7 @@ import {
   CubeTransparentIcon,
   GlobeAltIcon,
   HomeIcon,
+  InformationCircleIcon,
   MagnifyingGlassIcon,
   ServerIcon,
 } from '@heroicons/vue/24/outline'
@@ -380,6 +382,7 @@ const clearPaneAnimation = () => {
 }
 
 const categoryPresentation: Record<SETTINGS_MENU_KEY, { icon: Component; component: Component }> = {
+  [SETTINGS_MENU_KEY.about]: { icon: InformationCircleIcon, component: AboutSettings },
   [SETTINGS_MENU_KEY.general]: { icon: HomeIcon, component: ZashboardSettings },
   [SETTINGS_MENU_KEY.overview]: { icon: CubeTransparentIcon, component: OverviewSettings },
   [SETTINGS_MENU_KEY.backend]: { icon: ServerIcon, component: BackendSettings },

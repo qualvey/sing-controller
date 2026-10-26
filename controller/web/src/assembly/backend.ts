@@ -127,7 +127,9 @@ const hard = computed(() => {
   const singbox = !!activeBackend.value && channel.value === Channel.Singbox
 
   return {
-    rules: clash,
+    // The controller exposes route management for both Clash and sing-box
+    // channels. The old Clash-only gate hid the Rules page for sing-box.
+    rules: clash || singbox,
     dnsQuery: !!activeBackend.value,
     dnsFlush: clash,
     fakeIPFlush: clash,

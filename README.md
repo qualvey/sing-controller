@@ -133,6 +133,18 @@ sudo systemctl status sing-controller
 # 浏览器访问 http://<host>:8080（listen 可改 /etc/sing-controller/config.json 后 restart）
 ```
 
+### 本地 CD：构建并远程部署
+
+Linux 开发机可使用 `local-cd.sh` 构建带 systemd 单元的 `.deb` 并自动部署到远端：
+
+```bash
+./local-cd.sh              # 默认构建 amd64、arm64、armv7
+./local-cd.sh arm          # 只构建 arm64、armv7
+./local-cd.sh --skip-frontend  # 使用已有的前端产物
+```
+
+首次运行会询问 SSH 主机、用户、端口和私钥路径，配置保存在项目根目录 `.deploy.env`，该文件已被 Git 忽略。脚本会检测远端 `uname -m`，自动选择匹配的 `.deb`，然后执行 `dpkg` 安装并重启 `sing-controller`；如果远端已有 `/etc/sing-controller/config.json`，升级前会备份并恢复，绝不覆盖现有配置；SSH 密码不会保存。
+
 重载权限
 
 ```shell

@@ -84,7 +84,7 @@ builds:
     goarch:
       - arm64
     ldflags:
-      - -s -w -X main.version={{ .Version }}
+      - -s -w -X main.version={{ .Version }} -X main.buildHash={{ .ShortCommit }}
 
 archives:
   - formats: [tar.gz]
