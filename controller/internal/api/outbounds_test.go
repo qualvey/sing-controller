@@ -56,6 +56,13 @@ func TestGroupReferencesTag(t *testing.T) {
 			t.Errorf("got %v, want [g1]", got)
 		}
 	})
+	t.Run("selector default", func(t *testing.T) {
+		opts.Outbounds[0].Options.(*option.SelectorOutboundOptions).Default = "default-only"
+		got := groupReferencesTag(opts, "default-only")
+		if !reflect.DeepEqual(got, []string{"g1"}) {
+			t.Errorf("got %v, want [g1]", got)
+		}
+	})
 	t.Run("both groups", func(t *testing.T) {
 		got := groupReferencesTag(opts, "b")
 		if !reflect.DeepEqual(got, []string{"g1", "g2"}) {
@@ -78,7 +85,10 @@ func TestGroupReferencesTag(t *testing.T) {
 func TestRemoveTagFromGroups(t *testing.T) {
 	opts := &option.Options{
 		Outbounds: []option.Outbound{
-			selectorOutbound("g1", "a", "b", "a"),
+			{Type: "selector", Tag: "g1", Options: &option.SelectorOutboundOptions{
+				Outbounds: []string{"a", "b", "a"},
+				Default:   "a",
+			}},
 			urlTestOutbound("g2", "a"),
 			{Type: "direct", Tag: "a"},
 		},
@@ -88,6 +98,9 @@ func TestRemoveTagFromGroups(t *testing.T) {
 	if !reflect.DeepEqual(got1, []string{"b"}) {
 		t.Errorf("selector members = %v, want [b]", got1)
 	}
+	if got := opts.Outbounds[0].Options.(*option.SelectorOutboundOptions).Default; got != "b" {
+		t.Errorf("selector default = %q, want %q", got, "b")
+	}
 	got2 := opts.Outbounds[1].Options.(*option.URLTestOutboundOptions).Outbounds
 	if len(got2) != 0 {
 		t.Errorf("urltest members = %v, want empty", got2)
@@ -95,6 +108,27 @@ func TestRemoveTagFromGroups(t *testing.T) {
 	// 非 selector/urltest 的 outbound 不应被改动
 	if opts.Outbounds[2].Tag != "a" {
 		t.Errorf("direct outbound tag changed to %q", opts.Outbounds[2].Tag)
+	}
+}
+
+func TestGroupsThatBecomeEmpty(t *testing.T) {
+	opts := &option.Options{
+		Outbounds: []option.Outbound{
+			selectorOutbound("selector-only", "node-1"),
+			selectorOutbound("selector-many", "node-1", "node-2"),
+			urlTestOutbound("urltest-only", "node-1"),
+			{Type: "direct", Tag: "node-1"},
+		},
+	}
+
+	if got := groupsThatBecomeEmpty(opts, "node-1"); !reflect.DeepEqual(got, []string{"selector-only", "urltest-only"}) {
+		t.Fatalf("groupsThatBecomeEmpty = %v, want [selector-only urltest-only]", got)
+	}
+	if got := groupsThatBecomeEmpty(opts, "node-2"); len(got) != 0 {
+		t.Fatalf("groupsThatBecomeEmpty for a non-last member = %v, want empty", got)
+	}
+	if got := groupsThatBecomeEmpty(opts, "missing"); len(got) != 0 {
+		t.Fatalf("groupsThatBecomeEmpty for missing tag = %v, want empty", got)
 	}
 }
 
@@ -206,6 +240,3 @@ func TestHandleCreateOutboundWithCommit(t *testing.T) {
 		t.Fatalf("expected tag custom-direct, got %s", getRec.Body.String())
 	}
 }
-
-
-

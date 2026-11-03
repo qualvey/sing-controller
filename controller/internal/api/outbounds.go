@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/qualvey/sing-controller/internal/logger"
 	"github.com/sagernet/sing-box/option"
@@ -139,11 +140,17 @@ func groupReferencesTag(options *option.Options, tag string) []string {
 	for i := range options.Outbounds {
 		outbound := &options.Outbounds[i]
 		var members []string
+		defaultTag := ""
 		switch typed := outbound.Options.(type) {
 		case *option.SelectorOutboundOptions:
 			members = typed.Outbounds
+			defaultTag = typed.Default
 		case *option.URLTestOutboundOptions:
 			members = typed.Outbounds
+		}
+		if defaultTag == tag {
+			refs = append(refs, outbound.Tag)
+			continue
 		}
 		for _, member := range members {
 			if member == tag {
@@ -155,6 +162,36 @@ func groupReferencesTag(options *option.Options, tag string) []string {
 	return refs
 }
 
+// groupsThatBecomeEmpty reports selector/urltest groups that would have no
+// members after removing tag.  sing-box cannot start with an empty group, so
+// force-deleting the last member must still be rejected instead of writing an
+// invalid configuration.
+func groupsThatBecomeEmpty(options *option.Options, tag string) []string {
+	var empty []string
+	for i := range options.Outbounds {
+		outbound := &options.Outbounds[i]
+		var members []string
+		switch typed := outbound.Options.(type) {
+		case *option.SelectorOutboundOptions:
+			members = typed.Outbounds
+		case *option.URLTestOutboundOptions:
+			members = typed.Outbounds
+		default:
+			continue
+		}
+		remaining := 0
+		for _, member := range members {
+			if member != tag {
+				remaining++
+			}
+		}
+		if containsString(members, tag) && remaining == 0 {
+			empty = append(empty, outbound.Tag)
+		}
+	}
+	return empty
+}
+
 // removeTagFromGroups 从所有 selector/urltest 组中移除 tag。
 func removeTagFromGroups(options *option.Options, tag string) {
 	for i := range options.Outbounds {
@@ -162,6 +199,13 @@ func removeTagFromGroups(options *option.Options, tag string) {
 		switch typed := outbound.Options.(type) {
 		case *option.SelectorOutboundOptions:
 			typed.Outbounds = removeString(typed.Outbounds, tag)
+			if typed.Default == tag {
+				if len(typed.Outbounds) > 0 {
+					typed.Default = typed.Outbounds[0]
+				} else {
+					typed.Default = ""
+				}
+			}
 		case *option.URLTestOutboundOptions:
 			typed.Outbounds = removeString(typed.Outbounds, tag)
 		}
@@ -336,6 +380,10 @@ func (h *Handler) handleDeleteOutbound(w http.ResponseWriter, r *http.Request) {
 				logger.Warn("删除 outbound 存在组引用阻止 [%s]: 引用组=%v", tag, refs)
 				return &GroupReferenceError{Tag: tag, References: refs}
 			}
+			if emptyGroups := groupsThatBecomeEmpty(options, tag); len(emptyGroups) > 0 {
+				logger.Warn("删除 outbound 会留下空分组 [%s]: 分组=%v", tag, emptyGroups)
+				return errors.New("不能删除该 outbound：删除后以下分组将没有可用节点: " + strings.Join(emptyGroups, ", "))
+			}
 			logger.Info("强制删除 outbound [%s]: 从引用组 %v 中拔除", tag, refs)
 			removeTagFromGroups(options, tag)
 		}
@@ -344,4 +392,3 @@ func (h *Handler) handleDeleteOutbound(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 }
-
