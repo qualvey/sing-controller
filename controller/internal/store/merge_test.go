@@ -71,3 +71,48 @@ func TestFilterOverriddenTagsWithoutConflictsReturnsOriginal(t *testing.T) {
 		t.Fatalf("expected original base bytes, got %s", filtered)
 	}
 }
+
+func TestMergeConfigsReplacesGeneratedTags(t *testing.T) {
+	base := []byte(`{
+		"outbounds": [
+			{"type":"direct","tag":"direct"},
+			{"type":"selector","tag":"Proxy","outbounds":["direct"]},
+			{"type":"socks","tag":"base-only"}
+		],
+		"route": {"final":"Proxy"}
+	}`)
+	override := []byte(`{
+		"outbounds": [
+			{"type":"selector","tag":"Proxy","outbounds":["node-1"]},
+			{"type":"vless","tag":"node-1"}
+		]
+	}`)
+
+	merged, err := MergeConfigs(base, override)
+	if err != nil {
+		t.Fatalf("MergeConfigs returned error: %v", err)
+	}
+	var config struct {
+		Outbounds []struct {
+			Tag string `json:"tag"`
+		} `json:"outbounds"`
+	}
+	if err := json.Unmarshal(merged, &config); err != nil {
+		t.Fatalf("decode merged config: %v", err)
+	}
+	if got := len(config.Outbounds); got != 4 {
+		t.Fatalf("expected 4 merged outbounds, got %d: %s", got, merged)
+	}
+	seen := make(map[string]bool)
+	for _, outbound := range config.Outbounds {
+		if seen[outbound.Tag] {
+			t.Fatalf("duplicate merged tag %q: %s", outbound.Tag, merged)
+		}
+		seen[outbound.Tag] = true
+	}
+	for _, tag := range []string{"direct", "Proxy", "base-only", "node-1"} {
+		if !seen[tag] {
+			t.Fatalf("missing merged tag %q: %s", tag, merged)
+		}
+	}
+}

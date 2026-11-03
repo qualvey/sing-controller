@@ -182,8 +182,9 @@ func (m *Manager) startLocked(ctx context.Context) error {
 				// 目录模式：直接使用 -C <ConfigDir>
 				args = append(args, "-C", m.cfg.ConfigPath)
 			} else {
-				// 文件模式：添加主配置
-				// 若同目录下存在动态生成的 10-outbounds.json，自动双挂载
+				// 文件模式：添加主配置；若同目录下存在动态生成的
+				// 10-outbounds.json，先合成单份运行时配置，避免 sing-box
+				// 在多文件合并阶段再次遇到重复 tag。
 				outboundsPath := filepath.Join(filepath.Dir(m.cfg.ConfigPath), "10-outbounds.json")
 				if ofi, err := os.Stat(outboundsPath); err == nil && !ofi.IsDir() {
 					baseContent, err := os.ReadFile(m.cfg.ConfigPath)
@@ -196,40 +197,27 @@ func (m *Manager) startLocked(ctx context.Context) error {
 						m.state = StateError
 						return fmt.Errorf("读取动态出站配置失败: %w", err)
 					}
-					filteredBase, changed, err := store.FilterOverriddenTags(baseContent, overrideContent)
+					mergedContent, err := store.MergeConfigs(baseContent, overrideContent)
 					if err != nil {
 						m.state = StateError
-						return fmt.Errorf("处理默认配置与外部出站冲突失败: %w", err)
+						return fmt.Errorf("合并默认配置与外部出站配置失败: %w", err)
 					}
-					baseConfigPath := m.cfg.ConfigPath
-					if changed {
-						tmpFile, err := os.CreateTemp("", "sing-box-runtime-*.json")
-						if err != nil {
-							m.state = StateError
-							return fmt.Errorf("创建去重后的运行时配置失败: %w", err)
-						}
-						runtimeConfigPath = tmpFile.Name()
-						if _, err := tmpFile.Write(filteredBase); err != nil {
-							_ = tmpFile.Close()
-							m.state = StateError
-							return fmt.Errorf("写入去重后的运行时配置失败: %w", err)
-						}
-						if err := tmpFile.Close(); err != nil {
-							m.state = StateError
-							return fmt.Errorf("关闭去重后的运行时配置失败: %w", err)
-						}
-						baseConfigPath = runtimeConfigPath
+					tmpFile, err := os.CreateTemp("", "sing-box-runtime-*.json")
+					if err != nil {
+						m.state = StateError
+						return fmt.Errorf("创建合并后的运行时配置失败: %w", err)
 					}
-					args = append(args, "-c", baseConfigPath)
-					if changed {
-						absOutboundsPath, err := filepath.Abs(outboundsPath)
-						if err != nil {
-							m.state = StateError
-							return fmt.Errorf("解析动态出站配置路径失败: %w", err)
-						}
-						outboundsPath = absOutboundsPath
+					runtimeConfigPath = tmpFile.Name()
+					if _, err := tmpFile.Write(mergedContent); err != nil {
+						_ = tmpFile.Close()
+						m.state = StateError
+						return fmt.Errorf("写入合并后的运行时配置失败: %w", err)
 					}
-					args = append(args, "-c", outboundsPath)
+					if err := tmpFile.Close(); err != nil {
+						m.state = StateError
+						return fmt.Errorf("关闭合并后的运行时配置失败: %w", err)
+					}
+					args = append(args, "-c", runtimeConfigPath)
 				} else {
 					args = append(args, "-c", m.cfg.ConfigPath)
 				}
@@ -292,9 +280,16 @@ func (m *Manager) startLocked(ctx context.Context) error {
 		Message:   fmt.Sprintf("[Supervisor] sing-box 内核已启动 (PID: %d)", cmd.Process.Pid),
 	})
 
-	go m.streamLogs(stdout, "stdout")
-	go m.streamLogs(stderr, "stderr")
-	go m.waitProcess(cmd, waitDone, runtimeConfigPath)
+	logsDone := make(chan struct{}, 2)
+	go func() {
+		m.streamLogs(stdout, "stdout")
+		logsDone <- struct{}{}
+	}()
+	go func() {
+		m.streamLogs(stderr, "stderr")
+		logsDone <- struct{}{}
+	}()
+	go m.waitProcess(cmd, waitDone, runtimeConfigPath, logsDone)
 
 	return nil
 }
@@ -328,8 +323,13 @@ func (m *Manager) streamLogs(r io.Reader, source string) {
 	}
 }
 
-func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}, runtimeConfigPath string) {
+func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}, runtimeConfigPath string, logsDone <-chan struct{}) {
 	err := cmd.Wait()
+	// Wait for both scanners before inspecting lastFatal.  A short-lived
+	// startup failure can exit before the stderr scanner acquires m.mu; without
+	// this barrier the supervisor may schedule a restart before seeing FATAL.
+	<-logsDone
+	<-logsDone
 	if runtimeConfigPath != "" {
 		if removeErr := os.Remove(runtimeConfigPath); removeErr != nil && !os.IsNotExist(removeErr) {
 			logger.Warn("[Supervisor] 清理运行时配置失败 (%s): %v", runtimeConfigPath, removeErr)
@@ -384,6 +384,20 @@ func (m *Manager) waitProcess(cmd *exec.Cmd, waitDone chan struct{}, runtimeConf
 
 	// 生成 Crash Dump 文件
 	m.generateCrashDump(exitCode)
+
+	// fatal 通常是配置、规则集或启动依赖错误，自动重启不会改变输入，
+	// 只会覆盖真正有用的 fatal 日志。修复配置后允许用户通过 Start/Restart
+	// 明确触发下一次尝试。
+	if m.lastFatal != "" {
+		m.state = StateError
+		logger.Warn("[Supervisor] 检测到 fatal 启动错误，已停止自动重启，等待用户处理")
+		m.broadcast(LogLine{
+			Timestamp: now,
+			Source:    "system",
+			Message:   "[Supervisor] 检测到 fatal 启动错误，已停止自动重启，等待用户处理",
+		})
+		return
+	}
 
 	// 若检测到 TUN 权限不足 (Access is denied)，禁止无意义的自动重启，等待前端用户输入
 	if m.tunAccessDenied {

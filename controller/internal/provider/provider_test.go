@@ -224,6 +224,11 @@ proxies:
 	if err != nil {
 		t.Fatalf("parse 10-outbounds.json: %v", err)
 	}
+	for _, ob := range outboundOpts.Outbounds {
+		if ob.Tag == "direct" || ob.Tag == "Proxy" {
+			t.Fatalf("generated outbound %q duplicates a tag owned by the base config", ob.Tag)
+		}
+	}
 	hasHK := false
 	for _, ob := range outboundOpts.Outbounds {
 		if ob.Tag == "HK-01" {

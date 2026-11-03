@@ -122,34 +122,59 @@ var BinaryPath string
 
 // FindSingBoxBinary 自动查找宿主机上的 sing-box 二进制
 func FindSingBoxBinary() string {
-	if BinaryPath != "" {
-		if fi, err := os.Stat(BinaryPath); err == nil && !fi.IsDir() {
-			return BinaryPath
-		}
+	if path := existingBinary(BinaryPath); path != "" {
+		return path
 	}
-	candidates := []string{
-		"./sing-box.exe",
-		"./sing-box",
-		"../sing-box.exe",
-		"../sing-box",
+
+	candidates := make([]string, 0, 32)
+	addDir := func(dir string) {
+		candidates = append(candidates,
+			filepath.Join(dir, "sing-box"),
+			filepath.Join(dir, "sing-box.exe"),
+		)
 	}
+	addDir(".")
+	addDir("./core_bin")
+	addDir("./bin")
+	addDir("..")
+	addDir("../core_bin")
+	addDir("../bin")
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
-		candidates = append([]string{
-			filepath.Join(exeDir, "sing-box.exe"),
-			filepath.Join(exeDir, "sing-box"),
-		}, candidates...)
+		addDir(exeDir)
+		addDir(filepath.Join(exeDir, "bin"))
+		addDir(filepath.Join(exeDir, "core_bin"))
+		addDir(filepath.Join(exeDir, "..", "core_bin"))
 	}
-	candidates = append(candidates,
-		"/usr/bin/sing-box",
-		"/usr/local/bin/sing-box",
-	)
-	for _, c := range candidates {
-		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
-			return c
+	for _, dir := range []string{"/usr/bin", "/usr/local/bin", "/usr/local/lib/sing-box", "/opt/sing-box"} {
+		addDir(dir)
+	}
+
+	if configured := strings.TrimSpace(os.Getenv("SING_BOX_PATH")); configured != "" {
+		candidates = append([]string{configured}, candidates...)
+	}
+	for _, candidate := range candidates {
+		if path := existingBinary(candidate); path != "" {
+			return path
 		}
 	}
 	if path, err := exec.LookPath("sing-box"); err == nil {
+		return existingBinary(path)
+	}
+	return ""
+}
+
+// existingBinary normalizes a discovered path before it is passed to an
+// external process. Relative paths are otherwise resolved against whatever
+// working directory the supervisor happens to use.
+func existingBinary(path string) string {
+	if path == "" {
+		return ""
+	}
+	if fi, err := os.Stat(path); err == nil && fi.Mode().IsRegular() {
+		if absolute, err := filepath.Abs(path); err == nil {
+			return absolute
+		}
 		return path
 	}
 	return ""

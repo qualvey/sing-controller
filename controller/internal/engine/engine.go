@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -31,51 +30,11 @@ import (
 
 // FindSingBoxBinary 自动探测可用 sing-box 二进制文件路径
 func FindSingBoxBinary() string {
-	candidates := []string{
-		"./sing-box.exe",
-		"./sing-box",
-		"../sing-box.exe",
-		"../sing-box",
-		"./core_bin/sing-box.exe",
-		"../core_bin/sing-box.exe",
-		"../core_bin/extracted/sing-box-1.14.0-windows-amd64/sing-box.exe",
-	}
-
-	// 1. 优先探测可执行文件自身所在目录
-	if exePath, err := os.Executable(); err == nil {
-		exeDir := filepath.Dir(exePath)
-		candidates = append([]string{
-			filepath.Join(exeDir, "sing-box.exe"),
-			filepath.Join(exeDir, "sing-box"),
-			filepath.Join(exeDir, "bin", "sing-box.exe"),
-			filepath.Join(exeDir, "bin", "sing-box"),
-			filepath.Join(exeDir, "core_bin", "sing-box.exe"),
-		}, candidates...)
-	}
-
-	// 2. Linux / Unix 标准 FHS 路径
-	candidates = append(candidates,
-		"/usr/bin/sing-box",
-		"/usr/local/bin/sing-box",
-	)
-
-	for _, c := range candidates {
-		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
-			// Supervisor 会为子进程设置 WorkingDir。相对的 binary path
-			// 会因此相对于另一个目录解析，Windows 上尤其容易出现
-			// "The system cannot find the path specified"，即使文件实际存在。
-			if absolute, err := filepath.Abs(c); err == nil {
-				return absolute
-			}
-			return c
-		}
-	}
-
-	// 3. 环境变量 PATH 查找
-	if path, err := exec.LookPath("sing-box"); err == nil {
+	if path := store.FindSingBoxBinary(); path != "" {
 		return path
 	}
-
+	// Keep a useful supervisor default when the binary is installed later or
+	// is only available through a service-specific PATH.
 	return "sing-box"
 }
 

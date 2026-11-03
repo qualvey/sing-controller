@@ -731,6 +731,41 @@ func (m *Manager) DeleteProfile(id string) error {
 	return m.saveProfilesLocked()
 }
 
+// baseTags returns tags already owned by the base configuration. The Linux
+// systemd deployment mounts the base and generated outbound files together
+// with sing-box -C, which rejects duplicate outbound/endpoint tags instead of
+// treating the later file as an override. Generated entries must therefore
+// not shadow an entry that is already present in the base.
+func (m *Manager) baseTags(ctx context.Context) map[string]struct{} {
+	tags := make(map[string]struct{})
+	if m.store == nil {
+		return tags
+	}
+
+	content := m.store.RawContent()
+	options := m.store.Options
+	if len(content) > 0 {
+		parsed, err := store.Parse(ctx, content)
+		if err != nil {
+			logger.Warn("[CompileOutbounds] 读取 Base 配置 tags 失败: %v", err)
+		} else {
+			options = parsed
+		}
+	}
+
+	for _, outbound := range options.Outbounds {
+		if outbound.Tag != "" {
+			tags[outbound.Tag] = struct{}{}
+		}
+	}
+	for _, endpoint := range options.Endpoints {
+		if endpoint.Tag != "" {
+			tags[endpoint.Tag] = struct{}{}
+		}
+	}
+	return tags
+}
+
 // CompileOutbounds 核心管线：合成独立的出站配置文件 (10-outbounds.json)，包含目标选择器组与选中的 Provider 节点
 func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, error) {
 	if m.store == nil {
@@ -796,11 +831,21 @@ func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, e
 
 	// 2. 组装出站列表（包含基础出站、选择器组以及全部订阅节点）
 	var outbounds []option.Outbound
+	baseTags := m.baseTags(ctx)
+	appendGenerated := func(outbound option.Outbound) {
+		if outbound.Tag == "" {
+			return
+		}
+		if _, exists := baseTags[outbound.Tag]; exists {
+			return
+		}
+		outbounds = append(outbounds, outbound)
+	}
 
 	// 默认兜底直连与阻断
 	directJSON := []byte(`{"type": "direct", "tag": "direct"}`)
 	if directOb, err := sjson.UnmarshalExtendedContext[option.Outbound](include.Context(ctx), directJSON); err == nil {
-		outbounds = append(outbounds, directOb)
+		appendGenerated(directOb)
 	}
 
 	// 构建 Proxy 选择器组
@@ -815,7 +860,7 @@ func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, e
 	}
 	if pData, err := json.Marshal(proxyGroupJSON); err == nil {
 		if pOb, err := sjson.UnmarshalExtendedContext[option.Outbound](include.Context(ctx), pData); err == nil {
-			outbounds = append(outbounds, pOb)
+			appendGenerated(pOb)
 		}
 	}
 
@@ -833,7 +878,7 @@ func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, e
 	}
 	if aData, err := json.Marshal(autoGroupJSON); err == nil {
 		if aOb, err := sjson.UnmarshalExtendedContext[option.Outbound](include.Context(ctx), aData); err == nil {
-			outbounds = append(outbounds, aOb)
+			appendGenerated(aOb)
 		}
 	}
 
@@ -843,6 +888,9 @@ func (m *Manager) CompileOutbounds(ctx context.Context, prof Profile) ([]byte, e
 		tagSeen[ob.Tag] = true
 	}
 	for _, ob := range providerOutbounds {
+		if _, exists := baseTags[ob.Tag]; exists {
+			continue
+		}
 		if !tagSeen[ob.Tag] {
 			outbounds = append(outbounds, ob)
 			tagSeen[ob.Tag] = true

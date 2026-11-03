@@ -230,7 +230,7 @@ proxy_set_header Connection "upgrade";</code></pre>
               {{
                 isRetrying
                   ? $t('backendConnecting')
-                  : autoRetryCountdown > 0
+                  : !isFatalCoreError && !isCoreOffline && autoRetryCountdown > 0
                     ? `${$t('retry')} (${autoRetryCountdown}s)`
                     : $t('retry')
               }}
@@ -249,6 +249,10 @@ proxy_set_header Connection "upgrade";</code></pre>
           >
             {{ $t('manageBackends') }}
           </button>
+        </div>
+
+        <div class="text-base-content/40 pt-1 text-center font-mono text-[11px]">
+          commit: {{ __COMMIT_ID__ || 'dev' }}
         </div>
 
         <!-- 快速切换到其他后端 -->
@@ -391,6 +395,10 @@ const isCoreOffline = computed(() => {
   )
 })
 
+// Supervisor keeps the fatal runtime line after sing-box exits. Retrying a
+// fatal core error cannot recover it and only causes a restart loop in the UI.
+const isFatalCoreError = computed(() => Boolean(supervisorStatus.value?.fatal_error?.trim()))
+
 // 判断是否属于 HTTP 正常但 WebSocket 握手失败
 const isWsError = computed(() => {
   const msg = probe.value?.message || detail.value || ''
@@ -450,9 +458,9 @@ const editRemoteProvider = () => {
 }
 
 watch(
-  () => probe.value?.status,
-  (status) => {
-    if (status === 'failed') void fetchCoreLogs()
+  [() => probe.value?.status, isCoreOffline],
+  ([status, coreOffline]) => {
+    if (status === 'failed' || coreOffline) void fetchCoreLogs()
   },
   { immediate: true },
 )
@@ -491,9 +499,8 @@ watch(
     }
     if (status === 'failed' || coreAlive === false || coreObjAlive === false) {
       failed.value = true
-      if (coreAlive === true && coreObjAlive !== false && status === 'failed') {
-        startBackendSession()
-      }
+      // 不在失败观察器里重建会话。fatal/核心离线时重建只会重复请求并
+      // 覆盖当前错误；连接恢复或用户点击“重试”时才重新建立会话。
     } else if (status === 'connected' || status === undefined) {
       failed.value = false
     }
@@ -559,8 +566,13 @@ const stopAutoRetry = () => {
 
 const startAutoRetry = () => {
   stopAutoRetry()
+  if (isFatalCoreError.value || isCoreOffline.value) return
   autoRetryCountdown.value = 5
   autoRetryTimer = setInterval(() => {
+    if (isFatalCoreError.value || isCoreOffline.value) {
+      stopAutoRetry()
+      return
+    }
     // 正在编辑/抢救配置时暂停自动重试，避免被频繁重试打断
     if (showConfigRepair.value) return
     if (autoRetryCountdown.value > 1) {
@@ -573,6 +585,14 @@ const startAutoRetry = () => {
     }
   }, 1000)
 }
+
+watch(isFatalCoreError, (fatal) => {
+  if (fatal) stopAutoRetry()
+})
+
+watch(isCoreOffline, (offline) => {
+  if (offline) stopAutoRetry()
+})
 
 const openConfigRepair = () => {
   showConfigRepair.value = true
