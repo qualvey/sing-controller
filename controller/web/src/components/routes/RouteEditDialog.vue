@@ -18,6 +18,7 @@ import {
   type ConditionRow,
 } from '@/components/rules/conditionFields'
 import type { RouteRule } from '@/api'
+import { fetchRuleSetTags } from '@/assembly/rules/ruleSetRepository'
 import { useStatusStore } from '@/store/status'
 import { RULE_FIELDS } from '@/views/routeFields'
 
@@ -45,6 +46,7 @@ const statusStore = useStatusStore()
 const outboundTags = ref<string[]>([])
 const inboundTags = ref<string[]>([])
 const userNames = ref<string[]>([])
+const ruleSetTags = ref<string[]>([])
 const conditionRows = ref<ConditionRow[]>(createConditionRows(RULE_FIELDS))
 
 const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
@@ -113,18 +115,35 @@ const fieldSuggestions = computed<Record<string, string[]>>(() => ({
   user: userNames.value,
 }))
 
+const optionSources = computed<Record<string, string[]>>(() => ({
+  'rule-set': ruleSetTags.value,
+}))
+
 const loadTags = async () => {
-  try {
-    const [obs, ibs, us] = await Promise.all([
-      api.outbounds(),
-      api.inbounds(),
-      api.users().catch(() => []),
-    ])
-    outboundTags.value = obs.map((o) => String(o.tag)).filter(Boolean)
-    inboundTags.value = ibs.map((i) => String(i.tag)).filter(Boolean)
-    userNames.value = (Array.isArray(us) ? us : []).map((u) => String(u.name)).filter(Boolean)
-  } catch (e) {
-    showToast((e as Error).message || '加载标签列表失败', 'error')
+  // 各来源互不依赖：单个接口失败不应导致规则集等其它候选项为空。
+  const [obs, ibs, us, rss] = await Promise.allSettled([
+    api.outbounds(),
+    api.inbounds(),
+    api.users(),
+    fetchRuleSetTags(),
+  ])
+
+  if (obs.status === 'fulfilled') {
+    outboundTags.value = obs.value.map((o) => String(o.tag)).filter(Boolean)
+  }
+  if (ibs.status === 'fulfilled') {
+    inboundTags.value = ibs.value.map((i) => String(i.tag)).filter(Boolean)
+  }
+  if (us.status === 'fulfilled') {
+    userNames.value = (Array.isArray(us.value) ? us.value : [])
+      .map((u) => String(u.name))
+      .filter(Boolean)
+  }
+  ruleSetTags.value = rss.status === 'fulfilled' ? rss.value : []
+
+  if (obs.status === 'rejected' || ibs.status === 'rejected') {
+    const reason = obs.status === 'rejected' ? obs.reason : ibs.reason
+    showToast((reason as Error)?.message || '加载标签列表失败', 'error')
   }
 }
 
@@ -445,6 +464,7 @@ onMounted(() => {
                 v-model="conditionRows"
                 :fields="RULE_FIELDS"
                 :suggestions="fieldSuggestions"
+                :option-sources="optionSources"
                 add-label="添加匹配条件"
               />
             </div>

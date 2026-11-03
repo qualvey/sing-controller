@@ -17,7 +17,9 @@ export interface ConditionField {
   type: ConditionFieldType
   /** 候选值；fixed 为 true 时表示完整枚举 */
   options?: string[]
-  /** 固定枚举：值渲染为 checkbox（单选或多选由字段类型决定） */
+  /** 动态选项来源（如 rule-set）：由对话框加载后通过 optionSources 传入 */
+  optionsSource?: string
+  /** 固定枚举：值渲染为下拉框（单选或多选由字段类型决定） */
   fixed?: boolean
   placeholder?: string
   /** 常用字段：始终保留一行，不可删除 */
@@ -43,9 +45,12 @@ export function isListField(field: ConditionField) {
   return field.type === 'string-list' || field.type === 'uint-list' || field.type === 'int-list'
 }
 
-/** 固定枚举字段（值用 checkbox 渲染） */
+/** 固定枚举字段（值用下拉框渲染） */
 export function isEnumField(field: ConditionField) {
-  return !!field.options?.length && (field.fixed === true || field.type === 'select')
+  return (
+    (!!field.options?.length || !!field.optionsSource) &&
+    (field.fixed === true || field.type === 'select')
+  )
 }
 
 export function emptyFieldValue(field?: ConditionField): ConditionValue {

@@ -13,7 +13,9 @@ export interface DnsRuleField {
   type: DnsRuleFieldType
   /** 枚举选项（select 单选或 list 的可选项）；为空则仅 allow-create 输入 */
   options?: string[]
-  /** 固定枚举：值渲染为 checkbox（list 为多选，string/select 为单选） */
+  /** 动态选项来源（如 rule-set）：由对话框加载后传入 */
+  optionsSource?: string
+  /** 固定枚举：值渲染为下拉框（list 为多选，string/select 为单选） */
   fixed?: boolean
   /** 常用字段：始终保留一行，不可删除 */
   common?: boolean
@@ -41,7 +43,7 @@ export const DNS_RULE_FIELDS: DnsRuleField[] = [
   { key: 'domain_suffix', label: '域名后缀', group: '域名', type: 'string-list', placeholder: '如 .google.com' },
   { key: 'domain_keyword', label: '域名关键词', group: '域名', type: 'string-list' },
   { key: 'domain_regex', label: '域名正则', group: '域名', type: 'string-list' },
-  { key: 'rule_set', label: '规则集', group: '域名', type: 'string-list', placeholder: 'rule_set tag，回车添加' },
+  { key: 'rule_set', label: '规则集', group: '域名', type: 'string-list', optionsSource: 'rule-set', fixed: true, placeholder: '选择规则集（可多选）' },
   // IP
   { key: 'source_ip_cidr', label: '源 IP/CIDR', group: 'IP', type: 'string-list' },
   { key: 'source_ip_is_private', label: '源 IP 私网', group: 'IP', type: 'bool' },

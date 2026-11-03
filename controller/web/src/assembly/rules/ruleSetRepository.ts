@@ -1,3 +1,4 @@
+import { api } from '@/api'
 import { compareVersions } from '@/assembly/version'
 
 /** Normalize values returned as "1.14.0", "sing-box 1.14.0", or "... v1.14.0". */
@@ -14,3 +15,24 @@ export const supportsMultiTagRuleSet = (version: unknown): boolean => {
 }
 
 export const hasRuleSetTemplate = (url: unknown): boolean => String(url ?? '').includes('{tag}')
+
+/** 读取 route.rule_set 段配置的全部 tag（单个 rule set 的 tag 可为字符串或数组）。 */
+export const fetchRuleSetTags = async (): Promise<string[]> => {
+  const res = await api.ruleSets()
+  const tags: string[] = []
+  const seen = new Set<string>()
+
+  for (const item of res.rule_sets || []) {
+    const rawTag = item.rule_set?.tag
+    const values = Array.isArray(rawTag) ? rawTag : rawTag == null ? [] : [rawTag]
+    for (const value of values) {
+      const tag = String(value ?? '').trim()
+      if (tag && !seen.has(tag)) {
+        seen.add(tag)
+        tags.push(tag)
+      }
+    }
+  }
+
+  return tags
+}

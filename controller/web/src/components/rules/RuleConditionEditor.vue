@@ -44,19 +44,14 @@
           </template>
 
           <template v-else-if="isEnumField(fieldOf(row)!)">
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1.5">
-              <label
-                v-for="option in fieldOf(row)!.options"
-                :key="option"
-                class="flex cursor-pointer items-center gap-1.5"
-              >
-                <Checkbox
-                  :model-value="isOptionSelected(row, option)"
-                  @update:model-value="toggleOption(row, option, $event)"
-                />
-                <span class="text-xs">{{ option }}</span>
-              </label>
-            </div>
+            <RuleValueSelect
+              :model-value="row.value as string | string[]"
+              :options="fieldOptions(fieldOf(row)!)"
+              :multiple="isListField(fieldOf(row)!)"
+              :placeholder="fieldOf(row)!.placeholder || '请选择'"
+              :empty-text="emptyOptionText(fieldOf(row)!)"
+              @update:model-value="row.value = $event"
+            />
           </template>
 
           <template v-else-if="isListField(fieldOf(row)!)">
@@ -114,10 +109,10 @@
 
 <script setup lang="ts">
 import ChipInput from '@/components/common/ChipInput.vue'
-import { Checkbox } from '@/components/ui/checkbox'
 import { MinusIcon, PlusIcon } from '@lucide/vue'
 import { computed, ref } from 'vue'
 import RuleFieldPicker from './RuleFieldPicker.vue'
+import RuleValueSelect from './RuleValueSelect.vue'
 import {
   emptyFieldValue,
   isEnumField,
@@ -125,17 +120,19 @@ import {
   nextRowId,
   type ConditionField,
   type ConditionRow,
-  type ConditionValue,
 } from './conditionFields'
 
 const props = withDefaults(
   defineProps<{
     fields: ConditionField[]
     suggestions?: Record<string, string[]>
+    /** 动态选项来源，键为字段的 optionsSource */
+    optionSources?: Record<string, string[]>
     addLabel?: string
   }>(),
   {
     suggestions: () => ({}),
+    optionSources: () => ({}),
     addLabel: '添加匹配条件',
   },
 )
@@ -174,30 +171,14 @@ function addRow() {
   autoOpenRowId.value = id
 }
 
-function isOptionSelected(row: ConditionRow, option: string) {
-  const field = fieldOf(row)
-  if (!field) return false
-  if (field.type === 'select' || field.type === 'string') {
-    return String(row.value) === option
-  }
-  return Array.isArray(row.value) && row.value.includes(option)
+function fieldOptions(field: ConditionField) {
+  if (field.optionsSource) return props.optionSources[field.optionsSource] ?? []
+  return field.options ?? []
 }
 
-function toggleOption(row: ConditionRow, option: string, checked: boolean) {
-  const field = fieldOf(row)
-  if (!field) return
-
-  // 单选枚举（如 ip_version）只允许勾选一个
-  if (field.type === 'select' || field.type === 'string') {
-    row.value = checked ? option : ''
-    return
-  }
-
-  const values = Array.isArray(row.value) ? [...row.value] : []
-  const index = values.indexOf(option)
-  if (checked && index < 0) values.push(option)
-  if (!checked && index >= 0) values.splice(index, 1)
-  row.value = values as ConditionValue
+function emptyOptionText(field: ConditionField) {
+  if (field.optionsSource === 'rule-set') return '暂无规则集（请先在规则集中配置）'
+  return '暂无可选项'
 }
 
 function suggestionsFor(field: ConditionField) {

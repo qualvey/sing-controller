@@ -88,6 +88,7 @@
                 v-model="conditionRows"
                 :fields="DNS_RULE_FIELDS"
                 :suggestions="fieldSuggestions"
+                :option-sources="optionSources"
                 add-label="添加匹配条件"
               />
             </div>
@@ -291,6 +292,7 @@ import {
   saveDnsRule,
   saving,
 } from '@/assembly/dns'
+import { fetchRuleSetTags } from '@/assembly/rules/ruleSetRepository'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ResourceSourceTab from '@/components/ResourceSourceTab.vue'
 import RuleConditionEditor from '@/components/rules/RuleConditionEditor.vue'
@@ -362,9 +364,14 @@ const ruleForm = reactive<Record<string, any>>({
 })
 
 const conditionRows = ref<ConditionRow[]>(createConditionRows(DNS_RULE_FIELDS))
+const ruleSetTags = ref<string[]>([])
 
 const fieldSuggestions = computed<Record<string, string[]>>(() => ({
   inbound: inboundTags.value,
+}))
+
+const optionSources = computed<Record<string, string[]>>(() => ({
+  'rule-set': ruleSetTags.value,
 }))
 
 const resetRuleForm = () => {
@@ -544,6 +551,9 @@ watch(
     activeTab.value = 'form'
     validateMsg.value = ''
     resetRuleForm()
+    void fetchRuleSetTags()
+      .then((tags) => (ruleSetTags.value = tags))
+      .catch(() => (ruleSetTags.value = []))
     const item = editingRule.value
     if (item && item.rule) {
       const r = item.rule
