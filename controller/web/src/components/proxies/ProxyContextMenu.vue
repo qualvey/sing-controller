@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   isProxyContextMenuVisible,
@@ -20,6 +20,26 @@ const { t } = useI18n()
 const statusStore = useStatusStore()
 
 const target = computed(() => proxyContextMenuTarget.value)
+const isCrudManaged = ref(false)
+let managedCheckId = 0
+
+// 代理页同时展示 sing-box 运行时节点和控制器配置节点。
+// 订阅生成的节点只存在于 10-outbounds.json，不能通过 /api/outbounds CRUD。
+watch(
+  () => [isProxyContextMenuVisible.value, target.value?.name] as const,
+  async ([visible, name]) => {
+    const checkId = ++managedCheckId
+    isCrudManaged.value = false
+    if (!visible || !name) return
+    try {
+      await api.getOutbound(name)
+      if (checkId === managedCheckId) isCrudManaged.value = true
+    } catch {
+      // 运行时节点可能来自订阅，只允许测速、复制等运行时操作。
+    }
+  },
+  { immediate: true },
+)
 
 const menuStyle = computed(() => ({
   left: `${proxyContextMenuPos.value.x}px`,
@@ -66,7 +86,7 @@ const handleTestLatency = async () => {
 }
 
 const handleEditNode = () => {
-  if (!target.value) return
+  if (!target.value || !isCrudManaged.value) return
   openProxyEditModal(target.value.name)
 }
 
@@ -94,7 +114,7 @@ const handleCopyName = async () => {
 }
 
 const handleDeleteNode = async () => {
-  if (!target.value) return
+  if (!target.value || !isCrudManaged.value) return
   const { name, isGroup } = target.value
   closeProxyContextMenu()
 
@@ -183,7 +203,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleScroll, { capture: true })
 })
 const handleAssignToGroup = () => {
-  if (!target.value) return
+  if (!target.value || !isCrudManaged.value) return
   const name = target.value.name
   closeProxyContextMenu()
   openAssignModal(name)
@@ -205,6 +225,9 @@ const handleAssignToGroup = () => {
         </div>
         <div class="h-px bg-base-200 dark:bg-base-300 my-0.5" />
         <ul class="flex flex-col gap-0.5">
+          <li v-if="!isCrudManaged" class="px-2.5 py-1.5 text-[11px] text-base-content/50">
+            该节点不由控制器配置管理
+          </li>
           <li>
             <button
               class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
@@ -214,7 +237,7 @@ const handleAssignToGroup = () => {
               <span>{{ target.isGroup ? '测试整组延迟' : t('testLatency') }}</span>
             </button>
           </li>
-          <li>
+          <li v-if="isCrudManaged">
             <button
               class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
               @click="handleEditNode"
@@ -232,7 +255,7 @@ const handleAssignToGroup = () => {
               <span>{{ target.isGroup ? '复制分组名称' : t('copyNodeName') }}</span>
             </button>
           </li>
-          <li v-if="target.groupName && !target.isGroup">
+          <li v-if="isCrudManaged && target.groupName && !target.isGroup">
             <button
               class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
               @click="handleSetAsDefault"
@@ -241,7 +264,7 @@ const handleAssignToGroup = () => {
               <span>设为分组默认</span>
             </button>
           </li>
-          <li v-else-if="!target.groupName && !target.isGroup">
+          <li v-else-if="isCrudManaged && !target.groupName && !target.isGroup">
             <button
               class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-base-content hover:bg-primary/10 hover:text-primary transition-colors text-left"
               @click="handleAssignToGroup"
@@ -251,7 +274,7 @@ const handleAssignToGroup = () => {
             </button>
           </li>
           <div class="h-px bg-base-200 dark:bg-base-300 my-0.5" />
-          <li>
+          <li v-if="isCrudManaged">
             <button
               class="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-error hover:bg-error/10 transition-colors text-left"
               @click="handleDeleteNode"

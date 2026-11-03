@@ -13,6 +13,10 @@ export interface RuleField {
   type: RuleFieldType
   /** 枚举选项（select 单选或 list 的可选项）；为空则仅 allow-create 输入 */
   options?: string[]
+  /** 固定枚举：值渲染为 checkbox（list 为多选，string/select 为单选） */
+  fixed?: boolean
+  /** 常用字段：始终保留一行，不可删除 */
+  common?: boolean
   placeholder?: string
 }
 
@@ -33,10 +37,10 @@ export const NETWORK_TYPE_OPTIONS = ['wifi', 'cellular', 'ethernet', 'other']
 
 export const RULE_FIELDS: RuleField[] = [
   // 入站与网络
-  { key: 'inbound', label: '入站', group: '入站与网络', type: 'string-list', placeholder: '选择或输入入站 tag，回车添加' },
+  { key: 'inbound', label: '入站', group: '入站与网络', type: 'string-list', common: true, placeholder: '选择或输入入站 tag，回车添加' },
   { key: 'ip_version', label: 'IP 版本', group: '入站与网络', type: 'select', options: ['4', '6'] },
-  { key: 'network', label: '网络', group: '入站与网络', type: 'string-list', options: NETWORK_OPTIONS },
-  { key: 'protocol', label: '协议', group: '入站与网络', type: 'string-list', options: PROTOCOL_OPTIONS },
+  { key: 'network', label: '网络', group: '入站与网络', type: 'string-list', options: NETWORK_OPTIONS, fixed: true },
+  { key: 'protocol', label: '协议', group: '入站与网络', type: 'string-list', options: PROTOCOL_OPTIONS, fixed: true },
   { key: 'auth_user', label: '认证用户', group: '入站与网络', type: 'string-list' },
   { key: 'client', label: '客户端', group: '入站与网络', type: 'string-list' },
   // 域名
@@ -65,10 +69,10 @@ export const RULE_FIELDS: RuleField[] = [
   { key: 'package_name', label: '包名', group: '进程与包', type: 'string-list' },
   { key: 'package_name_regex', label: '包名正则', group: '进程与包', type: 'string-list' },
   // 用户
-  { key: 'user', label: '用户', group: '用户', type: 'string-list' },
+  { key: 'user', label: '用户', group: '用户', type: 'string-list', common: true },
   { key: 'user_id', label: '用户 ID', group: '用户', type: 'int-list', placeholder: '输入用户 ID 回车，可多值' },
   // 网络环境
-  { key: 'network_type', label: '网络类型', group: '网络环境', type: 'string-list', options: NETWORK_TYPE_OPTIONS },
+  { key: 'network_type', label: '网络类型', group: '网络环境', type: 'string-list', options: NETWORK_TYPE_OPTIONS, fixed: true },
   { key: 'network_is_expensive', label: '计费网络', group: '网络环境', type: 'bool' },
   { key: 'network_is_constrained', label: '受限网络', group: '网络环境', type: 'bool' },
   { key: 'wifi_ssid', label: 'WiFi SSID', group: '网络环境', type: 'string-list' },

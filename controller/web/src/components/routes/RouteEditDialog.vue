@@ -12,9 +12,14 @@ import { SelectField } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { api } from '@/api'
 import ResourceSourceTab from '@/components/ResourceSourceTab.vue'
+import RuleConditionEditor from '@/components/rules/RuleConditionEditor.vue'
+import {
+  createConditionRows,
+  type ConditionRow,
+} from '@/components/rules/conditionFields'
 import type { RouteRule } from '@/api'
 import { useStatusStore } from '@/store/status'
-import { RULE_FIELDS, RULE_GROUPS } from '@/views/routeFields'
+import { RULE_FIELDS } from '@/views/routeFields'
 
 const { t } = useI18n()
 
@@ -39,6 +44,8 @@ const statusStore = useStatusStore()
 
 const outboundTags = ref<string[]>([])
 const inboundTags = ref<string[]>([])
+const userNames = ref<string[]>([])
+const conditionRows = ref<ConditionRow[]>(createConditionRows(RULE_FIELDS))
 
 const srcTab = ref<InstanceType<typeof ResourceSourceTab>>()
 const sourceJson = ref('{}')
@@ -92,30 +99,30 @@ const ruleForm = reactive<Record<string, any>>({
   ruleType: 'default',
   mode: 'and',
   rulesJson: '',
+  invert: false,
   action: 'route',
   outbound: '',
   sniffers: [] as string[],
   resolve_server: '',
 })
 
-for (const f of RULE_FIELDS) {
-  if (f.type === 'bool') ruleForm[f.key] = false
-  else if (f.type === 'select' || f.type === 'string') ruleForm[f.key] = ''
-  else ruleForm[f.key] = []
-}
-
 const isRouteAction = computed(() => ruleForm.action === 'route')
 
-function fieldOptions(f: (typeof RULE_FIELDS)[number]): string[] {
-  if (f.key === 'inbound') return inboundTags.value
-  return f.options ?? []
-}
+const fieldSuggestions = computed<Record<string, string[]>>(() => ({
+  inbound: inboundTags.value,
+  user: userNames.value,
+}))
 
 const loadTags = async () => {
   try {
-    const [obs, ibs] = await Promise.all([api.outbounds(), api.inbounds()])
+    const [obs, ibs, us] = await Promise.all([
+      api.outbounds(),
+      api.inbounds(),
+      api.users().catch(() => []),
+    ])
     outboundTags.value = obs.map((o) => String(o.tag)).filter(Boolean)
     inboundTags.value = ibs.map((i) => String(i.tag)).filter(Boolean)
+    userNames.value = (Array.isArray(us) ? us : []).map((u) => String(u.name)).filter(Boolean)
   } catch (e) {
     showToast((e as Error).message || '加载标签列表失败', 'error')
   }
@@ -126,15 +133,12 @@ const resetForm = () => {
   ruleForm.ruleType = 'default'
   ruleForm.mode = 'and'
   ruleForm.rulesJson = ''
+  ruleForm.invert = false
   ruleForm.action = 'route'
   ruleForm.outbound = ''
   ruleForm.sniffers = []
   ruleForm.resolve_server = ''
-  for (const f of RULE_FIELDS) {
-    if (f.type === 'bool') ruleForm[f.key] = false
-    else if (f.type === 'select' || f.type === 'string') ruleForm[f.key] = ''
-    else ruleForm[f.key] = []
-  }
+  conditionRows.value = createConditionRows(RULE_FIELDS)
 }
 
 function fillAction(rowRec: Record<string, unknown>) {
@@ -164,13 +168,7 @@ function fillRuleForm(rowRec: Record<string, unknown>) {
   }
   ruleForm.ruleType = 'default'
   ruleForm.invert = rowRec.invert === true
-  for (const f of RULE_FIELDS) {
-    const v = rowRec[f.key]
-    if (f.type === 'bool') ruleForm[f.key] = v === true
-    else if (f.type === 'select' || f.type === 'string')
-      ruleForm[f.key] = v == null ? '' : String(v)
-    else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
-  }
+  conditionRows.value = createConditionRows(RULE_FIELDS, rowRec)
   fillAction(rowRec)
 }
 
@@ -245,8 +243,11 @@ function buildRule(): RouteRule {
     buildAction(rule)
     return rule
   }
-  for (const f of RULE_FIELDS) {
-    const v = ruleForm[f.key]
+  const fieldByKey = new Map(RULE_FIELDS.map((field) => [field.key, field]))
+  for (const row of conditionRows.value) {
+    const f = fieldByKey.get(row.key)
+    if (!f) continue
+    const v = row.value
     if (f.type === 'bool') {
       if (v === true) rule[f.key] = true
       continue
@@ -415,75 +416,37 @@ onMounted(() => {
               ]"
             />
 
-            <!-- 逻辑组合区域 -->
-            <div class="col-span-2 collapse-row" :class="{ 'is-open': ruleForm.ruleType === 'logical' }">
-              <div class="collapse-inner">
-                <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
-                  <label class="pt-2 text-base-content/70">mode <span class="text-destructive">*</span></label>
-                  <SelectField v-model="ruleForm.mode" :options="['and', 'or']" />
-                  <label class="pt-2 text-base-content/70">invert</label>
-                  <Switch v-model="ruleForm.invert" class="self-center" />
-                  <label class="pt-2 text-base-content/70">子规则 (JSON) <span class="text-destructive">*</span></label>
-                  <div class="flex flex-col gap-1">
-                    <textarea
-                      v-model="ruleForm.rulesJson"
-                      rows="8"
-                      class="textarea textarea-bordered w-full font-mono text-xs"
-                      placeholder='[{"rule_set": "gfw"}, {"clash_mode": "direct"}]'
-                    />
-                    <p class="text-xs text-base-content/50">嵌套子规则为 Rule 数组（可再嵌套 logical）；每个子规则也可带 action</p>
-                  </div>
-                </div>
+            <!-- 逻辑组合区域（仅逻辑类型显示 mode） -->
+            <template v-if="ruleForm.ruleType === 'logical'">
+              <label class="pt-2 text-base-content/70">mode <span class="text-destructive">*</span></label>
+              <SelectField v-model="ruleForm.mode" :options="['and', 'or']" />
+              <label class="pt-2 text-base-content/70">invert</label>
+              <Switch v-model="ruleForm.invert" class="self-center" />
+              <label class="pt-2 text-base-content/70">子规则 (JSON) <span class="text-destructive">*</span></label>
+              <div class="flex flex-col gap-1">
+                <textarea
+                  v-model="ruleForm.rulesJson"
+                  rows="8"
+                  class="textarea textarea-bordered w-full font-mono text-xs"
+                  placeholder='[{"rule_set": "gfw"}, {"clash_mode": "direct"}]'
+                />
+                <p class="text-xs text-base-content/50">嵌套子规则为 Rule 数组（可再嵌套 logical）；每个子规则也可带 action</p>
               </div>
-            </div>
+            </template>
 
-            <!-- 普通规则匹配字段区域 -->
-            <div class="col-span-2 collapse-row" :class="{ 'is-open': ruleForm.ruleType === 'default' }">
-              <div class="collapse-inner">
-                <div class="grid gap-x-4 gap-y-4 pt-2 text-sm" style="grid-template-columns: 130px minmax(0, 1fr)">
-                  <div
-                    class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
-                    style="grid-column: 1 / -1"
-                  >
-                    <span class="border-base-content/10 h-px flex-1 border-t" />匹配条件<span class="border-base-content/10 h-px flex-1 border-t" />
-                  </div>
-                  <template v-for="g in RULE_GROUPS" :key="g">
-                    <div
-                      class="flex items-center gap-2 text-xs font-semibold text-base-content/50"
-                      style="grid-column: 1 / -1"
-                    >
-                      <span class="border-base-content/10 h-px flex-1 border-t" />{{ g }}<span class="border-base-content/10 h-px flex-1 border-t" />
-                    </div>
-                    <template v-for="f in RULE_FIELDS.filter((x) => x.group === g)" :key="f.key">
-                      <label class="pt-2 text-base-content/70">{{ f.label }}</label>
-                      <ChipInput
-                        v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
-                        v-model="ruleForm[f.key] as string[]"
-                        :placeholder="f.placeholder || '输入后回车添加，可多值'"
-                        :suggestions="fieldOptions(f)"
-                      />
-                      <SelectField
-                        v-else-if="f.type === 'select'"
-                        v-model="ruleForm[f.key]"
-                        :options="fieldOptions(f)"
-                        :placeholder="f.placeholder || '请选择'"
-                      />
-                      <Switch
-                        v-else-if="f.type === 'bool'"
-                        v-model="ruleForm[f.key]"
-                        class="self-center"
-                      />
-                      <input
-                        v-else
-                        v-model="ruleForm[f.key]"
-                        type="text"
-                        class="input input-bordered input-sm w-full"
-                        :placeholder="f.placeholder || '请输入'"
-                      />
-                    </template>
-                  </template>
-                </div>
+            <!-- 普通规则匹配字段区域：键值对编辑器 -->
+            <div v-if="ruleForm.ruleType === 'default'" class="col-span-2 pt-2">
+              <div
+                class="mb-3 flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
+              >
+                <span class="border-base-content/10 h-px flex-1 border-t" />匹配条件<span class="border-base-content/10 h-px flex-1 border-t" />
               </div>
+              <RuleConditionEditor
+                v-model="conditionRows"
+                :fields="RULE_FIELDS"
+                :suggestions="fieldSuggestions"
+                add-label="添加匹配条件"
+              />
             </div>
 
             <!-- 动作配置区域 -->
@@ -613,18 +576,3 @@ onMounted(() => {
     </template>
   </DialogWrapper>
 </template>
-
-<style scoped>
-.collapse-row {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.collapse-row.is-open {
-  grid-template-rows: 1fr;
-}
-.collapse-inner {
-  overflow: hidden;
-  min-height: 0;
-}
-</style>

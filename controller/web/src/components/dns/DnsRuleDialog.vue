@@ -70,68 +70,27 @@
               </div>
             </template>
 
-            <!-- 普通规则匹配字段 -->
-            <template v-if="ruleForm.ruleType === 'default'">
+            <!-- 普通规则匹配字段：键值对编辑器 -->
+            <div
+              v-if="ruleForm.ruleType === 'default'"
+              class="pt-2"
+              style="grid-column: 1 / -1"
+            >
               <div
-                class="flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
-                style="grid-column: 1 / -1"
+                class="mb-3 flex items-center gap-2 text-[13px] font-semibold text-base-content/90"
               >
                 <span class="border-base-content/10 h-px flex-1 border-t" />
                 匹配条件
                 <span class="border-base-content/10 h-px flex-1 border-t" />
               </div>
 
-              <template
-                v-for="g in DNS_RULE_GROUPS"
-                :key="g"
-              >
-                <div
-                  class="flex items-center gap-2 text-xs font-semibold text-base-content/50"
-                  style="grid-column: 1 / -1"
-                >
-                  <span class="border-base-content/10 h-px flex-1 border-t" />
-                  {{ g }}
-                  <span class="border-base-content/10 h-px flex-1 border-t" />
-                </div>
-                <template
-                  v-for="f in DNS_RULE_FIELDS.filter((x) => x.group === g)"
-                  :key="f.key"
-                >
-                  <label class="text-base-content/70 pt-2">{{ f.label }}</label>
-                  <ChipInput
-                    v-if="f.type === 'string-list' || f.type === 'uint-list' || f.type === 'int-list'"
-                    v-model="ruleForm[f.key]"
-                    :placeholder="f.placeholder || '输入后回车添加，可多值'"
-                    :suggestions="f.options ?? (f.key === 'inbound' ? inboundTags : [])"
-                  />
-                  <SelectField
-                    v-else-if="f.type === 'select'"
-                    v-model="ruleForm[f.key]"
-                    :options="f.options ?? []"
-                    :placeholder="f.placeholder || '请选择'"
-                  />
-                  <Switch
-                    v-else-if="f.type === 'bool'"
-                    v-model="ruleForm[f.key]"
-                    class="self-center"
-                  />
-                  <textarea
-                    v-else-if="f.type === 'json'"
-                    v-model="ruleForm[f.key]"
-                    rows="3"
-                    class="textarea textarea-bordered font-mono text-xs w-full"
-                    :placeholder="f.placeholder || 'JSON 对象，如 {\x22key\x22: \x22value\x22}'"
-                  />
-                  <input
-                    v-else
-                    v-model="ruleForm[f.key]"
-                    type="text"
-                    class="input input-bordered input-sm w-full"
-                    :placeholder="f.placeholder || '请输入'"
-                  />
-                </template>
-              </template>
-            </template>
+              <RuleConditionEditor
+                v-model="conditionRows"
+                :fields="DNS_RULE_FIELDS"
+                :suggestions="fieldSuggestions"
+                add-label="添加匹配条件"
+              />
+            </div>
 
             <!-- 动作配置 -->
             <div
@@ -332,9 +291,13 @@ import {
   saveDnsRule,
   saving,
 } from '@/assembly/dns'
-import ChipInput from '@/components/common/ChipInput.vue'
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import ResourceSourceTab from '@/components/ResourceSourceTab.vue'
+import RuleConditionEditor from '@/components/rules/RuleConditionEditor.vue'
+import {
+  createConditionRows,
+  type ConditionRow,
+} from '@/components/rules/conditionFields'
 import { SelectField } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from '@/components/ui/tabs'
@@ -348,7 +311,6 @@ import { showToast } from '@/helper/toast'
 import {
   DNS_RULE_ACTIONS,
   DNS_RULE_FIELDS,
-  DNS_RULE_GROUPS,
   DNS_RULE_TYPES,
   LOGICAL_MODES,
 } from '@/views/dnsRuleFields'
@@ -389,6 +351,7 @@ const ruleForm = reactive<Record<string, any>>({
   ruleType: 'default',
   mode: 'and',
   rulesJson: '',
+  invert: false,
   action: 'route',
   server: '',
   speculative: false,
@@ -398,17 +361,18 @@ const ruleForm = reactive<Record<string, any>>({
   actionParamsJson: '',
 })
 
-for (const f of DNS_RULE_FIELDS) {
-  if (f.type === 'bool') ruleForm[f.key] = false
-  else if (f.type === 'string' || f.type === 'select' || f.type === 'json') ruleForm[f.key] = ''
-  else ruleForm[f.key] = []
-}
+const conditionRows = ref<ConditionRow[]>(createConditionRows(DNS_RULE_FIELDS))
+
+const fieldSuggestions = computed<Record<string, string[]>>(() => ({
+  inbound: inboundTags.value,
+}))
 
 const resetRuleForm = () => {
   validateMsg.value = ''
   ruleForm.ruleType = 'default'
   ruleForm.mode = 'and'
   ruleForm.rulesJson = ''
+  ruleForm.invert = false
   ruleForm.action = 'route'
   ruleForm.server = ''
   ruleForm.speculative = false
@@ -416,11 +380,7 @@ const resetRuleForm = () => {
   ruleForm.evaluate_speculative = false
   ruleForm.reject_method = ''
   ruleForm.actionParamsJson = ''
-  for (const f of DNS_RULE_FIELDS) {
-    if (f.type === 'bool') ruleForm[f.key] = false
-    else if (f.type === 'string' || f.type === 'select' || f.type === 'json') ruleForm[f.key] = ''
-    else ruleForm[f.key] = []
-  }
+  conditionRows.value = createConditionRows(DNS_RULE_FIELDS)
 }
 
 function parseJsonField(text: string, label: string): unknown {
@@ -450,8 +410,11 @@ function buildDnsRule(): Record<string, any> {
     return rule
   }
 
-  for (const f of DNS_RULE_FIELDS) {
-    const v = ruleForm[f.key]
+  const fieldByKey = new Map(DNS_RULE_FIELDS.map((field) => [field.key, field]))
+  for (const row of conditionRows.value) {
+    const f = fieldByKey.get(row.key)
+    if (!f) continue
+    const v = row.value
     if (f.type === 'bool') {
       if (v === true) rule[f.key] = true
       continue
@@ -544,14 +507,8 @@ function fillForm(r: Record<string, any>) {
     fillDnsAction(r)
     return
   }
-  for (const f of DNS_RULE_FIELDS) {
-    const v = r[f.key]
-    if (f.type === 'bool') ruleForm[f.key] = v === true
-    else if (f.type === 'json') ruleForm[f.key] = v == null ? '' : JSON.stringify(v, null, 2)
-    else if (f.type === 'string' || f.type === 'select')
-      ruleForm[f.key] = v == null ? '' : String(v)
-    else ruleForm[f.key] = v == null ? [] : Array.isArray(v) ? v.map(String) : [String(v)]
-  }
+  ruleForm.invert = r.invert === true
+  conditionRows.value = createConditionRows(DNS_RULE_FIELDS, r)
   fillDnsAction(r)
 }
 
