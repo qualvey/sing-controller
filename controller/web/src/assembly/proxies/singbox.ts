@@ -39,6 +39,9 @@ const nodeToProxy = (item: GroupItem): Proxy => {
 
 let groups = new Map<string, Group>()
 let outbounds = new Map<string, GroupItem>()
+let outboundsReady = false
+let configuredOutboundTags: Set<string> | null = null
+const hiddenOutboundTags = new Set<string>()
 let handles: StreamHandle[] = []
 let sessionKey = ''
 let ready: Promise<void> | null = null
@@ -65,6 +68,21 @@ const rejectURLTestWaiters = (reason: Error) => {
     waiter.reject(reason)
   }
   urlTestWaiters.clear()
+}
+
+const syncConfiguredOutboundTags = async () => {
+  try {
+    const nextTags = new Set((await api.outbounds()).map((outbound) => outbound.tag))
+    if (configuredOutboundTags) {
+      for (const tag of configuredOutboundTags) {
+        if (!nextTags.has(tag)) hiddenOutboundTags.add(tag)
+      }
+    }
+    for (const tag of nextTags) hiddenOutboundTags.delete(tag)
+    configuredOutboundTags = nextTags
+  } catch {
+    // Runtime proxy streams remain usable when the controller CRUD endpoint is unavailable.
+  }
 }
 
 const waitForURLTestResult = (timeout: number) => {
@@ -94,24 +112,34 @@ const waitForURLTestResult = (timeout: number) => {
 // 由流数据原生组装共享状态(无 clash 的 provider / GLOBAL / 排序等概念)。
 const rebuild = () => {
   const proxies: Record<string, Proxy> = {}
+  const visibleItems = (group: Group) =>
+    group.items.filter(
+      (item) => !hiddenOutboundTags.has(item.tag) && (!outboundsReady || outbounds.has(item.tag)),
+    )
 
   // 1) 出站叶子节点(含延迟)
   for (const item of outbounds.values()) {
+    if (hiddenOutboundTags.has(item.tag)) continue
     proxies[item.tag] = nodeToProxy(item)
   }
   // 2) 用组内 items 补建缺失的叶子节点(outbounds 流可能晚到或不含某些成员)
   for (const group of groups.values()) {
-    for (const item of group.items) {
+    for (const item of visibleItems(group)) {
       if (!proxies[item.tag]) proxies[item.tag] = nodeToProxy(item)
     }
   }
   // 3) 分组条目(携带 all / now),始终覆盖同名节点
   for (const group of groups.values()) {
+    if (hiddenOutboundTags.has(group.tag)) continue
+    const items = visibleItems(group)
+    const selected = items.some((item) => item.tag === group.selected)
+      ? group.selected
+      : items[0]?.tag || ''
     proxies[group.tag] = {
       name: group.tag,
       type: group.type,
-      now: group.selected,
-      all: group.items.map((i) => i.tag),
+      now: selected,
+      all: items.map((i) => i.tag),
       selectable: group.selectable,
       history: [],
       extra: {},
@@ -120,7 +148,7 @@ const rebuild = () => {
   }
   // 4) 把组内 items 的延迟回填到叶子节点(绝不动带 all 的组条目)
   for (const group of groups.values()) {
-    for (const item of group.items) {
+    for (const item of visibleItems(group)) {
       const node = proxies[item.tag]
       if (node && !node.all?.length && item.urlTestDelay > 0) {
         node.history = getHistoryFromItem(item)
@@ -135,7 +163,7 @@ const rebuild = () => {
 
   proxyMap.value = proxies
   proxyGroupList.value = Array.from(groups.values())
-    .filter((g) => g.items.length)
+    .filter((g) => visibleItems(g).length)
     .map((g) => g.tag)
   proxyProviederList.value = []
 }
@@ -152,6 +180,7 @@ const stop = () => {
   closeStreams()
   groups = new Map()
   outbounds = new Map()
+  outboundsReady = false
 }
 
 const ensureSession = () => {
@@ -163,6 +192,10 @@ const ensureSession = () => {
   }
   if (sessionKey === backend.uuid && handles.length) return
 
+  if (sessionKey && sessionKey !== backend.uuid) {
+    configuredOutboundTags = null
+    hiddenOutboundTags.clear()
+  }
   stop()
   sessionKey = backend.uuid
 
@@ -198,15 +231,21 @@ const ensureSession = () => {
     subscribeStream<OutboundList>('outbounds', (msg) => {
       outbounds = new Map()
       for (const o of msg.outbounds) outbounds.set(o.tag, o)
+      outboundsReady = true
       rebuild()
     }, { onError: fallbackIfUnavailable }),
   ]
 }
 
 // 在后端切换 / 登出时丢弃订阅。
-export const resetProxies = () => stop()
+export const resetProxies = () => {
+  configuredOutboundTags = null
+  hiddenOutboundTags.clear()
+  stop()
+}
 
 export const fetchProxies = async (force = false) => {
+  await syncConfiguredOutboundTags()
   if (force) {
     stop()
   }
